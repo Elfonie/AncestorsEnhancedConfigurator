@@ -1,11 +1,11 @@
 namespace AncestorsEnhanced.Core.Settings;
 
-public sealed record ReadableSettingSnapshot(
+public sealed record FeatureGroupSnapshot(
     string Id,
     string Category,
     string Name,
-    string Value,
+    string Summary,
     string Description,
-    string Source,
+    bool IsEssential,
     ReadableSettingState State,
-    double? Percentage);
+    IReadOnlyList<FeatureSettingSnapshot> Settings);

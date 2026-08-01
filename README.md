@@ -2,7 +2,7 @@
 
 An unofficial, portable configurator for *Ancestors: The Humankind Odyssey*.
 
-Version 0.2 detects a native Windows Steam installation and displays its configuration state. It reads Steam metadata, INI settings, and PAK file metadata. Verified overrides are translated into understandable setting cards; raw details remain available in a collapsed technical section. Game-file writes remain disabled.
+Version 0.2 detects a native Windows Steam installation and displays its configuration state. It reads Steam metadata, INI settings, and PAK file metadata. Verified overrides are translated into expandable feature groups; raw details remain available in a collapsed technical section. Game-file writes remain disabled.
 
 ## Project principles
 
@@ -43,6 +43,8 @@ The current build can:
 - locate the Ancestors user-data directory;
 - parse all top-level INI files without discarding duplicate keys;
 - translate verified overrides such as motion blur, depth of field, texture filtering, sharpening, TAA response, view distance, texture memory, light shafts, and startup-video skipping into readable values;
+- group related controls under Motion Blur, Depth of Field, Vignette, Image Clarity, View Distance, Textures, Post-processing, Shadows, Effects, and Convenience;
+- switch between a simple view of important controls and an advanced view of every catalogued Ancestors scalability field;
 - identify `SaveGames/System.sav` as the separate binary source used for built-in game settings;
 - list PAK names, sizes, timestamps, conservative classifications, and fingerprints for small patch packages;
 - recognize the project's known half-strength vignette patch by its exact fingerprint;

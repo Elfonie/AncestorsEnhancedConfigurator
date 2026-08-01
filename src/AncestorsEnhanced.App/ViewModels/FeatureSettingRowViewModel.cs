@@ -1,11 +1,10 @@
 namespace AncestorsEnhanced.App.ViewModels;
 
-public sealed record ReadableSettingRowViewModel(
-    string Category,
+public sealed record FeatureSettingRowViewModel(
     string Name,
     string Value,
     string Description,
     string Source,
+    string TechnicalDetails,
     string AccentColor,
-    double ProgressValue,
-    bool HasProgress);
+    bool ShowTechnicalDetails);

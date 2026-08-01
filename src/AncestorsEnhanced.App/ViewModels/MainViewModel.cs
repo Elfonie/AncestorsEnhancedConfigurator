@@ -10,6 +10,7 @@ namespace AncestorsEnhanced.App.ViewModels;
 public partial class MainViewModel : ViewModelBase
 {
     private readonly IReadOnlyGameInspector _inspector;
+    private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
 
     [ObservableProperty]
     private string _detectionStatus = "Inspection has not run yet";
@@ -36,7 +37,16 @@ public partial class MainViewModel : ViewModelBase
     private string _gameMenuSettingsSummary = "Game menu settings have not been inspected";
 
     [ObservableProperty]
-    private IReadOnlyList<ReadableSettingRowViewModel> _readableSettings = [];
+    private IReadOnlyList<FeatureGroupRowViewModel> _featureGroups = [];
+
+    [ObservableProperty]
+    private bool _isAdvancedMode;
+
+    [ObservableProperty]
+    private string _viewModeTitle = "Simple view";
+
+    [ObservableProperty]
+    private string _viewModeDescription = "Important settings and their effective state.";
 
     [ObservableProperty]
     private IReadOnlyList<ConfigurationFileRowViewModel> _configurationFiles = [];
@@ -101,17 +111,8 @@ public partial class MainViewModel : ViewModelBase
               "Their custom binary values are not shown until the decoder is verified."
             : "The game's own graphics-settings file has not been created yet.";
 
-        ReadableSettings = ReadableSettingsCatalog.Create(snapshot)
-            .Select(setting => new ReadableSettingRowViewModel(
-                setting.Category,
-                setting.Name,
-                setting.Value,
-                setting.Description,
-                setting.Source,
-                GetAccentColor(setting.State),
-                (setting.Percentage ?? 0) * 100,
-                setting.Percentage is not null))
-            .ToArray();
+        _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
+        ApplyViewMode();
 
         ConfigurationFiles = snapshot.ConfigurationFiles
             .Select(file => new ConfigurationFileRowViewModel(
@@ -151,6 +152,48 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ConfigurationFileCount));
         OnPropertyChanged(nameof(SettingCount));
         OnPropertyChanged(nameof(PakFileCount));
+    }
+
+    partial void OnIsAdvancedModeChanged(bool value) => ApplyViewMode();
+
+    private void ApplyViewMode()
+    {
+        ViewModeTitle = IsAdvancedMode ? "Advanced view" : "Simple view";
+        ViewModeDescription = IsAdvancedMode
+            ? "All verified renderer settings, game-controlled values, and technical sources."
+            : "Important visual settings with only the controls that are useful to most players.";
+
+        FeatureGroups = _allFeatureGroups
+            .Where(group => IsAdvancedMode || group.IsEssential)
+            .Select(group =>
+            {
+                FeatureSettingSnapshot[] visibleSettings = group.Settings
+                    .Where(setting => IsAdvancedMode || !setting.IsAdvanced)
+                    .ToArray();
+
+                return new FeatureGroupRowViewModel(
+                    group.Category,
+                    group.Name,
+                    group.Summary,
+                    group.Description,
+                    GetAccentColor(group.State),
+                    visibleSettings.Length == 1
+                        ? "1 setting"
+                        : $"{visibleSettings.Length} settings",
+                    visibleSettings
+                        .Select(setting => new FeatureSettingRowViewModel(
+                            setting.Name,
+                            setting.Value,
+                            setting.Description,
+                            setting.Source,
+                            setting.TechnicalKey is null
+                                ? setting.Source
+                                : $"{setting.TechnicalKey} · {setting.Source}",
+                            GetAccentColor(setting.State),
+                            IsAdvancedMode))
+                        .ToArray());
+            })
+            .ToArray();
     }
 
     private static string GetAccentColor(ReadableSettingState state) => state switch

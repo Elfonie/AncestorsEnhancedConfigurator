@@ -16,6 +16,8 @@ AncestorsEnhanced.App
 
 `App` displays state and invokes application operations. It must not implement file mutation inside button handlers.
 
+The readable settings catalog models a feature hierarchy rather than exposing one UI card per console variable. A feature group owns its summary and related settings; each setting records its source, technical key, confidence state, and whether it belongs in the advanced view. The application may filter this hierarchy, but it must not reinterpret unknown values as detected defaults.
+
 ## Planned operation lifecycle
 
 Every future game modification must implement the same lifecycle:

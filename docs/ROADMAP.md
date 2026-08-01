@@ -16,6 +16,9 @@
 - [x] Display installed PAK metadata without reading PAK contents
 - [x] Classify patch-style packages without assuming their origin
 - [x] Show verified overrides as human-readable setting cards
+- [x] Group related settings into expandable visual features
+- [x] Provide simple and advanced read-only views
+- [x] Catalogue the fields used by Ancestors' custom scalability configuration
 - [x] Fingerprint small patch packages without hashing multi-gigabyte base archives
 - [x] Model host, store, and compatibility layer independently
 - [x] Test alternate Steam libraries and unsafe manifest paths

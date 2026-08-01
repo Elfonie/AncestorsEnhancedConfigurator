@@ -6,18 +6,19 @@ namespace AncestorsEnhanced.Core.Tests.Settings;
 public sealed class ReadableSettingsCatalogTests
 {
     [Fact]
-    public void CreateTranslatesVerifiedOverridesIntoReadableValues()
+    public void CreateFeatureGroupsTranslatesVerifiedOverrides()
     {
         GameInspectionSnapshot snapshot = CreateSnapshot(
             [
                 new IniSettingSnapshot("SystemSettings", "r.MotionBlurQuality", "0", 1),
                 new IniSettingSnapshot("SystemSettings", "r.MaxAnisotropy", "16", 2),
                 new IniSettingSnapshot("SystemSettings", "r.ViewDistanceScale", "1.20", 3),
+                new IniSettingSnapshot("SystemSettings", "r.Streaming.PoolSize", "4096", 4),
                 new IniSettingSnapshot(
                     "/Script/MoviePlayer.MoviePlayerSettings",
                     "!StartupMovies",
                     "ClearArray",
-                    4),
+                    5),
             ],
             [
                 new PakFileSnapshot(
@@ -29,25 +30,56 @@ public sealed class ReadableSettingsCatalogTests
                     "06F74C5E4BF70D2748614D8C74405B4C96FB4E50F103A66827C4E2041B2801A0"),
             ]);
 
-        IReadOnlyList<ReadableSettingSnapshot> settings = ReadableSettingsCatalog.Create(snapshot);
+        IReadOnlyList<FeatureGroupSnapshot> groups =
+            ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
 
-        ReadableSettingSnapshot motionBlur = Assert.Single(settings, setting => setting.Id == "motion-blur");
-        Assert.Equal("Off", motionBlur.Value);
-        Assert.Equal(ReadableSettingState.Disabled, motionBlur.State);
-        ReadableSettingSnapshot textureFiltering =
-            Assert.Single(settings, setting => setting.Id == "anisotropic-filtering");
-        Assert.Equal("16×", textureFiltering.Value);
-        Assert.Equal(1, textureFiltering.Percentage);
-        ReadableSettingSnapshot viewDistance =
-            Assert.Single(settings, setting => setting.Id == "view-distance");
-        Assert.Equal("120%", viewDistance.Value);
-        Assert.Null(viewDistance.Percentage);
-        Assert.Equal("Skipped", Assert.Single(settings, setting => setting.Id == "startup-videos").Value);
-        Assert.Equal("50% intensity", Assert.Single(settings, setting => setting.Id == "vignette").Value);
+        FeatureGroupSnapshot motionBlur = FindGroup(groups, "motion-blur");
+        Assert.Equal("Off", motionBlur.Summary);
+        Assert.Equal("Off", FindSetting(motionBlur, "motion-blur-quality").Value);
+
+        FeatureGroupSnapshot textures = FindGroup(groups, "textures");
+        Assert.Equal("16× · 4 GB", textures.Summary);
+        Assert.Equal("16×", FindSetting(textures, "anisotropic-filtering").Value);
+
+        Assert.Equal(
+            "120%",
+            FindSetting(FindGroup(groups, "view-distance-foliage"), "view-distance").Value);
+        Assert.Equal(
+            "50% of original",
+            FindSetting(FindGroup(groups, "vignette"), "environment-vignette").Value);
+        Assert.Equal("Videos skipped", FindGroup(groups, "convenience").Summary);
     }
 
     [Fact]
-    public void CreateUsesTheLastDuplicateIniEntry()
+    public void CreateFeatureGroupsSeparatesImportantAndAdvancedSettings()
+    {
+        IReadOnlyList<FeatureGroupSnapshot> groups =
+            ReadableSettingsCatalog.CreateFeatureGroups(CreateSnapshot([], []));
+
+        FeatureGroupSnapshot motionBlur = FindGroup(groups, "motion-blur");
+        Assert.True(motionBlur.IsEssential);
+        Assert.False(FindSetting(motionBlur, "motion-blur-scale").IsAdvanced);
+        Assert.True(FindSetting(motionBlur, "motion-blur-max").IsAdvanced);
+
+        FeatureGroupSnapshot effects = FindGroup(groups, "effects-materials");
+        Assert.False(effects.IsEssential);
+        Assert.Contains(effects.Settings, setting => setting.TechnicalKey == "r.SSR.Quality");
+
+        FeatureGroupSnapshot postProcessing = FindGroup(groups, "post-processing");
+        Assert.Equal(15, postProcessing.Settings.Count);
+        Assert.Contains(postProcessing.Settings, setting => setting.TechnicalKey == "r.BloomQuality");
+        Assert.Contains(
+            postProcessing.Settings,
+            setting => setting.TechnicalKey == "r.Tonemapper.GrainQuantization");
+
+        Assert.Equal(15, FindGroup(groups, "depth-of-field").Settings.Count);
+        Assert.Equal(8, FindGroup(groups, "textures").Settings.Count);
+        Assert.Equal(18, FindGroup(groups, "shadows-lighting").Settings.Count);
+        Assert.Equal(13, effects.Settings.Count);
+    }
+
+    [Fact]
+    public void CreateFeatureGroupsUsesTheLastDuplicateIniEntry()
     {
         GameInspectionSnapshot snapshot = CreateSnapshot(
             [
@@ -56,26 +88,39 @@ public sealed class ReadableSettingsCatalogTests
             ],
             []);
 
-        ReadableSettingSnapshot motionBlur = Assert.Single(
-            ReadableSettingsCatalog.Create(snapshot),
-            setting => setting.Id == "motion-blur");
+        FeatureSettingSnapshot motionBlur = FindSetting(
+            FindGroup(ReadableSettingsCatalog.CreateFeatureGroups(snapshot), "motion-blur"),
+            "motion-blur-quality");
 
         Assert.Equal("Off", motionBlur.Value);
     }
 
     [Fact]
-    public void CreateDoesNotGuessAMissingOverride()
+    public void CreateFeatureGroupsDoesNotGuessMissingScalabilityValues()
     {
-        GameInspectionSnapshot snapshot = CreateSnapshot([], []);
+        IReadOnlyList<FeatureGroupSnapshot> groups =
+            ReadableSettingsCatalog.CreateFeatureGroups(CreateSnapshot([], []));
 
-        ReadableSettingSnapshot motionBlur = Assert.Single(
-            ReadableSettingsCatalog.Create(snapshot),
-            setting => setting.Id == "motion-blur");
+        FeatureSettingSnapshot quality = FindSetting(
+            FindGroup(groups, "motion-blur"),
+            "motion-blur-quality");
+        FeatureSettingSnapshot bloom = FindSetting(
+            FindGroup(groups, "post-processing"),
+            "bloom-quality");
 
-        Assert.Equal("Game default", motionBlur.Value);
-        Assert.Equal(ReadableSettingState.Unknown, motionBlur.State);
-        Assert.Null(motionBlur.Percentage);
+        Assert.Equal("Game preset", quality.Value);
+        Assert.Equal(ReadableSettingState.Unknown, quality.State);
+        Assert.Equal("Game preset", bloom.Value);
+        Assert.Equal(ReadableSettingState.Unknown, bloom.State);
     }
+
+    private static FeatureGroupSnapshot FindGroup(
+        IReadOnlyList<FeatureGroupSnapshot> groups,
+        string id) => Assert.Single(groups, group => group.Id == id);
+
+    private static FeatureSettingSnapshot FindSetting(
+        FeatureGroupSnapshot group,
+        string id) => Assert.Single(group.Settings, setting => setting.Id == id);
 
     private static GameInspectionSnapshot CreateSnapshot(
         IReadOnlyList<IniSettingSnapshot> iniSettings,
