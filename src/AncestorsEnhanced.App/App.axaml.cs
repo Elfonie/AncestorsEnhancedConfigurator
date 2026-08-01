@@ -1,8 +1,9 @@
+using AncestorsEnhanced.App.ViewModels;
+using AncestorsEnhanced.App.Views;
+using AncestorsEnhanced.Infrastructure.Inspection;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using AncestorsEnhanced.App.ViewModels;
-using AncestorsEnhanced.App.Views;
 
 namespace AncestorsEnhanced.App;
 
@@ -19,7 +20,7 @@ public partial class App : Application
         {
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainViewModel(),
+                DataContext = new MainViewModel(ReadOnlyAncestorsInspector.CreateDefault()),
             };
         }
 

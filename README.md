@@ -2,7 +2,7 @@
 
 An unofficial, portable configurator for *Ancestors: The Humankind Odyssey*.
 
-The repository is in its foundation phase. The current application deliberately does not read or modify game files. The first functional milestone will detect supported installations and display configuration state without writing anything.
+Version 0.2 detects a native Windows Steam installation and displays its configuration state. It reads Steam metadata, INI settings, and PAK file metadata. Verified overrides are translated into understandable setting cards; raw details remain available in a collapsed technical section. Game-file writes remain disabled.
 
 ## Project principles
 
@@ -35,4 +35,19 @@ dotnet run --project src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj
 
 ## Status
 
+The current build can:
+
+- locate Steam through read-only registry sources and the default Windows path;
+- follow every library listed in Steam's `libraryfolders.vdf`;
+- validate Steam App ID 536270, the install directory, executable, and build ID;
+- locate the Ancestors user-data directory;
+- parse all top-level INI files without discarding duplicate keys;
+- translate verified overrides such as motion blur, depth of field, texture filtering, sharpening, TAA response, view distance, texture memory, light shafts, and startup-video skipping into readable values;
+- identify `SaveGames/System.sav` as the separate binary source used for built-in game settings;
+- list PAK names, sizes, timestamps, conservative classifications, and fingerprints for small patch packages;
+- recognize the project's known half-strength vignette patch by its exact fingerprint;
+- refresh the complete snapshot without changing any source file.
+
 This is development software and not yet a mod release. It must not be presented as an official Panache Digital Games or Private Division product.
+
+Version 0.2 does not claim to decode values stored inside `System.sav`. Local inspection proves that graphics-setting labels are present there, but its serialization format has not yet been verified well enough for a public parser.

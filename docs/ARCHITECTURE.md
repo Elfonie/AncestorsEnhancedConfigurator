@@ -28,3 +28,18 @@ Every future game modification must implement the same lifecycle:
 6. Revert only owned changes.
 
 The foundation phase has all mutation capabilities disabled.
+
+## Read-only inspection boundary
+
+Version 0.2 exposes only an `IReadOnlyGameInspector` to the application. Its physical file-system dependency contains methods for existence checks, metadata, enumeration, and text reads; it deliberately contains no create, write, move, or delete operation.
+
+The Windows Steam inspector separates:
+
+- host operating system;
+- storefront;
+- compatibility layer;
+- Steam root and library root;
+- game installation and per-user data;
+- raw INI entries and PAK metadata.
+
+This separation prevents later Epic, GOG, Proton, and Wine support from being represented as variants of a hard-coded Steam path.

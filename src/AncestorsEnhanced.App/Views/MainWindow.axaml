@@ -3,77 +3,252 @@
         xmlns:vm="using:AncestorsEnhanced.App.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="960" d:DesignHeight="640"
+        mc:Ignorable="d"
+        d:DesignWidth="1120"
+        d:DesignHeight="780"
         x:Class="AncestorsEnhanced.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
-        Width="960"
-        Height="640"
-        MinWidth="760"
-        MinHeight="520"
+        Width="1120"
+        Height="780"
+        MinWidth="840"
+        MinHeight="620"
         Title="Ancestors Enhanced Configurator">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainViewModel />
-    </Design.DataContext>
+  <Grid RowDefinitions="Auto,*" Background="#0E1216">
+    <Border Grid.Row="0" Background="#192028" Padding="28,20">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Spacing="5">
+          <TextBlock Text="{Binding ProductName}"
+                     FontSize="27"
+                     FontWeight="SemiBold"
+                     Foreground="#F3F6F8" />
+          <TextBlock Text="{Binding Phase}"
+                     FontSize="14"
+                     Foreground="#9FB0BD" />
+        </StackPanel>
 
-    <Grid RowDefinitions="Auto,*" Background="#11151A">
-        <Border Grid.Row="0" Background="#192028" Padding="32,24">
-            <StackPanel Spacing="6">
-                <TextBlock Text="{Binding ProductName}"
-                           FontSize="28"
-                           FontWeight="SemiBold"
-                           Foreground="#F3F6F8" />
-                <TextBlock Text="{Binding Phase}"
-                           FontSize="14"
-                           Foreground="#9FB0BD" />
+        <Button Grid.Column="1"
+                Command="{Binding RefreshCommand}"
+                Padding="18,10"
+                VerticalAlignment="Center"
+                Content="Check again" />
+      </Grid>
+    </Border>
+
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Margin="28" Spacing="18">
+        <Border Padding="18"
+                CornerRadius="9"
+                Background="#17392F"
+                BorderBrush="#2B7A63"
+                BorderThickness="1">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="5">
+              <TextBlock Text="{Binding DetectionStatus}"
+                         FontSize="20"
+                         FontWeight="SemiBold"
+                         Foreground="#E7FFF7" />
+              <TextBlock Text="{Binding InstallationDetails}"
+                         Foreground="#9ED8C5" />
             </StackPanel>
+            <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="5">
+              <TextBlock Text="{Binding SafetyStatus}"
+                         HorizontalAlignment="Right"
+                         Foreground="#9ED8C5" />
+              <TextBlock Text="{Binding InspectionTime}"
+                         HorizontalAlignment="Right"
+                         Foreground="#82929E" />
+            </StackPanel>
+          </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="32" RowDefinitions="Auto,Auto,*" RowSpacing="20">
-            <Border Grid.Row="0"
-                    Padding="18"
-                    CornerRadius="8"
-                    Background="#17392F"
-                    BorderBrush="#2B7A63"
-                    BorderThickness="1">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Safety state"
-                               FontSize="13"
+        <StackPanel Spacing="4">
+          <TextBlock Text="Current enhancements"
+                     FontSize="23"
+                     FontWeight="SemiBold"
+                     Foreground="#F3F6F8" />
+          <TextBlock Text="These values are decoded from verified overrides currently active for the game."
+                     FontSize="14"
+                     Foreground="#92A3AF" />
+        </StackPanel>
+
+        <ItemsControl ItemsSource="{Binding ReadableSettings}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Columns="3" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ReadableSettingRowViewModel">
+              <Border Margin="0,0,12,12"
+                      Padding="17"
+                      MinHeight="174"
+                      CornerRadius="8"
+                      Background="#171D23"
+                      BorderBrush="{Binding AccentColor}"
+                      BorderThickness="1">
+                <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="7">
+                  <TextBlock Text="{Binding Category}"
+                             FontSize="12"
+                             FontWeight="SemiBold"
+                             Foreground="#82929E" />
+                  <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding Name}"
+                               FontSize="17"
                                FontWeight="SemiBold"
-                               Foreground="#9ED8C5" />
-                    <TextBlock Text="{Binding SafetyStatus}"
-                               FontSize="18"
-                               Foreground="#E7FFF7" />
-                </StackPanel>
+                               Foreground="#EDF2F5" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Value}"
+                               Margin="12,0,0,0"
+                               FontSize="17"
+                               FontWeight="SemiBold"
+                               Foreground="{Binding AccentColor}" />
+                  </Grid>
+                  <TextBlock Grid.Row="2"
+                             Text="{Binding Description}"
+                             TextWrapping="Wrap"
+                             FontSize="13"
+                             LineHeight="19"
+                             Foreground="#AAB7C0" />
+                  <ProgressBar Grid.Row="3"
+                               IsVisible="{Binding HasProgress}"
+                               Minimum="0"
+                               Maximum="100"
+                               Value="{Binding ProgressValue}"
+                               Height="5"
+                               Foreground="{Binding AccentColor}"
+                               Background="#273038" />
+                  <TextBlock Grid.Row="4"
+                             Text="{Binding Source}"
+                             FontSize="11"
+                             Foreground="#6F808B" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Border Padding="17"
+                CornerRadius="8"
+                Background="#2B2519"
+                BorderBrush="#715D2D"
+                BorderThickness="1">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+            <TextBlock Text="!"
+                       FontSize="20"
+                       FontWeight="Bold"
+                       Foreground="#D6BC84" />
+            <StackPanel Grid.Column="1" Spacing="4">
+              <TextBlock Text="Game-menu graphics"
+                         FontSize="16"
+                         FontWeight="SemiBold"
+                         Foreground="#F0E4C9" />
+              <TextBlock Text="{Binding GameMenuSettingsSummary}"
+                         TextWrapping="Wrap"
+                         Foreground="#D7C9A9" />
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Expander Header="Technical details and raw files"
+                  IsExpanded="False"
+                  FontSize="16"
+                  Foreground="#DCE4E9">
+          <StackPanel Margin="0,14,0,0" Spacing="16">
+            <Border Padding="18" CornerRadius="8" Background="#171D23">
+              <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
+                <TextBlock Text="Installation" Foreground="#92A3AF" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding InstallationPath}"
+                           TextWrapping="Wrap"
+                           Foreground="#E4EAEE" />
+                <TextBlock Grid.Row="1" Text="User data" Foreground="#92A3AF" />
+                <TextBlock Grid.Row="1"
+                           Grid.Column="1"
+                           Text="{Binding UserDataPath}"
+                           TextWrapping="Wrap"
+                           Foreground="#E4EAEE" />
+                <TextBlock Grid.Row="2" Text="System.sav" Foreground="#92A3AF" />
+                <TextBlock Grid.Row="2"
+                           Grid.Column="1"
+                           Text="{Binding BinarySettingsPath}"
+                           TextWrapping="Wrap"
+                           Foreground="#E4EAEE" />
+                <TextBlock Grid.Row="3" Text="Binary status" Foreground="#92A3AF" />
+                <TextBlock Grid.Row="3"
+                           Grid.Column="1"
+                           Text="{Binding BinarySettingsStatus}"
+                           TextWrapping="Wrap"
+                           Foreground="#D6BC84" />
+              </Grid>
             </Border>
 
-            <TextBlock Grid.Row="1"
-                       Text="{Binding Description}"
-                       TextWrapping="Wrap"
-                       FontSize="16"
-                       LineHeight="24"
-                       Foreground="#D4DCE2" />
+            <Expander Header="Configuration files">
+              <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding ConfigurationFiles}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ConfigurationFileRowViewModel">
+                    <Border Margin="0,0,0,7" Padding="12" CornerRadius="5" Background="#171D23">
+                      <Grid ColumnDefinitions="180,*,220">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#9EADB7" />
+                        <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="#9ED8C5" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Expander>
 
-            <Border Grid.Row="2"
-                    Padding="20"
-                    CornerRadius="8"
-                    Background="#171D23"
-                    BorderBrush="#2A343D"
-                    BorderThickness="1">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Next milestone"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               Foreground="#F3F6F8" />
-                    <TextBlock Text="Detect the Windows Steam installation and Ancestors user-data directory without modifying either location."
-                               TextWrapping="Wrap"
-                               FontSize="15"
-                               Foreground="#AEBCC6" />
-                </StackPanel>
-            </Border>
-        </Grid>
-    </Grid>
+            <Expander Header="Raw INI entries">
+              <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding Settings}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SettingRowViewModel">
+                    <Border Margin="0,0,0,6" Padding="11" CornerRadius="5" Background="#151A20">
+                      <Grid ColumnDefinitions="140,2*,2*,70">
+                        <TextBlock Text="{Binding Source}" Foreground="#8FA1AD" />
+                        <TextBlock Grid.Column="1" Text="{Binding Setting}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="2" Text="{Binding Value}" TextWrapping="Wrap" Foreground="#A9D7C7" />
+                        <TextBlock Grid.Column="3" Text="{Binding Location}" Foreground="#71818C" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Expander>
 
+            <Expander Header="PAK packages">
+              <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding PakFiles}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:PakFileRowViewModel">
+                    <Border Margin="0,0,0,7" Padding="12" CornerRadius="5" Background="#171D23">
+                      <Grid ColumnDefinitions="250,200,*">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#9EADB7" />
+                        <TextBlock Grid.Column="2" Text="{Binding Classification}" Foreground="#C7B98C" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Expander>
+
+            <Expander Header="Inspection notes">
+              <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding Notices}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:NoticeRowViewModel">
+                    <Border Margin="0,0,0,7" Padding="12" CornerRadius="5" Background="#211D19">
+                      <Grid ColumnDefinitions="110,*">
+                        <TextBlock Text="{Binding Severity}" FontWeight="SemiBold" Foreground="#D6BC84" />
+                        <TextBlock Grid.Column="1" Text="{Binding Message}" TextWrapping="Wrap" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Expander>
+          </StackPanel>
+        </Expander>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
 </Window>
