@@ -1,6 +1,8 @@
+using System.Text.Json;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
+using AncestorsEnhanced.Infrastructure.Paks;
 using AncestorsEnhanced.Infrastructure.Parsing;
 
 namespace AncestorsEnhanced.Infrastructure.Inspection;
@@ -23,30 +25,35 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
     }
 
     public static ReadOnlyAncestorsInspector CreateDefault() =>
-        new(new PhysicalReadOnlyFileSystem(), new WindowsHostEnvironment());
+        new(new PhysicalReadOnlyFileSystem(), CreateHostEnvironment());
+
+    private static IHostEnvironment CreateHostEnvironment()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return new WindowsHostEnvironment();
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return new LinuxHostEnvironment();
+        }
+
+        throw new PlatformNotSupportedException("Windows and Linux are supported.");
+    }
 
     public GameInspectionSnapshot Inspect()
     {
         List<InspectionNotice> notices = [];
-        GameInstallationSnapshot? installation = null;
-
-        if (!_environment.IsWindows)
-        {
-            notices.Add(new InspectionNotice(
-                InspectionSeverity.Warning,
-                "host.unsupported",
-                "This release detects native Windows Steam installations only."));
-        }
-        else
-        {
-            installation = DiscoverInstallation(notices);
-        }
-
-        string? userDataDirectory = GetUserDataDirectory(notices);
+        GameInstallationSnapshot? installation = DiscoverInstallation(notices);
+        string? userDataDirectory = GetUserDataDirectory(installation, notices);
         ConfigurationFileSnapshot[] configurationFiles =
             ReadConfigurationFiles(userDataDirectory, notices);
         BinarySettingsFileSnapshot? binarySettingsFile = ReadBinarySettingsFile(userDataDirectory);
         PakFileSnapshot[] pakFiles = ReadPakFiles(installation, notices);
+        VignetteModSnapshot? vignette = installation is null
+            ? null
+            : VignettePakEditor.Inspect(installation.InstallDirectory);
 
         return new GameInspectionSnapshot(
             _environment.UtcNow,
@@ -55,7 +62,8 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
             configurationFiles,
             binarySettingsFile,
             pakFiles,
-            notices);
+            notices,
+            vignette);
     }
 
     private GameInstallationSnapshot? DiscoverInstallation(List<InspectionNotice> notices)
@@ -88,12 +96,15 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
             }
         }
 
+        installations.AddRange(DiscoverEpicInstallations(notices));
+        installations.AddRange(DiscoverGogInstallations());
+
         if (installations.Count == 0)
         {
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "game.not-found",
-                "Ancestors was not found in the detected Steam libraries."));
+                "Ancestors was not found. Steam Epic and GOG were checked."));
             return null;
         }
 
@@ -102,7 +113,7 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "game.multiple-installations",
-                "Multiple Steam installations were detected; the first valid installation is displayed."));
+                "Multiple Ancestors installations were detected. The first valid installation is displayed."));
         }
 
         return installations[0];
@@ -232,14 +243,17 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
 
             return new GameInstallationSnapshot(
                 StoreKind.Steam,
-                HostKind.Windows,
-                CompatibilityLayerKind.None,
+                _environment.Host,
+                _environment.Host == HostKind.Linux
+                    ? CompatibilityLayerKind.Proton
+                    : CompatibilityLayerKind.None,
                 steamRoot,
                 libraryRoot,
                 installDirectory,
                 executablePath,
                 appState?.GetString("buildid"),
-                executableExists);
+                executableExists,
+                ReadContentSignature(installDirectory));
         }
         catch (Exception exception) when (IsExpectedReadException(exception))
         {
@@ -251,8 +265,33 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
         }
     }
 
-    private string? GetUserDataDirectory(List<InspectionNotice> notices)
+    private string? GetUserDataDirectory(
+        GameInstallationSnapshot? installation,
+        List<InspectionNotice> notices)
     {
+        if (installation is { Host: HostKind.Linux, Store: StoreKind.Steam })
+        {
+            string users = Path.Combine(
+                installation.LibraryRoot,
+                "steamapps", "compatdata", SteamAppId, "pfx", "drive_c", "users");
+            if (_fileSystem.DirectoryExists(users))
+            {
+                string? protonData = Directory.EnumerateDirectories(users)
+                    .Select(path => Path.Combine(path, "AppData", "Local", "Ancestors", "Saved"))
+                    .FirstOrDefault(_fileSystem.DirectoryExists);
+                if (protonData is not null)
+                {
+                    return protonData;
+                }
+            }
+
+            notices.Add(new InspectionNotice(
+                InspectionSeverity.Warning,
+                "userdata.not-found",
+                "The Ancestors Proton prefix was not found. Start the game once."));
+            return null;
+        }
+
         if (string.IsNullOrWhiteSpace(_environment.LocalApplicationDataPath))
         {
             notices.Add(new InspectionNotice(
@@ -275,6 +314,108 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
         }
 
         return userDataDirectory;
+    }
+
+    private List<GameInstallationSnapshot> DiscoverEpicInstallations(
+        List<InspectionNotice> notices)
+    {
+        List<GameInstallationSnapshot> found = [];
+        foreach (string directory in _environment.GetEpicManifestDirectories()
+                     .Where(_fileSystem.DirectoryExists))
+        {
+            foreach (ReadOnlyFileMetadata file in _fileSystem.EnumerateFiles(directory, "*.item"))
+            {
+                try
+                {
+                    if (file.SizeBytes > MaximumTextFileSizeBytes)
+                    {
+                        continue;
+                    }
+
+                    using JsonDocument json = JsonDocument.Parse(_fileSystem.ReadAllText(file.FullPath));
+                    JsonElement root = json.RootElement;
+                    string? name = ReadJsonString(root, "DisplayName");
+                    string? install = ReadJsonString(root, "InstallLocation");
+                    if (string.IsNullOrWhiteSpace(install) ||
+                        name?.Contains("Ancestors", StringComparison.OrdinalIgnoreCase) != true)
+                    {
+                        continue;
+                    }
+
+                    GameInstallationSnapshot? snapshot = CreateStoreInstallation(
+                        StoreKind.EpicGames,
+                        directory,
+                        install,
+                        ReadJsonString(root, "BuildVersion"));
+                    if (snapshot is not null)
+                    {
+                        found.Add(snapshot);
+                    }
+                }
+                catch (Exception exception) when (IsExpectedReadException(exception))
+                {
+                    notices.Add(new InspectionNotice(
+                        InspectionSeverity.Information,
+                        "epic.manifest-unreadable",
+                        $"An Epic manifest could not be read: {exception.Message}"));
+                }
+            }
+        }
+
+        return found;
+    }
+
+    private GameInstallationSnapshot[] DiscoverGogInstallations() =>
+        _environment.GetGogInstallCandidates()
+            .Select(path => CreateStoreInstallation(StoreKind.Gog, path, path, null))
+            .OfType<GameInstallationSnapshot>()
+            .ToArray();
+
+    private GameInstallationSnapshot? CreateStoreInstallation(
+        StoreKind store,
+        string storeRoot,
+        string installDirectory,
+        string? buildId)
+    {
+        string fullInstall = Path.GetFullPath(installDirectory);
+        string executable = Path.Combine(
+            fullInstall, "Ancestors", "Binaries", "Win64", "Ancestors-Win64-Shipping.exe");
+        if (!_fileSystem.FileExists(executable))
+        {
+            return null;
+        }
+
+        return new GameInstallationSnapshot(
+            store,
+            HostKind.Windows,
+            CompatibilityLayerKind.None,
+            Path.GetFullPath(storeRoot),
+            fullInstall,
+            fullInstall,
+            executable,
+            buildId,
+            true,
+            ReadContentSignature(fullInstall));
+    }
+
+    private static string? ReadJsonString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static string? ReadContentSignature(string installDirectory)
+    {
+        try
+        {
+            string paks = Path.Combine(installDirectory, "Ancestors", "Content", "Paks");
+            string main = PakV5Archive.ReadIndexIdentity(Path.Combine(paks, "Ancestors-WindowsNoEditor.pak"));
+            string level = PakV5Archive.ReadIndexIdentity(Path.Combine(paks, "VL01E01.pak"));
+            return $"{main}:{level[(level.IndexOf(':') + 1)..]}";
+        }
+        catch (Exception exception) when (IsExpectedReadException(exception))
+        {
+            return null;
+        }
     }
 
     private ConfigurationFileSnapshot[] ReadConfigurationFiles(
@@ -477,9 +618,12 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
 
     private static bool IsExpectedReadException(Exception exception) =>
         exception is IOException or
+        InvalidDataException or
         UnauthorizedAccessException or
         System.Security.SecurityException or
         FormatException or
+        JsonException or
         ArgumentException or
-        NotSupportedException;
+        NotSupportedException or
+        OverflowException;
 }

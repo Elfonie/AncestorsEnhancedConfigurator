@@ -16,11 +16,9 @@ internal sealed record ScalabilityPresetValues(
 internal static class AncestorsScalabilityPresetCatalog
 {
     public const string SupportedBuildId = "5495393";
+    public const string SupportedContentSignature =
+        "PAK5:3F8F78ACFD698EC584691CACB2791DA79E2AEBF2:A97EEE5DD250452D963F167EBD6091CB7574E60D";
 
-    // Extracted from Ancestors/Config/DefaultScalability.ini in the packaged
-    // Steam build above. Only LOW, MEDIUM and HIGH are exposed by the game's
-    // AdvancedOptionsQualityLevels string table, so Unreal's unused level 3
-    // and Cine sections are intentionally excluded here.
     private static readonly Dictionary<string, ScalabilityPresetValues> Values =
         new Dictionary<string, ScalabilityPresetValues>(StringComparer.OrdinalIgnoreCase)
         {

@@ -8,9 +8,6 @@ public static class ReadableSettingsCatalog
 {
     private const string SystemSettingsSection = "SystemSettings";
     private const string MoviePlayerSection = "/Script/MoviePlayer.MoviePlayerSettings";
-    private const string KnownHalfVignettePakSha256 =
-        "06F74C5E4BF70D2748614D8C74405B4C96FB4E50F103A66827C4E2041B2801A0";
-
     public static IReadOnlyList<FeatureGroupSnapshot> CreateFeatureGroups(
         GameInspectionSnapshot snapshot)
     {
@@ -224,31 +221,28 @@ public static class ReadableSettingsCatalog
 
     private static FeatureGroupSnapshot CreateVignetteGroup(GameInspectionSnapshot snapshot)
     {
-        PakFileSnapshot? knownPatch = snapshot.PakFiles.FirstOrDefault(pak =>
-            string.Equals(pak.Sha256, KnownHalfVignettePakSha256, StringComparison.OrdinalIgnoreCase));
-        bool hasUnknownPatch = snapshot.PakFiles.Any(pak =>
-            pak.Classification == PakClassification.PatchStyle);
-
-        FeatureSettingSnapshot environment = knownPatch is not null
-            ? new FeatureSettingSnapshot(
-                "environment-vignette",
-                "Environmental vignette",
-                "50% of original",
-                "The day/night curve is reduced from 0.40-0.80 to 0.20-0.40; it is not a constant value of 0.50.",
-                "Verified patch fingerprint",
-                "VL01E01_Vignette_Intensity",
-                ReadableSettingState.Modified,
-                IsAdvanced: false,
-                Percentage: 0.5)
-            : new FeatureSettingSnapshot(
-                "environment-vignette",
-                "Environmental vignette",
-                hasUnknownPatch ? "Unknown custom package" : "Game controlled",
-                "The game's day/night system varies vignette intensity over time.",
-                hasUnknownPatch ? "Unrecognized patch package" : "No verified patch",
-                "VL01E01_Vignette_Intensity",
-                ReadableSettingState.Unknown,
-                IsAdvanced: false);
+        VignetteModSnapshot vignette = snapshot.Vignette ?? new VignetteModSnapshot(
+            null,
+            false,
+            "Not inspected");
+        decimal? percent = vignette.Percent;
+        SettingEditSnapshot? editor = vignette.IsEditable
+            ? EditableSettingsCatalog.Create(
+                snapshot,
+                "mod.VignettePercent",
+                percent?.ToString(CultureInfo.InvariantCulture))
+            : null;
+        FeatureSettingSnapshot environment = new(
+            "environment-vignette",
+            "Environmental vignette",
+            percent is decimal value ? $"{value:0}% of original" : "Game controlled",
+            "Scales the full day and night vignette curve without changing gameplay status effects.",
+            vignette.Status,
+            "VL01E01_Vignette_Intensity",
+            percent is null ? ReadableSettingState.Unknown : ReadableSettingState.Modified,
+            IsAdvanced: false,
+            Percentage: percent is decimal percentage ? (double)(percentage / 100) : null,
+            Editor: editor);
 
         return new FeatureGroupSnapshot(
             "vignette",

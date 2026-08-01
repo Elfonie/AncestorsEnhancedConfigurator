@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AncestorsEnhanced.Core.Editing;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
 
@@ -7,12 +8,21 @@ internal static class ConfigurationFileOperations
     private const string BackupFolderName = "AncestorsEnhanced";
     private static readonly HashSet<string> AllowedFiles =
         new(StringComparer.OrdinalIgnoreCase) { "Engine.ini", "Game.ini" };
+    private static readonly HashSet<string> AllowedPakFiles =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "AncestorsEnhanced-Vignette_P.pak",
+            "pakchunk99-WindowsNoEditor_P.pak",
+        };
 
     public static string GetConfigurationDirectory(string userDataDirectory) =>
         Path.GetFullPath(Path.Combine(userDataDirectory, "Config", "WindowsNoEditor"));
 
     public static string GetBackupRoot(string userDataDirectory) =>
         Path.GetFullPath(Path.Combine(userDataDirectory, BackupFolderName, "Backups"));
+
+    public static string GetPakDirectory(string installDirectory) =>
+        Path.GetFullPath(Path.Combine(installDirectory, "Ancestors", "Content", "Paks"));
 
     public static string GetOperationDirectory(string userDataDirectory, string operationId)
     {
@@ -46,6 +56,42 @@ internal static class ConfigurationFileOperations
         {
             throw new InvalidOperationException($"{fileName} is not an allowed configuration target.");
         }
+    }
+
+    public static void ValidatePakFileName(string fileName)
+    {
+        if (!AllowedPakFiles.Contains(fileName) ||
+            !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"{fileName} is not an allowed PAK target.");
+        }
+    }
+
+    public static string GetTargetPath(
+        string userDataDirectory,
+        string? installDirectory,
+        string fileName,
+        SettingFileTarget target)
+    {
+        if (target == SettingFileTarget.Ini)
+        {
+            return GetTargetPath(GetConfigurationDirectory(userDataDirectory), fileName);
+        }
+
+        if (string.IsNullOrWhiteSpace(installDirectory))
+        {
+            throw new InvalidOperationException("The game installation directory is missing.");
+        }
+
+        ValidatePakFileName(fileName);
+        string directory = GetPakDirectory(installDirectory);
+        string path = Path.GetFullPath(Path.Combine(directory, fileName));
+        if (!string.Equals(Path.GetDirectoryName(path), directory, PathComparison))
+        {
+            throw new InvalidOperationException("The target path leaves the PAK directory.");
+        }
+
+        return path;
     }
 
     public static void ValidateConfigurationPath(
@@ -120,4 +166,8 @@ internal static class ConfigurationFileOperations
 
     public static string Sha256(byte[] content) =>
         Convert.ToHexString(SHA256.HashData(content));
+
+    public static StringComparison PathComparison => OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
 }

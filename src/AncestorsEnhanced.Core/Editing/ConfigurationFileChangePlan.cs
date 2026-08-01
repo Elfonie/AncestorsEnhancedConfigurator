@@ -6,4 +6,6 @@ public sealed record ConfigurationFileChangePlan(
     bool Existed,
     string OriginalSha256,
     byte[] OriginalContent,
-    byte[] UpdatedContent);
+    byte[] UpdatedContent,
+    SettingFileTarget Target = SettingFileTarget.Ini,
+    bool ResultExists = true);

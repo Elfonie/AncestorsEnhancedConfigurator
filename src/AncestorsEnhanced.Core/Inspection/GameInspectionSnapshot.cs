@@ -7,7 +7,8 @@ public sealed record GameInspectionSnapshot(
     IReadOnlyList<ConfigurationFileSnapshot> ConfigurationFiles,
     BinarySettingsFileSnapshot? BinarySettingsFile,
     IReadOnlyList<PakFileSnapshot> PakFiles,
-    IReadOnlyList<InspectionNotice> Notices)
+    IReadOnlyList<InspectionNotice> Notices,
+    VignetteModSnapshot? Vignette = null)
 {
     public bool IsGameDetected => Installation is not null;
 

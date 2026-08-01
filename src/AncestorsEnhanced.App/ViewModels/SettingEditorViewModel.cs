@@ -67,6 +67,14 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public decimal Increment => _snapshot.Increment ?? 1;
 
+    public string Unit => _snapshot.Unit ?? string.Empty;
+
+    public bool HasUnit => _snapshot.Unit is not null;
+
+    public string OverrideLabel => _snapshot.Target == SettingFileTarget.Pak
+        ? "Custom vignette strength"
+        : "Override game preset";
+
     public string ModeLabel => IsPresence
         ? UseCustomValue ? "Videos skipped" : "Game default"
         : UseCustomValue ? "Custom value" : "Game controlled";
@@ -83,7 +91,7 @@ public partial class SettingEditorViewModel : ViewModelBase
             ? SelectedChoice?.Label ?? "Choose a value"
             : IsToggle
                 ? ToggleValue ? "On" : "Off"
-                : DesiredValue ?? "Invalid value"
+                : $"{DesiredValue ?? "Invalid value"}{Unit}"
         : "Use game preset";
 
     public SettingChangeRequest CreateRequest(string settingId, string displayName) =>

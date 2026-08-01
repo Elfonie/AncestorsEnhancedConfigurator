@@ -105,7 +105,7 @@
       "ancestorsenhanced.infrastructure": {
         "type": "Project",
         "dependencies": {
-          "AncestorsEnhanced.Core": "[1.0.0, )"
+          "AncestorsEnhanced.Core": "[0.3.0, )"
         }
       }
     }

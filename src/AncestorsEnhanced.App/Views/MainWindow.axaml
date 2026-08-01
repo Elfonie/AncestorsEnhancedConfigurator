@@ -204,7 +204,7 @@
 
                                         <StackPanel IsVisible="{Binding IsRegularEditor}" Spacing="8">
                                           <ToggleSwitch IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
-                                                        Content="Override game preset" />
+                                                        Content="{Binding OverrideLabel}" />
 
                                           <Grid IsEnabled="{Binding UseCustomValue}">
                                             <ToggleSwitch IsVisible="{Binding IsToggle}"
@@ -212,13 +212,21 @@
                                                           HorizontalAlignment="Right"
                                                           Content="Enabled" />
 
-                                            <NumericUpDown IsVisible="{Binding IsNumber}"
-                                                           Value="{Binding NumberValue, Mode=TwoWay}"
-                                                           Minimum="{Binding Minimum}"
-                                                           Maximum="{Binding Maximum}"
-                                                           Increment="{Binding Increment}"
-                                                           FormatString="0.####"
-                                                           HorizontalAlignment="Stretch" />
+                                            <Grid IsVisible="{Binding IsNumber}"
+                                                  ColumnDefinitions="*,Auto"
+                                                  ColumnSpacing="8">
+                                              <NumericUpDown Value="{Binding NumberValue, Mode=TwoWay}"
+                                                             Minimum="{Binding Minimum}"
+                                                             Maximum="{Binding Maximum}"
+                                                             Increment="{Binding Increment}"
+                                                             FormatString="0.####"
+                                                             HorizontalAlignment="Stretch" />
+                                              <TextBlock Grid.Column="1"
+                                                         Text="{Binding Unit}"
+                                                         IsVisible="{Binding HasUnit}"
+                                                         VerticalAlignment="Center"
+                                                         Foreground="#92A3AF" />
+                                            </Grid>
 
                                             <ComboBox IsVisible="{Binding IsChoice}"
                                                       ItemsSource="{Binding Choices}"

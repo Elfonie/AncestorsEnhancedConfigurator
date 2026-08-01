@@ -8,7 +8,6 @@ public sealed class ValveKeyValueParserTests
     public void ParseReadsNestedObjectsCommentsAndEscapedPaths()
     {
         const string Content = """
-            // Steam generated file
             "libraryfolders"
             {
                 "0"

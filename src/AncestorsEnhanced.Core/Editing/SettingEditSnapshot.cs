@@ -10,4 +10,6 @@ public sealed record SettingEditSnapshot(
     decimal? Minimum = null,
     decimal? Maximum = null,
     decimal? Increment = null,
-    IReadOnlyList<SettingChoice>? Choices = null);
+    IReadOnlyList<SettingChoice>? Choices = null,
+    SettingFileTarget Target = SettingFileTarget.Ini,
+    string? Unit = null);

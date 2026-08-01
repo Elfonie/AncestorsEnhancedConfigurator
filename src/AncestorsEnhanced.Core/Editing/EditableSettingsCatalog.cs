@@ -11,7 +11,9 @@ internal sealed record SettingEditorTemplate(
     decimal? Minimum = null,
     decimal? Maximum = null,
     decimal? Increment = null,
-    IReadOnlyList<SettingChoice>? Choices = null);
+    IReadOnlyList<SettingChoice>? Choices = null,
+    SettingFileTarget Target = SettingFileTarget.Ini,
+    string? Unit = null);
 
 public static class EditableSettingsCatalog
 {
@@ -92,6 +94,16 @@ public static class EditableSettingsCatalog
                 "ClearArray",
                 "Game.ini",
                 "/Script/MoviePlayer.MoviePlayerSettings"),
+            ["mod.VignettePercent"] = new(
+                SettingEditorKind.Number,
+                "100",
+                "AncestorsEnhanced-Vignette_P.pak",
+                "GraphicsMods",
+                0,
+                100,
+                5,
+                Target: SettingFileTarget.Pak,
+                Unit: "%"),
         };
 
     public static SettingEditSnapshot? Create(
@@ -115,7 +127,9 @@ public static class EditableSettingsCatalog
             template.Minimum,
             template.Maximum,
             template.Increment,
-            template.Choices);
+            template.Choices,
+            template.Target,
+            template.Unit);
         return currentOverride is null || IsValidValue(editor, currentOverride)
             ? editor
             : null;
@@ -153,16 +167,30 @@ public static class EditableSettingsCatalog
     public static bool IsVerifiedEditingTarget(GameInspectionSnapshot snapshot)
     {
         GameInstallationSnapshot? installation = snapshot.Installation;
-        return installation is
+        if (installation?.ExecutableExists != true)
         {
-            Store: StoreKind.Steam,
-            Host: HostKind.Windows,
-            CompatibilityLayer: CompatibilityLayerKind.None,
-            ExecutableExists: true,
-        } &&
-               string.Equals(
+            return false;
+        }
+
+        bool supportedPlatform = installation switch
+        {
+            { Store: StoreKind.Steam, Host: HostKind.Windows, CompatibilityLayer: CompatibilityLayerKind.None } => true,
+            { Store: StoreKind.Steam, Host: HostKind.Linux, CompatibilityLayer: CompatibilityLayerKind.Proton } => true,
+            { Store: StoreKind.EpicGames or StoreKind.Gog, Host: HostKind.Windows, CompatibilityLayer: CompatibilityLayerKind.None } => true,
+            _ => false,
+        };
+        if (!supportedPlatform)
+        {
+            return false;
+        }
+
+        return string.Equals(
                    installation.BuildId,
                    AncestorsScalabilityPresetCatalog.SupportedBuildId,
+                   StringComparison.Ordinal) ||
+               string.Equals(
+                   installation.ContentSignature,
+                   AncestorsScalabilityPresetCatalog.SupportedContentSignature,
                    StringComparison.Ordinal);
     }
 

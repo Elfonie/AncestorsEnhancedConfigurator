@@ -79,7 +79,7 @@ internal static class SettingsBackupStore
 
             OperationManifest? manifest = ReadManifest(directory);
             if (manifest is null ||
-                manifest.Version != 1 ||
+                manifest.Version != 2 ||
                 !string.Equals(manifest.BuildId, supportedBuildId, StringComparison.Ordinal) ||
                 !string.Equals(
                     Path.GetFullPath(manifest.UserDataDirectory),
@@ -91,7 +91,11 @@ internal static class SettingsBackupStore
 
             bool validFiles = manifest.Files.Count > 0 && manifest.Files.All(file =>
             {
-                ValidateFileName(file.FileName);
+                _ = GetTargetPath(
+                    manifest.UserDataDirectory,
+                    manifest.InstallDirectory,
+                    file.FileName,
+                    file.Target);
                 string? expectedBackup = file.Existed ? $"{file.FileName}.before" : null;
                 return string.Equals(
                     file.BackupFileName,
@@ -104,14 +108,19 @@ internal static class SettingsBackupStore
                 return null;
             }
 
-            string configDirectory = GetConfigurationDirectory(manifest.UserDataDirectory);
             bool unchanged = manifest.Files.All(file =>
             {
-                string path = GetTargetPath(configDirectory, file.FileName);
-                return File.Exists(path) && string.Equals(
-                    Sha256(File.ReadAllBytes(path)),
-                    file.ResultSha256,
-                    StringComparison.Ordinal);
+                string path = GetTargetPath(
+                    manifest.UserDataDirectory,
+                    manifest.InstallDirectory,
+                    file.FileName,
+                    file.Target);
+                return file.ResultExists
+                    ? File.Exists(path) && string.Equals(
+                        Sha256(File.ReadAllBytes(path)),
+                        file.ResultSha256,
+                        StringComparison.Ordinal)
+                    : !File.Exists(path);
             });
 
             return unchanged ? new StoredSettingsOperation(directory, manifest) : null;
@@ -122,25 +131,39 @@ internal static class SettingsBackupStore
 
     private static OperationManifest CreateManifest(SettingsChangePlan plan) =>
         new(
-            Version: 1,
+            Version: 2,
             plan.OperationId,
             plan.CreatedAtUtc,
             plan.BuildId,
             plan.UserDataDirectory,
+            plan.InstallDirectory,
             plan.Changes,
             plan.Files.Select(file => new ManifestFile(
                 file.FileName,
                 file.Existed,
                 file.OriginalSha256,
                 Sha256(file.UpdatedContent),
-                file.Existed ? $"{file.FileName}.before" : null)).ToArray());
+                file.Existed ? $"{file.FileName}.before" : null,
+                file.Target,
+                file.ResultExists)).ToArray());
 
     private static OperationManifest? ReadManifest(string directory)
     {
         string path = Path.Combine(directory, ManifestFileName);
-        return IsNormalFile(path)
+        OperationManifest? manifest = IsNormalFile(path)
             ? JsonSerializer.Deserialize<OperationManifest>(File.ReadAllText(path, Encoding.UTF8))
             : null;
+        return manifest?.Version == 1
+            ? manifest with
+            {
+                Version = 2,
+                Files = manifest.Files.Select(file => file with
+                {
+                    Target = SettingFileTarget.Ini,
+                    ResultExists = true,
+                }).ToArray(),
+            }
+            : manifest;
     }
 
     private static bool IsNormalFile(string path) =>
@@ -159,6 +182,7 @@ internal sealed record OperationManifest(
     DateTimeOffset CreatedAtUtc,
     string BuildId,
     string UserDataDirectory,
+    string? InstallDirectory,
     IReadOnlyList<SettingChangePreview> Changes,
     IReadOnlyList<ManifestFile> Files);
 
@@ -167,7 +191,9 @@ internal sealed record ManifestFile(
     bool Existed,
     string OriginalSha256,
     string ResultSha256,
-    string? BackupFileName);
+    string? BackupFileName,
+    SettingFileTarget Target,
+    bool ResultExists);
 
 internal sealed record StoredSettingsOperation(
     string Directory,

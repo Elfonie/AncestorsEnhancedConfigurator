@@ -28,7 +28,8 @@ public sealed class ReadableSettingsCatalogTests
                     DateTimeOffset.UnixEpoch,
                     PakClassification.PatchStyle,
                     "06F74C5E4BF70D2748614D8C74405B4C96FB4E50F103A66827C4E2041B2801A0"),
-            ]);
+            ],
+            vignette: new VignetteModSnapshot(50, true, "Managed graphics patch"));
 
         IReadOnlyList<FeatureGroupSnapshot> groups =
             ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
@@ -149,7 +150,8 @@ public sealed class ReadableSettingsCatalogTests
     private static GameInspectionSnapshot CreateSnapshot(
         IReadOnlyList<IniSettingSnapshot> iniSettings,
         IReadOnlyList<PakFileSnapshot> pakFiles,
-        string? buildId = null)
+        string? buildId = null,
+        VignetteModSnapshot? vignette = null)
     {
         return new GameInspectionSnapshot(
             DateTimeOffset.UnixEpoch,
@@ -178,6 +180,7 @@ public sealed class ReadableSettingsCatalogTests
             ],
             null,
             pakFiles,
-            []);
+            [],
+            vignette);
     }
 }

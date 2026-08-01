@@ -27,7 +27,7 @@ public partial class MainViewModel : ViewModelBase
     private string _installationPath = "Not detected";
 
     [ObservableProperty]
-    private string _installationDetails = "Steam build unknown";
+    private string _installationDetails = "Store and build unknown";
 
     [ObservableProperty]
     private string _userDataPath = "Not detected";
@@ -272,8 +272,8 @@ public partial class MainViewModel : ViewModelBase
         InspectionTime = $"Checked {snapshot.InspectedAtUtc.ToLocalTime():G}";
         InstallationPath = snapshot.Installation?.InstallDirectory ?? "Not detected";
         InstallationDetails = snapshot.Installation is null
-            ? "Steam build unknown"
-            : $"Steam · Build {snapshot.Installation.BuildId ?? "unknown"}";
+            ? "Store and build unknown"
+            : FormatInstallation(snapshot.Installation);
         UserDataPath = snapshot.UserDataDirectory ?? "Not detected";
         BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
         BinarySettingsStatus = snapshot.BinarySettingsFile?.FormatStatus ?? "Not inspected";
@@ -473,5 +473,20 @@ public partial class MainViewModel : ViewModelBase
         }
 
         return string.Create(CultureInfo.CurrentCulture, $"{size:0.##} {units[unit]}");
+    }
+
+    private static string FormatInstallation(GameInstallationSnapshot installation)
+    {
+        string store = installation.Store switch
+        {
+            StoreKind.EpicGames => "Epic Games",
+            StoreKind.Gog => "GOG",
+            _ => installation.Store.ToString(),
+        };
+        string layer = installation.CompatibilityLayer == CompatibilityLayerKind.Proton
+            ? "  Proton"
+            : string.Empty;
+        return $"{store}  {installation.Host}{layer}  " +
+               $"Build {installation.BuildId ?? "content verified"}";
     }
 }

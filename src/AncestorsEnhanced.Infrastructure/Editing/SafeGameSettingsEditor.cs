@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Infrastructure.Paks;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
@@ -79,7 +80,10 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         List<ConfigurationFileChangePlan> filePlans = [];
         List<SettingChangePreview> previews = [];
 
-        foreach (IGrouping<string, SettingChangeRequest> fileGroup in requests.GroupBy(
+        SettingChangeRequest[] iniRequests = requests
+            .Where(request => !string.Equals(request.Key, "mod.VignettePercent", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        foreach (IGrouping<string, SettingChangeRequest> fileGroup in iniRequests.GroupBy(
                      request => request.FileName,
                      StringComparer.OrdinalIgnoreCase))
         {
@@ -131,6 +135,31 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
             }
         }
 
+        SettingChangeRequest? vignetteRequest = requests.SingleOrDefault(request =>
+            string.Equals(request.Key, "mod.VignettePercent", StringComparison.OrdinalIgnoreCase));
+        if (vignetteRequest is not null)
+        {
+            ConfigurationFileChangePlan vignette = VignettePakEditor.CreatePlan(
+                snapshot,
+                vignetteRequest.Value);
+            if (vignette.Existed || vignette.ResultExists)
+            {
+                string before = snapshot.Vignette?.Percent?.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture) ?? "100";
+                string after = vignetteRequest.Value ?? "100";
+                if (!string.Equals(before, after, StringComparison.Ordinal))
+                {
+                    previews.Add(new SettingChangePreview(
+                        vignetteRequest.DisplayName,
+                        vignette.FileName,
+                        vignetteRequest.Key,
+                        before,
+                        after));
+                    filePlans.Add(vignette);
+                }
+            }
+        }
+
         if (filePlans.Count == 0)
         {
             throw new InvalidOperationException("The selected values already match the configuration files.");
@@ -144,7 +173,8 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
             SupportedBuildId,
             userDataDirectory,
             previews,
-            filePlans);
+            filePlans,
+            snapshot.Installation!.InstallDirectory);
         lock (_planLock)
         {
             _issuedPlan = plan;
@@ -197,12 +227,23 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
             {
                 foreach (ConfigurationFileChangePlan file in plan.Files)
                 {
-                    WriteBytesAtomically(file.FullPath, file.UpdatedContent);
+                    if (file.ResultExists)
+                    {
+                        WriteBytesAtomically(file.FullPath, file.UpdatedContent);
+                    }
+                    else
+                    {
+                        File.Delete(file.FullPath);
+                    }
+
                     applied.Add(file);
-                    if (!string.Equals(
+                    bool valid = file.ResultExists
+                        ? File.Exists(file.FullPath) && string.Equals(
                             Sha256(File.ReadAllBytes(file.FullPath)),
                             Sha256(file.UpdatedContent),
-                            StringComparison.Ordinal))
+                            StringComparison.Ordinal)
+                        : !File.Exists(file.FullPath);
+                    if (!valid)
                     {
                         throw new IOException($"Validation failed after writing {file.FileName}.");
                     }
@@ -279,9 +320,11 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
                 foreach (ManifestFile file in operation.Manifest.Files)
                 {
                     string targetPath = GetTargetPath(
-                        GetConfigurationDirectory(operation.Manifest.UserDataDirectory),
-                        file.FileName);
-                    byte[] current = File.ReadAllBytes(targetPath);
+                        operation.Manifest.UserDataDirectory,
+                        operation.Manifest.InstallDirectory,
+                        file.FileName,
+                        file.Target);
+                    byte[] current = File.Exists(targetPath) ? File.ReadAllBytes(targetPath) : [];
                     restored.Add((file, current));
                     if (file.Existed)
                     {
@@ -319,9 +362,18 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
                 foreach ((ManifestFile file, byte[] current) in restored)
                 {
                     string targetPath = GetTargetPath(
-                        GetConfigurationDirectory(operation.Manifest.UserDataDirectory),
-                        file.FileName);
-                    WriteBytesAtomically(targetPath, current);
+                        operation.Manifest.UserDataDirectory,
+                        operation.Manifest.InstallDirectory,
+                        file.FileName,
+                        file.Target);
+                    if (file.ResultExists)
+                    {
+                        WriteBytesAtomically(targetPath, current);
+                    }
+                    else
+                    {
+                        File.Delete(targetPath);
+                    }
                 }
 
                 throw;
@@ -351,7 +403,7 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         if (!EditableSettingsCatalog.IsVerifiedEditingTarget(snapshot))
         {
             throw new InvalidOperationException(
-                "Editing is enabled only for the verified native Windows Steam build 5495393.");
+                "Editing requires a supported Ancestors installation.");
         }
 
         if (string.IsNullOrWhiteSpace(snapshot.UserDataDirectory))
@@ -361,7 +413,7 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
 
         if (!_isExpectedUserDataDirectory(snapshot.UserDataDirectory))
         {
-            throw new InvalidOperationException("The detected user-data directory is not the native Ancestors location.");
+            throw new InvalidOperationException("The detected user-data directory is not a supported Ancestors location.");
         }
     }
 
@@ -374,13 +426,28 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
             throw new InvalidOperationException("The change plan is not valid for this release.");
         }
 
-        string configDirectory = GetConfigurationDirectory(plan.UserDataDirectory);
-        ValidateConfigurationPath(plan.UserDataDirectory, configDirectory);
+        ValidateConfigurationPath(
+            plan.UserDataDirectory,
+            GetConfigurationDirectory(plan.UserDataDirectory));
+        if (plan.Files.Any(file => file.Target == SettingFileTarget.Pak))
+        {
+            if (string.IsNullOrWhiteSpace(plan.InstallDirectory))
+            {
+                throw new InvalidOperationException("The game installation directory is missing.");
+            }
+
+            ValidateConfigurationPath(
+                plan.InstallDirectory,
+                GetPakDirectory(plan.InstallDirectory));
+        }
         foreach (ConfigurationFileChangePlan file in plan.Files)
         {
-            ValidateFileName(file.FileName);
-            string expectedPath = GetTargetPath(configDirectory, file.FileName);
-            if (!string.Equals(expectedPath, Path.GetFullPath(file.FullPath), StringComparison.OrdinalIgnoreCase))
+            string expectedPath = GetTargetPath(
+                plan.UserDataDirectory,
+                plan.InstallDirectory,
+                file.FileName,
+                file.Target);
+            if (!string.Equals(expectedPath, Path.GetFullPath(file.FullPath), PathComparison))
             {
                 throw new InvalidOperationException("The change plan contains an unexpected target path.");
             }
@@ -415,9 +482,17 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
                 continue;
             }
 
-            WriteBytesAtomically(
-                file.FullPath,
-                useOriginal ? file.OriginalContent : file.UpdatedContent);
+            bool exists = useOriginal ? file.Existed : file.ResultExists;
+            if (exists)
+            {
+                WriteBytesAtomically(
+                    file.FullPath,
+                    useOriginal ? file.OriginalContent : file.UpdatedContent);
+            }
+            else
+            {
+                File.Delete(file.FullPath);
+            }
         }
     }
 
@@ -440,13 +515,19 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
     {
         string localApplicationData = System.Environment.GetFolderPath(
             System.Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(localApplicationData))
+        string fullPath = Path.GetFullPath(path);
+        if (!string.IsNullOrWhiteSpace(localApplicationData))
         {
-            return false;
+            string expected = Path.GetFullPath(Path.Combine(localApplicationData, "Ancestors", "Saved"));
+            if (string.Equals(expected, fullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
         }
 
-        string expected = Path.GetFullPath(Path.Combine(localApplicationData, "Ancestors", "Saved"));
-        return string.Equals(expected, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
+        string normalized = fullPath.Replace('\\', '/');
+        return normalized.Contains("/steamapps/compatdata/536270/pfx/drive_c/users/", StringComparison.Ordinal) &&
+               normalized.EndsWith("/AppData/Local/Ancestors/Saved", StringComparison.Ordinal);
     }
 
     private static bool IsExpectedWriteException(Exception exception) =>

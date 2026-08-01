@@ -72,6 +72,71 @@ public sealed class ReadOnlyAncestorsInspectorTests
         Assert.Contains(snapshot.Notices, notice => notice.Code == "steam.manifest-invalid");
     }
 
+    [Fact]
+    public void InspectFindsEpicManifest()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string install = CreateStoreInstallation(temporaryDirectory.CreateDirectory("EpicGame"));
+        string manifests = temporaryDirectory.CreateDirectory("EpicManifests");
+        string jsonPath = install.Replace("\\", "\\\\", StringComparison.Ordinal);
+        File.WriteAllText(
+            Path.Combine(manifests, "ancestor.item"),
+            $$"""
+            {
+              "DisplayName": "Ancestors The Humankind Odyssey",
+              "InstallLocation": "{{jsonPath}}",
+              "BuildVersion": "epic build"
+            }
+            """);
+
+        ReadOnlyAncestorsInspector inspector = new(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment(
+                [],
+                temporaryDirectory.CreateDirectory("Local"),
+                EpicManifests: [manifests]));
+
+        GameInstallationSnapshot installation = Assert.IsType<GameInstallationSnapshot>(
+            inspector.Inspect().Installation);
+        Assert.Equal(StoreKind.EpicGames, installation.Store);
+        Assert.Equal(install, installation.InstallDirectory);
+    }
+
+    [Fact]
+    public void InspectFindsGogCandidate()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string install = CreateStoreInstallation(temporaryDirectory.CreateDirectory("GogGame"));
+        ReadOnlyAncestorsInspector inspector = new(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment(
+                [],
+                temporaryDirectory.CreateDirectory("Local"),
+                GogCandidates: [install]));
+
+        Assert.Equal(StoreKind.Gog, inspector.Inspect().Installation?.Store);
+    }
+
+    [Fact]
+    public void InspectFindsProtonUserData()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        CreateValidInstallation(steamRoot);
+        string saved = Directory.CreateDirectory(Path.Combine(
+            steamRoot,
+            "steamapps", "compatdata", "536270", "pfx", "drive_c", "users", "steamuser",
+            "AppData", "Local", "Ancestors", "Saved")).FullName;
+        ReadOnlyAncestorsInspector inspector = new(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment([steamRoot], null, HostKind.Linux));
+
+        GameInspectionSnapshot snapshot = inspector.Inspect();
+
+        Assert.Equal(CompatibilityLayerKind.Proton, snapshot.Installation?.CompatibilityLayer);
+        Assert.Equal(saved, snapshot.UserDataDirectory);
+    }
+
     private static void CreateSteamLibraryList(string steamRoot, string libraryRoot)
     {
         string steamApps = Directory.CreateDirectory(Path.Combine(steamRoot, "steamapps")).FullName;
@@ -150,17 +215,41 @@ public sealed class ReadOnlyAncestorsInspectorTests
         File.WriteAllBytes(Path.Combine(saveDirectory, "System.sav"), [1, 2, 3, 4]);
     }
 
-    private sealed class TestHostEnvironment(
-        string steamRoot,
-        string localApplicationDataPath) : IHostEnvironment
+    private static string CreateStoreInstallation(string gameRoot)
     {
-        public bool IsWindows => true;
+        string binaryDirectory = Directory.CreateDirectory(Path.Combine(
+            gameRoot,
+            "Ancestors",
+            "Binaries",
+            "Win64")).FullName;
+        File.WriteAllBytes(Path.Combine(binaryDirectory, "Ancestors-Win64-Shipping.exe"), []);
+        Directory.CreateDirectory(Path.Combine(gameRoot, "Ancestors", "Content", "Paks"));
+        return gameRoot;
+    }
 
-        public string? LocalApplicationDataPath => localApplicationDataPath;
+    private sealed class TestHostEnvironment(
+        IReadOnlyList<string> SteamRoots,
+        string? LocalData,
+        HostKind CurrentHost = HostKind.Windows,
+        IReadOnlyList<string>? EpicManifests = null,
+        IReadOnlyList<string>? GogCandidates = null) : IHostEnvironment
+    {
+        public TestHostEnvironment(string steamRoot, string localData)
+            : this([steamRoot], localData)
+        {
+        }
+
+        public HostKind Host => CurrentHost;
+
+        public string? LocalApplicationDataPath => LocalData;
 
         public DateTimeOffset UtcNow { get; } = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
 
-        public IReadOnlyList<string> GetSteamRootCandidates() => [steamRoot];
+        public IReadOnlyList<string> GetSteamRootCandidates() => SteamRoots;
+
+        public IReadOnlyList<string> GetEpicManifestDirectories() => EpicManifests ?? [];
+
+        public IReadOnlyList<string> GetGogInstallCandidates() => GogCandidates ?? [];
     }
 
     private sealed class TemporaryDirectory : IDisposable

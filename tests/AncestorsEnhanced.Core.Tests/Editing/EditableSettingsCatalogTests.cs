@@ -41,14 +41,13 @@ public sealed class EditableSettingsCatalogTests
     }
 
     [Theory]
-    [InlineData(StoreKind.Gog, HostKind.Windows, CompatibilityLayerKind.None, true)]
-    [InlineData(StoreKind.Steam, HostKind.Linux, CompatibilityLayerKind.Proton, true)]
-    [InlineData(StoreKind.Steam, HostKind.Windows, CompatibilityLayerKind.None, false)]
-    public void EditingRequiresTheExactVerifiedTarget(
+    [InlineData(StoreKind.EpicGames, HostKind.Windows, CompatibilityLayerKind.None)]
+    [InlineData(StoreKind.Gog, HostKind.Windows, CompatibilityLayerKind.None)]
+    [InlineData(StoreKind.Steam, HostKind.Linux, CompatibilityLayerKind.Proton)]
+    public void EditingSupportsVerifiedStores(
         StoreKind store,
         HostKind host,
-        CompatibilityLayerKind compatibilityLayer,
-        bool executableExists)
+        CompatibilityLayerKind compatibilityLayer)
     {
         GameInspectionSnapshot valid = CreateSnapshot();
         GameInspectionSnapshot unsupported = valid with
@@ -58,12 +57,21 @@ public sealed class EditableSettingsCatalogTests
                 Store = store,
                 Host = host,
                 CompatibilityLayer = compatibilityLayer,
-                ExecutableExists = executableExists,
             },
         };
 
-        Assert.Null(EditableSettingsCatalog.Create(
+        Assert.NotNull(EditableSettingsCatalog.Create(
             unsupported,
+            "r.ViewDistanceScale",
+            null));
+    }
+
+    [Fact]
+    public void EditingRejectsAMissingExecutable()
+    {
+        GameInspectionSnapshot valid = CreateSnapshot();
+        Assert.Null(EditableSettingsCatalog.Create(
+            valid with { Installation = valid.Installation! with { ExecutableExists = false } },
             "r.ViewDistanceScale",
             null));
     }

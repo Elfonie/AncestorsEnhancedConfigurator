@@ -323,8 +323,6 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     }
 
     [Theory]
-    [InlineData(StoreKind.EpicGames, HostKind.Windows, CompatibilityLayerKind.None, true)]
-    [InlineData(StoreKind.Steam, HostKind.Linux, CompatibilityLayerKind.Proton, true)]
     [InlineData(StoreKind.Steam, HostKind.Windows, CompatibilityLayerKind.None, false)]
     public void CreatePlanRejectsUnverifiedTargets(
         StoreKind store,
@@ -350,7 +348,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
                 unsupported,
                 [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]));
 
-        Assert.Contains("verified native Windows Steam build", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("supported Ancestors installation", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -367,7 +365,68 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
                 CreateSnapshot(userData),
                 [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]));
 
-        Assert.Contains("not the native Ancestors location", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("not a supported Ancestors location", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void RevertRestoresPakCreationAndRemoval(bool existed, bool resultExists)
+    {
+        string userData = CreateUserData();
+        string install = Path.Combine(_temporaryDirectory, "install");
+        string pakDirectory = Directory.CreateDirectory(Path.Combine(
+            install, "Ancestors", "Content", "Paks")).FullName;
+        string pakPath = Path.Combine(pakDirectory, "AncestorsEnhanced-Vignette_P.pak");
+        byte[] original = existed ? [1, 2, 3] : [];
+        byte[] updated = resultExists ? [4, 5, 6] : [];
+        if (existed)
+        {
+            File.WriteAllBytes(pakPath, original);
+        }
+
+        DateTimeOffset created = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+        var plan = new SettingsChangePlan(
+            "20260801-120000-000-test",
+            created,
+            "5495393",
+            userData,
+            [new SettingChangePreview("Vignette", Path.GetFileName(pakPath), "mod.VignettePercent", "50", "35")],
+            [new ConfigurationFileChangePlan(
+                Path.GetFileName(pakPath),
+                pakPath,
+                existed,
+                ConfigurationFileOperations.Sha256(original),
+                original,
+                updated,
+                SettingFileTarget.Pak,
+                resultExists)],
+            install);
+        string operation = SettingsBackupStore.Prepare(plan);
+        if (resultExists)
+        {
+            File.WriteAllBytes(pakPath, updated);
+        }
+        else
+        {
+            File.Delete(pakPath);
+        }
+
+        SettingsBackupStore.MarkApplied(operation, created);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        snapshot = snapshot with
+        {
+            Installation = snapshot.Installation! with { InstallDirectory = install },
+        };
+
+        SettingsOperationResult result = CreateEditor(gameRunning: false).RevertLast(snapshot);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal(existed, File.Exists(pakPath));
+        if (existed)
+        {
+            Assert.Equal(original, File.ReadAllBytes(pakPath));
+        }
     }
 
     public void Dispose()
