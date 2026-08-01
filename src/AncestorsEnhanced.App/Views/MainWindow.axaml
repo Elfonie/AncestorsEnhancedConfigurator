@@ -10,76 +10,110 @@
         x:DataType="vm:MainViewModel"
         Width="1180"
         Height="820"
-        MinWidth="900"
+        MinWidth="940"
         MinHeight="640"
         Title="Ancestors Enhanced Configurator">
 
-  <Grid RowDefinitions="Auto,*,Auto" Background="#0D1115">
+  <Window.Styles>
+    <Style Selector="ToggleButton.mode">
+      <Setter Property="Padding" Value="18,8" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ToggleButton.mode:checked">
+      <Setter Property="Background" Value="#315E78" />
+      <Setter Property="Foreground" Value="#F4FAFD" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto" Background="#0C1115">
     <Border Grid.Row="0"
-            Padding="26,17"
-            Background="#171E25"
-            BorderBrush="#28333C"
+            Padding="22,14"
+            Background="#161D23"
+            BorderBrush="#273139"
             BorderThickness="0,0,0,1">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="24">
-        <StackPanel Spacing="3">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+        <StackPanel Spacing="1">
           <TextBlock Text="{Binding ProductName}"
-                     FontSize="25"
+                     FontSize="23"
                      FontWeight="SemiBold"
-                     Foreground="#F3F6F8" />
+                     Foreground="#F2F5F7" />
           <TextBlock Text="{Binding Phase}"
-                     FontSize="13"
-                     Foreground="#8FA1AD" />
+                     FontSize="11"
+                     Foreground="#748691" />
         </StackPanel>
         <Button Grid.Column="1"
                 Command="{Binding RefreshCommand}"
-                Padding="16,9"
+                Padding="14,8"
                 VerticalAlignment="Center"
-                Content="Reload from disk" />
+                Content="Reload" />
       </Grid>
     </Border>
 
     <ScrollViewer Grid.Row="1">
-      <StackPanel Margin="26,22" Spacing="16">
-        <Border Padding="16"
-                CornerRadius="8"
-                Background="#142B25"
-                BorderBrush="#28614F"
+      <StackPanel Margin="22,18"
+                  Spacing="12"
+                  MaxWidth="1380"
+                  HorizontalAlignment="Center">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+          <Border Padding="14,10"
+                  CornerRadius="7"
+                  Background="#122A23"
+                  BorderBrush="#275442"
+                  BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+              <Ellipse Width="9" Height="9" Fill="#62C9A7" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="1">
+                <TextBlock Text="{Binding DetectionStatus}"
+                           FontWeight="SemiBold"
+                           Foreground="#DDF4EC" />
+                <TextBlock Text="{Binding InstallationDetails}"
+                           FontSize="11"
+                           Foreground="#80B8A5" />
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <Border Grid.Column="1"
+                  Padding="4"
+                  CornerRadius="7"
+                  Background="#171F25"
+                  BorderBrush="#2B363F"
+                  BorderThickness="1">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton Classes="mode"
+                            Command="{Binding ShowSimpleCommand}"
+                            IsChecked="{Binding IsSimpleMode, Mode=OneWay}"
+                            Content="Simple" />
+              <ToggleButton Classes="mode"
+                            Command="{Binding ShowAdvancedCommand}"
+                            IsChecked="{Binding IsAdvancedMode, Mode=OneWay}"
+                            Content="Advanced" />
+            </StackPanel>
+          </Border>
+        </Grid>
+
+        <Border Padding="14,11"
+                CornerRadius="7"
+                Background="#151C22"
+                BorderBrush="#273139"
                 BorderThickness="1">
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
-            <StackPanel Spacing="4">
-              <TextBlock Text="{Binding DetectionStatus}"
+          <Grid ColumnDefinitions="*,320" ColumnSpacing="18">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{Binding ViewModeTitle}"
                          FontSize="18"
                          FontWeight="SemiBold"
-                         Foreground="#DFF7EF" />
-              <TextBlock Text="{Binding InstallationDetails}"
-                         Foreground="#8FCAB7" />
-            </StackPanel>
-            <TextBlock Grid.Column="1"
-                       Text="{Binding InspectionTime}"
-                       VerticalAlignment="Center"
-                       Foreground="#71818C" />
-          </Grid>
-        </Border>
-
-        <Border Padding="16"
-                CornerRadius="8"
-                Background="#171D23"
-                BorderBrush="#2A343D"
-                BorderThickness="1">
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="24">
-            <StackPanel Spacing="4">
-              <TextBlock Text="{Binding ViewModeTitle}"
-                         FontSize="20"
-                         FontWeight="SemiBold"
-                         Foreground="#F3F6F8" />
+                         Foreground="#EBF0F3" />
               <TextBlock Text="{Binding ViewModeDescription}"
-                         TextWrapping="Wrap"
-                         Foreground="#92A3AF" />
+                         FontSize="11"
+                         Foreground="#81929D" />
             </StackPanel>
-            <ToggleSwitch Grid.Column="1"
-                          IsChecked="{Binding IsAdvancedMode, Mode=TwoWay}"
-                          Content="Advanced"
-                          VerticalAlignment="Center" />
+            <TextBox Grid.Column="1"
+                     IsVisible="{Binding IsAdvancedMode}"
+                     Text="{Binding SearchText, Mode=TwoWay}"
+                     PlaceholderText="Search name or renderer key"
+                     VerticalAlignment="Center" />
           </Grid>
         </Border>
 
@@ -87,11 +121,12 @@
                       IsEnabled="{Binding CanEditSettings}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:FeatureGroupRowViewModel">
-              <Border Margin="0,0,0,9"
-                      CornerRadius="8"
-                      Background="#171D23"
-                      BorderBrush="#2A343D"
-                      BorderThickness="1">
+              <Border Margin="0,0,0,8"
+                      CornerRadius="7"
+                      Background="#151C22"
+                      BorderBrush="#273139"
+                      BorderThickness="1"
+                      ClipToBounds="True">
                 <Grid RowDefinitions="Auto,Auto">
                   <Button Command="{Binding ToggleExpandedCommand}"
                           Padding="14,10"
@@ -99,157 +134,158 @@
                           HorizontalContentAlignment="Stretch"
                           Background="Transparent"
                           BorderThickness="0">
-                    <Grid ColumnDefinitions="4,*,Auto,30"
-                          ColumnSpacing="14"
-                          MinHeight="60">
+                    <Grid ColumnDefinitions="4,*,Auto,22" ColumnSpacing="12" MinHeight="42">
                       <Border Background="{Binding AccentColor}" CornerRadius="2" />
-                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                         <TextBlock Text="{Binding Category}"
-                                   FontSize="10"
+                                   FontSize="9"
                                    FontWeight="SemiBold"
-                                   Foreground="#71818C" />
+                                   Foreground="#697B86" />
                         <TextBlock Text="{Binding Name}"
-                                   FontSize="17"
+                                   FontSize="16"
                                    FontWeight="SemiBold"
-                                   Foreground="#EDF2F5" />
+                                   Foreground="#E6ECEF" />
                         <TextBlock Text="{Binding Description}"
-                                   FontSize="12"
+                                   IsVisible="{Binding ShowDescription}"
+                                   FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="#8FA1AD" />
+                                   Foreground="#82939E" />
                       </StackPanel>
                       <StackPanel Grid.Column="2"
-                                  MinWidth="200"
                                   VerticalAlignment="Center"
                                   HorizontalAlignment="Right"
-                                  Spacing="3">
+                                  Spacing="1">
                         <TextBlock Text="{Binding Summary}"
                                    HorizontalAlignment="Right"
                                    TextAlignment="Right"
                                    TextWrapping="Wrap"
-                                   FontSize="15"
+                                   MaxWidth="280"
                                    FontWeight="SemiBold"
                                    Foreground="{Binding AccentColor}" />
                         <TextBlock Text="{Binding SettingCount}"
                                    HorizontalAlignment="Right"
-                                   FontSize="10"
-                                   Foreground="#667681" />
+                                   FontSize="9"
+                                   Foreground="#647580" />
                       </StackPanel>
                       <TextBlock Grid.Column="3"
                                  Text="{Binding Chevron}"
                                  HorizontalAlignment="Center"
                                  VerticalAlignment="Center"
-                                 FontSize="18"
-                                 Foreground="#9EADB7" />
+                                 Foreground="#8B9AA4" />
                     </Grid>
                   </Button>
 
                   <ItemsControl Grid.Row="1"
-                                Margin="17,3,17,15"
                                 IsVisible="{Binding IsExpanded}"
                                 ItemsSource="{Binding Settings}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:FeatureSettingRowViewModel">
-                        <Border Padding="14"
-                                Margin="0,0,0,6"
-                                CornerRadius="6"
-                                Background="#10161B">
-                          <Grid ColumnDefinitions="*,300" ColumnSpacing="24">
-                            <StackPanel Spacing="4">
+                        <Border Padding="14,11"
+                                Background="#10171C"
+                                BorderBrush="#222C33"
+                                BorderThickness="0,1,0,0"
+                                ToolTip.Tip="{Binding Description}">
+                          <Grid ColumnDefinitions="2*,190,330" ColumnSpacing="18" MinHeight="46">
+                            <StackPanel VerticalAlignment="Center" Spacing="2">
                               <TextBlock Text="{Binding Name}"
-                                         FontSize="15"
+                                         FontSize="14"
                                          FontWeight="SemiBold"
-                                         Foreground="#E4EAEE" />
+                                         Foreground="#E2E8EB" />
                               <TextBlock Text="{Binding Description}"
-                                         TextWrapping="Wrap"
-                                         FontSize="12"
-                                         LineHeight="18"
-                                         Foreground="#92A3AF" />
-                              <TextBlock Text="{Binding TechnicalDetails}"
-                                         IsVisible="{Binding ShowTechnicalDetails}"
-                                         Margin="0,3,0,0"
+                                         IsVisible="{Binding ShowDescription}"
                                          TextWrapping="Wrap"
                                          FontSize="11"
-                                         Foreground="#647680" />
+                                         Foreground="#81929D" />
+                              <TextBlock Text="{Binding TechnicalKey}"
+                                         IsVisible="{Binding ShowTechnicalDetails}"
+                                         FontSize="10"
+                                         Foreground="#5F7480" />
                             </StackPanel>
 
-                            <StackPanel Grid.Column="1" Spacing="9">
-                              <StackPanel Spacing="2">
-                                <TextBlock Text="CURRENT"
-                                           HorizontalAlignment="Right"
-                                           FontSize="9"
-                                           FontWeight="SemiBold"
-                                           Foreground="#667681" />
-                                <TextBlock Text="{Binding Value}"
-                                           HorizontalAlignment="Right"
-                                           TextAlignment="Right"
-                                           TextWrapping="Wrap"
-                                           FontSize="14"
-                                           FontWeight="SemiBold"
-                                           Foreground="{Binding AccentColor}" />
-                              </StackPanel>
-
-                              <ContentControl Content="{Binding Editor}"
-                                              IsVisible="{Binding IsEditable}">
-                                <ContentControl.ContentTemplate>
-                                  <DataTemplate x:DataType="vm:SettingEditorViewModel">
-                                    <Border Padding="10"
-                                            CornerRadius="5"
-                                            Background="#182128"
-                                            BorderBrush="#2D3A44"
-                                            BorderThickness="1">
-                                      <StackPanel Spacing="8">
-                                        <ToggleSwitch IsVisible="{Binding IsPresence}"
-                                                      IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
-                                                      Content="Skip startup videos" />
-
-                                        <StackPanel IsVisible="{Binding IsRegularEditor}" Spacing="8">
-                                          <ToggleSwitch IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
-                                                        Content="{Binding OverrideLabel}" />
-
-                                          <Grid IsEnabled="{Binding UseCustomValue}">
-                                            <ToggleSwitch IsVisible="{Binding IsToggle}"
-                                                          IsChecked="{Binding ToggleValue, Mode=TwoWay}"
-                                                          HorizontalAlignment="Right"
-                                                          Content="Enabled" />
-
-                                            <Grid IsVisible="{Binding IsNumber}"
-                                                  ColumnDefinitions="*,Auto"
-                                                  ColumnSpacing="8">
-                                              <NumericUpDown Value="{Binding NumberValue, Mode=TwoWay}"
-                                                             Minimum="{Binding Minimum}"
-                                                             Maximum="{Binding Maximum}"
-                                                             Increment="{Binding Increment}"
-                                                             FormatString="0.####"
-                                                             HorizontalAlignment="Stretch" />
-                                              <TextBlock Grid.Column="1"
-                                                         Text="{Binding Unit}"
-                                                         IsVisible="{Binding HasUnit}"
-                                                         VerticalAlignment="Center"
-                                                         Foreground="#92A3AF" />
-                                            </Grid>
-
-                                            <ComboBox IsVisible="{Binding IsChoice}"
-                                                      ItemsSource="{Binding Choices}"
-                                                      SelectedItem="{Binding SelectedChoice, Mode=TwoWay}"
-                                                      HorizontalAlignment="Stretch">
-                                              <ComboBox.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:SettingChoiceViewModel">
-                                                  <TextBlock Text="{Binding Label}" />
-                                                </DataTemplate>
-                                              </ComboBox.ItemTemplate>
-                                            </ComboBox>
-                                          </Grid>
-                                        </StackPanel>
-                                        <TextBlock Text="{Binding ModeLabel}"
-                                                   FontSize="10"
-                                                   HorizontalAlignment="Right"
-                                                   Foreground="#71818C" />
-                                      </StackPanel>
-                                    </Border>
-                                  </DataTemplate>
-                                </ContentControl.ContentTemplate>
-                              </ContentControl>
+                            <StackPanel Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Right"
+                                        Spacing="1">
+                              <TextBlock Text="Current"
+                                         HorizontalAlignment="Right"
+                                         FontSize="9"
+                                         Foreground="#657680" />
+                              <TextBlock Text="{Binding Value}"
+                                         HorizontalAlignment="Right"
+                                         TextAlignment="Right"
+                                         TextWrapping="Wrap"
+                                         MaxWidth="190"
+                                         FontWeight="SemiBold"
+                                         Foreground="{Binding AccentColor}" />
                             </StackPanel>
+
+                            <ContentControl Grid.Column="2"
+                                            Content="{Binding Editor}"
+                                            IsVisible="{Binding IsEditable}"
+                                            VerticalAlignment="Center">
+                              <ContentControl.ContentTemplate>
+                                <DataTemplate x:DataType="vm:SettingEditorViewModel">
+                                  <Grid>
+                                    <ToggleSwitch IsVisible="{Binding IsPresence}"
+                                                  IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
+                                                  HorizontalAlignment="Right"
+                                                  Content="Skip startup videos" />
+
+                                    <Grid IsVisible="{Binding IsRegularEditor}"
+                                          ColumnDefinitions="Auto,*"
+                                          ColumnSpacing="12">
+                                      <CheckBox IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
+                                                VerticalAlignment="Center"
+                                                Content="Custom" />
+
+                                      <Grid Grid.Column="1" IsEnabled="{Binding UseCustomValue}">
+                                        <ToggleSwitch IsVisible="{Binding IsToggle}"
+                                                      IsChecked="{Binding ToggleValue, Mode=TwoWay}"
+                                                      HorizontalAlignment="Right"
+                                                      Content="{Binding ToggleLabel}" />
+
+                                        <Grid IsVisible="{Binding IsNumber}"
+                                              ColumnDefinitions="*,Auto"
+                                              ColumnSpacing="7">
+                                          <NumericUpDown Value="{Binding NumberValue, Mode=TwoWay}"
+                                                         Minimum="{Binding Minimum}"
+                                                         Maximum="{Binding Maximum}"
+                                                         Increment="{Binding Increment}"
+                                                         FormatString="0.####"
+                                                         HorizontalAlignment="Stretch" />
+                                          <TextBlock Grid.Column="1"
+                                                     Text="{Binding Unit}"
+                                                     IsVisible="{Binding HasUnit}"
+                                                     VerticalAlignment="Center"
+                                                     Foreground="#82939E" />
+                                        </Grid>
+
+                                        <ComboBox IsVisible="{Binding IsChoice}"
+                                                  ItemsSource="{Binding Choices}"
+                                                  SelectedItem="{Binding SelectedChoice, Mode=TwoWay}"
+                                                  HorizontalAlignment="Stretch">
+                                          <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:SettingChoiceViewModel">
+                                              <TextBlock Text="{Binding Label}" />
+                                            </DataTemplate>
+                                          </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                      </Grid>
+                                    </Grid>
+                                  </Grid>
+                                </DataTemplate>
+                              </ContentControl.ContentTemplate>
+                            </ContentControl>
+
+                            <Border Grid.Column="2"
+                                    IsVisible="{Binding IsReadOnly}"
+                                    Padding="9,5"
+                                    CornerRadius="5"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Background="#1B2329">
+                              <TextBlock Text="Read only" FontSize="10" Foreground="#71828D" />
+                            </Border>
                           </Grid>
                         </Border>
                       </DataTemplate>
@@ -261,33 +297,52 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <Expander Header="Technical details"
+        <Border IsVisible="{Binding HasNoSearchResults}"
+                Padding="18"
+                CornerRadius="7"
+                Background="#151C22"
+                BorderBrush="#273139"
+                BorderThickness="1">
+          <StackPanel Spacing="3" HorizontalAlignment="Center">
+            <TextBlock Text="No matching settings"
+                       HorizontalAlignment="Center"
+                       FontWeight="SemiBold"
+                       Foreground="#D6DEE3" />
+            <TextBlock Text="Try a setting name such as shadow or a renderer key"
+                       HorizontalAlignment="Center"
+                       FontSize="11"
+                       Foreground="#71828D" />
+          </StackPanel>
+        </Border>
+
+        <Expander IsVisible="{Binding IsAdvancedMode}"
+                  Header="Files and diagnostics"
                   IsExpanded="False"
-                  FontSize="15"
-                  Foreground="#DCE4E9">
-          <StackPanel Margin="0,12,0,0" Spacing="14">
-            <Border Padding="16" CornerRadius="8" Background="#171D23">
-              <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="7">
-                <TextBlock Text="Installation" Foreground="#82929E" />
+                  FontSize="14"
+                  Foreground="#D6DEE3">
+          <StackPanel Margin="0,10,0,0" Spacing="10">
+            <Border Padding="13" CornerRadius="7" Background="#151C22">
+              <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+                <TextBlock Text="Installation" Foreground="#71828D" />
                 <TextBlock Grid.Column="1" Text="{Binding InstallationPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="1" Text="User data" Foreground="#82929E" />
+                <TextBlock Grid.Row="1" Text="User data" Foreground="#71828D" />
                 <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding UserDataPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="2" Text="System.sav" Foreground="#82929E" />
+                <TextBlock Grid.Row="2" Text="System.sav" Foreground="#71828D" />
                 <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding BinarySettingsPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="3" Text="Binary status" Foreground="#82929E" />
+                <TextBlock Grid.Row="3" Text="Status" Foreground="#71828D" />
                 <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding BinarySettingsStatus}" TextWrapping="Wrap" Foreground="#C3A66A" />
               </Grid>
             </Border>
 
             <Expander Header="Configuration files">
-              <ItemsControl Margin="0,9,0,0" ItemsSource="{Binding ConfigurationFiles}">
+              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ConfigurationFiles}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ConfigurationFileRowViewModel">
-                    <Border Margin="0,0,0,6" Padding="11" CornerRadius="5" Background="#171D23">
-                      <Grid ColumnDefinitions="180,*,220">
+                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="#151C22">
+                      <Grid ColumnDefinitions="170,*,210">
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#9EADB7" />
-                        <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="#9ED8C5" />
+                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#8B9AA4" />
+                        <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="#8CC8B4" />
                       </Grid>
                     </Border>
                   </DataTemplate>
@@ -296,15 +351,15 @@
             </Expander>
 
             <Expander Header="Raw INI entries">
-              <ItemsControl Margin="0,9,0,0" ItemsSource="{Binding Settings}">
+              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Settings}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:SettingRowViewModel">
-                    <Border Margin="0,0,0,5" Padding="10" CornerRadius="5" Background="#151A20">
-                      <Grid ColumnDefinitions="130,2*,2*,65">
-                        <TextBlock Text="{Binding Source}" Foreground="#8FA1AD" />
+                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="#151C22">
+                      <Grid ColumnDefinitions="120,2*,2*,60" ColumnSpacing="8">
+                        <TextBlock Text="{Binding Source}" Foreground="#71828D" />
                         <TextBlock Grid.Column="1" Text="{Binding Setting}" TextWrapping="Wrap" />
-                        <TextBlock Grid.Column="2" Text="{Binding Value}" TextWrapping="Wrap" Foreground="#A9D7C7" />
-                        <TextBlock Grid.Column="3" Text="{Binding Location}" Foreground="#71818C" />
+                        <TextBlock Grid.Column="2" Text="{Binding Value}" TextWrapping="Wrap" Foreground="#8CC8B4" />
+                        <TextBlock Grid.Column="3" Text="{Binding Location}" Foreground="#71828D" />
                       </Grid>
                     </Border>
                   </DataTemplate>
@@ -313,13 +368,13 @@
             </Expander>
 
             <Expander Header="PAK packages">
-              <ItemsControl Margin="0,9,0,0" ItemsSource="{Binding PakFiles}">
+              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding PakFiles}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:PakFileRowViewModel">
-                    <Border Margin="0,0,0,6" Padding="11" CornerRadius="5" Background="#171D23">
-                      <Grid ColumnDefinitions="250,190,*">
+                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="#151C22">
+                      <Grid ColumnDefinitions="250,180,*">
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#9EADB7" />
+                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#8B9AA4" />
                         <TextBlock Grid.Column="2" Text="{Binding Classification}" Foreground="#C7B98C" />
                       </Grid>
                     </Border>
@@ -329,11 +384,11 @@
             </Expander>
 
             <Expander Header="Inspection notes">
-              <ItemsControl Margin="0,9,0,0" ItemsSource="{Binding Notices}">
+              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Notices}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:NoticeRowViewModel">
-                    <Border Margin="0,0,0,6" Padding="11" CornerRadius="5" Background="#211D19">
-                      <Grid ColumnDefinitions="100,*">
+                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="#211D19">
+                      <Grid ColumnDefinitions="90,*">
                         <TextBlock Text="{Binding Severity}" FontWeight="SemiBold" Foreground="#D6BC84" />
                         <TextBlock Grid.Column="1" Text="{Binding Message}" TextWrapping="Wrap" />
                       </Grid>
@@ -350,10 +405,10 @@
     <Border Grid.Row="1"
             ZIndex="10"
             IsVisible="{Binding IsReviewingChanges}"
-            Padding="26"
-            Background="#D90D1115">
-      <Border MaxWidth="980"
-              MaxHeight="620"
+            Padding="24"
+            Background="#E60C1115">
+      <Border MaxWidth="900"
+              MaxHeight="580"
               Padding="20"
               HorizontalAlignment="Center"
               VerticalAlignment="Center"
@@ -361,26 +416,25 @@
               Background="#15232C"
               BorderBrush="#3B7598"
               BorderThickness="1">
-        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="9">
           <TextBlock Text="{Binding ReviewSummary}"
                      FontSize="20"
                      FontWeight="SemiBold"
                      Foreground="#DCEEFF" />
           <TextBlock Grid.Row="1"
-                     Text="Nothing has been written yet. Check the old and new values below."
-                     TextWrapping="Wrap"
-                     Foreground="#92AFC1" />
-          <ScrollViewer Grid.Row="2" MaxHeight="470">
+                     Text="Check the old and new values before anything is written"
+                     Foreground="#8CA9BA" />
+          <ScrollViewer Grid.Row="2" MaxHeight="440">
             <ItemsControl ItemsSource="{Binding ReviewChanges}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ChangeReviewRowViewModel">
-                  <Border Margin="0,0,0,6" Padding="12" CornerRadius="5" Background="#111A20">
-                    <Grid ColumnDefinitions="1.2*,1.2*,Auto,1.2*" ColumnSpacing="12">
+                  <Border Margin="0,0,0,5" Padding="11" CornerRadius="5" Background="#10191F">
+                    <Grid ColumnDefinitions="1.2*,1.2*,Auto,1.2*" ColumnSpacing="10">
                       <StackPanel>
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding TechnicalKey}" FontSize="10" Foreground="#71818C" />
+                        <TextBlock Text="{Binding TechnicalKey}" FontSize="9" Foreground="#687984" />
                       </StackPanel>
-                      <TextBlock Grid.Column="1" Text="{Binding Before}" TextWrapping="Wrap" Foreground="#9EADB7" />
+                      <TextBlock Grid.Column="1" Text="{Binding Before}" TextWrapping="Wrap" Foreground="#8E9DA6" />
                       <TextBlock Grid.Column="2" Text="→" Foreground="#71818C" />
                       <TextBlock Grid.Column="3" Text="{Binding After}" TextWrapping="Wrap" Foreground="#78C7E8" />
                     </Grid>
@@ -394,51 +448,47 @@
     </Border>
 
     <Border Grid.Row="2"
-            Padding="18,12"
-            Background="#171E25"
-            BorderBrush="#2A343D"
+            Padding="16,10"
+            Background="#161D23"
+            BorderBrush="#273139"
             BorderThickness="0,1,0,0">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
-        <StackPanel Spacing="3" VerticalAlignment="Center">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="18">
+        <StackPanel Spacing="1" VerticalAlignment="Center">
           <TextBlock Text="{Binding PendingSummary}"
-                     FontSize="15"
                      FontWeight="SemiBold"
-                     Foreground="#E4EAEE" />
+                     Foreground="#E1E7EA" />
           <TextBlock Text="{Binding PendingDetails}"
                      IsVisible="{Binding HasPendingChanges}"
                      TextWrapping="Wrap"
-                     FontSize="11"
+                     FontSize="10"
                      Foreground="#C7B98C" />
           <TextBlock Text="{Binding OperationMessage}"
                      TextWrapping="Wrap"
-                     FontSize="11"
+                     FontSize="10"
                      Foreground="{Binding OperationAccent}" />
         </StackPanel>
-        <StackPanel Grid.Column="1"
-                    Orientation="Horizontal"
-                    VerticalAlignment="Center"
-                    Spacing="9">
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
           <Button Command="{Binding RevertLastCommand}"
                   IsEnabled="{Binding CanUndo}"
-                  Content="Undo last apply" />
+                  Content="Undo" />
           <Button Command="{Binding DiscardChangesCommand}"
                   IsVisible="{Binding ShowPendingActions}"
                   Content="Discard" />
           <Button Command="{Binding OpenReviewCommand}"
                   IsVisible="{Binding ShowPendingActions}"
-                  Padding="18,8"
+                  Padding="16,7"
                   Background="#2D715C"
                   Foreground="#F4FFFB"
-                  Content="Review changes" />
+                  Content="Review" />
           <Button Command="{Binding CancelReviewCommand}"
                   IsVisible="{Binding ShowReviewActions}"
                   Content="Back" />
           <Button Command="{Binding ConfirmApplyCommand}"
                   IsVisible="{Binding ShowReviewActions}"
-                  Padding="18,8"
+                  Padding="16,7"
                   Background="#2D715C"
                   Foreground="#F4FFFB"
-                  Content="Confirm apply" />
+                  Content="Apply" />
         </StackPanel>
       </Grid>
     </Border>

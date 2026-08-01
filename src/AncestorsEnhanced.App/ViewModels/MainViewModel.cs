@@ -9,6 +9,24 @@ namespace AncestorsEnhanced.App.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
+    private static readonly HashSet<string> SimpleSettingIds = new(StringComparer.Ordinal)
+    {
+        "motion-blur-quality",
+        "dof-quality",
+        "environment-vignette",
+        "aa-quality",
+        "image-sharpening",
+        "view-distance",
+        "foliage-density",
+        "grass-density",
+        "anisotropic-filtering",
+        "bloom-quality",
+        "chromatic-aberration",
+        "light-shafts",
+        "shadow-quality",
+        "startup-videos",
+    };
+
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
@@ -45,10 +63,13 @@ public partial class MainViewModel : ViewModelBase
     private bool _isAdvancedMode;
 
     [ObservableProperty]
-    private string _viewModeTitle = "Essential settings";
+    private string _searchText = "";
 
     [ObservableProperty]
-    private string _viewModeDescription = "The useful controls first. Changes stay pending until you apply them.";
+    private string _viewModeTitle = "Simple";
+
+    [ObservableProperty]
+    private string _viewModeDescription = "The settings that make the clearest visual difference";
 
     [ObservableProperty]
     private IReadOnlyList<PendingChangeRowViewModel> _pendingChanges = [];
@@ -108,6 +129,13 @@ public partial class MainViewModel : ViewModelBase
 
     public bool CanEditSettings => !IsReviewingChanges;
 
+    public bool IsSimpleMode => !IsAdvancedMode;
+
+    public bool HasNoSearchResults =>
+        IsAdvancedMode &&
+        SearchText.Trim().Length > 0 &&
+        FeatureGroups.Count == 0;
+
     public string ReviewSummary => ReviewChanges.Count == 1
         ? "Review 1 change before writing"
         : $"Review {ReviewChanges.Count} changes before writing";
@@ -142,6 +170,12 @@ public partial class MainViewModel : ViewModelBase
         RefreshFromDisk();
         ShowMessage("Configuration reloaded from disk.", "#62C9A7");
     }
+
+    [RelayCommand]
+    private void ShowSimple() => IsAdvancedMode = false;
+
+    [RelayCommand]
+    private void ShowAdvanced() => IsAdvancedMode = true;
 
     [RelayCommand]
     private void DiscardChanges()
@@ -243,7 +277,13 @@ public partial class MainViewModel : ViewModelBase
         ShowMessage(result.Message, result.Succeeded ? "#62C9A7" : "#D6BC84");
     }
 
-    partial void OnIsAdvancedModeChanged(bool value) => ApplyViewMode();
+    partial void OnIsAdvancedModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsSimpleMode));
+        ApplyViewMode();
+    }
+
+    partial void OnSearchTextChanged(string value) => ApplyViewMode();
 
     partial void OnCanRevertLastChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
 
@@ -309,43 +349,61 @@ public partial class MainViewModel : ViewModelBase
 
     private void ApplyViewMode()
     {
-        ViewModeTitle = IsAdvancedMode ? "All renderer settings" : "Essential settings";
+        ViewModeTitle = IsAdvancedMode ? "Advanced" : "Simple";
         ViewModeDescription = IsAdvancedMode
-            ? "Every detected renderer value, including technical controls and read-only fields."
-            : "The useful controls first. Changes stay pending until you apply them.";
+            ? "Every known renderer value with search and technical details"
+            : "The settings that make the clearest visual difference";
 
+        string query = IsAdvancedMode ? SearchText.Trim() : "";
         FeatureGroups = _allFeatureGroups
             .Where(group => IsAdvancedMode || group.IsEssential)
-            .Select(group => CreateGroupRow(group, IsAdvancedMode))
+            .Select(group => CreateGroupRow(group, query))
+            .Where(group => group.Settings.Count > 0)
             .ToArray();
+        OnPropertyChanged(nameof(HasNoSearchResults));
     }
 
     private FeatureGroupRowViewModel CreateGroupRow(
         FeatureGroupSnapshot group,
-        bool showAdvanced)
+        string query)
     {
         FeatureSettingRowViewModel[] settings = group.Settings
-            .Where(setting => showAdvanced || !setting.IsAdvanced)
+            .Where(setting => IsAdvancedMode || SimpleSettingIds.Contains(setting.Id))
+            .Where(setting => MatchesSearch(group, setting, query))
             .Select(setting => new FeatureSettingRowViewModel(
                 setting.Name,
                 setting.Value,
                 setting.Description,
-                setting.Source,
-                CreateTechnicalDetails(setting),
+                setting.TechnicalKey ?? setting.Source,
                 GetAccentColor(setting.State),
-                showAdvanced,
+                IsAdvancedMode,
+                IsAdvancedMode,
                 _editors.GetValueOrDefault(setting.Id)))
             .ToArray();
 
         return new FeatureGroupRowViewModel(
+            group.Id,
             group.Category,
             group.Name,
             group.Summary,
             group.Description,
             GetAccentColor(group.State),
-            settings.Length == 1 ? "1 setting" : $"{settings.Length} settings",
-            settings);
+            settings.Length == 1 ? "1 option" : $"{settings.Length} options",
+            settings,
+            IsAdvancedMode,
+            query.Length > 0);
     }
+
+    private static bool MatchesSearch(
+        FeatureGroupSnapshot group,
+        FeatureSettingSnapshot setting,
+        string query) =>
+        query.Length == 0 ||
+        group.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+        group.Category.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+        setting.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+        setting.Description.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
+        setting.TechnicalKey?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
 
     private void LoadTechnicalDetails(GameInspectionSnapshot snapshot)
     {
@@ -436,16 +494,6 @@ public partial class MainViewModel : ViewModelBase
     {
         OperationMessage = message;
         OperationAccent = accent;
-    }
-
-    private static string CreateTechnicalDetails(FeatureSettingSnapshot setting)
-    {
-        string source = setting.TechnicalKey is null
-            ? setting.Source
-            : $"{setting.TechnicalKey} · {setting.Source}";
-        return setting.PresetDetails is null
-            ? source
-            : $"{source}{Environment.NewLine}{setting.PresetDetails}";
     }
 
     private static string GetAccentColor(ReadableSettingState state) => state switch

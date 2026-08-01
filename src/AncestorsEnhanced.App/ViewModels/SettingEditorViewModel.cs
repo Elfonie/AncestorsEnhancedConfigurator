@@ -71,9 +71,7 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public bool HasUnit => _snapshot.Unit is not null;
 
-    public string OverrideLabel => _snapshot.Target == SettingFileTarget.Pak
-        ? "Custom vignette strength"
-        : "Override game preset";
+    public string ToggleLabel => ToggleValue ? "On" : "Off";
 
     public string ModeLabel => IsPresence
         ? UseCustomValue ? "Videos skipped" : "Game default"
@@ -124,7 +122,11 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     partial void OnUseCustomValueChanged(bool value) => NotifyStateChanged();
 
-    partial void OnToggleValueChanged(bool value) => NotifyStateChanged();
+    partial void OnToggleValueChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ToggleLabel));
+        NotifyStateChanged();
+    }
 
     partial void OnNumberValueChanged(decimal value) => NotifyStateChanged();
 

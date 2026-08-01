@@ -10,14 +10,18 @@ public partial class FeatureGroupRowViewModel : ViewModelBase
     private bool _isExpanded;
 
     public FeatureGroupRowViewModel(
+        string id,
         string category,
         string name,
         string summary,
         string description,
         string accentColor,
         string settingCount,
-        IReadOnlyList<FeatureSettingRowViewModel> settings)
+        IReadOnlyList<FeatureSettingRowViewModel> settings,
+        bool showDescription,
+        bool isExpanded)
     {
+        Id = id;
         Category = category;
         Name = name;
         Summary = summary;
@@ -25,7 +29,11 @@ public partial class FeatureGroupRowViewModel : ViewModelBase
         AccentColor = accentColor;
         SettingCount = settingCount;
         Settings = settings;
+        ShowDescription = showDescription;
+        IsExpanded = isExpanded;
     }
+
+    public string Id { get; }
 
     public string Category { get; }
 
@@ -40,6 +48,8 @@ public partial class FeatureGroupRowViewModel : ViewModelBase
     public string SettingCount { get; }
 
     public IReadOnlyList<FeatureSettingRowViewModel> Settings { get; }
+
+    public bool ShowDescription { get; }
 
     public string Chevron => IsExpanded ? "⌃" : "⌄";
 

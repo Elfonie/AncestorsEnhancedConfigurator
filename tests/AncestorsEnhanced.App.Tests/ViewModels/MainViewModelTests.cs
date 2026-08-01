@@ -44,6 +44,52 @@ public sealed class MainViewModelTests
         Assert.Equal(0, editor.ApplyCount);
     }
 
+    [Fact]
+    public void SimpleModeKeepsOnlyTheCuratedControls()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+
+        FeatureGroupRowViewModel shadows = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "shadows-lighting");
+
+        Assert.True(viewModel.IsSimpleMode);
+        Assert.Equal(14, viewModel.FeatureGroups.Sum(group => group.Settings.Count));
+        Assert.Single(shadows.Settings);
+        Assert.Equal("Shadow quality", shadows.Settings[0].Name);
+        Assert.All(viewModel.FeatureGroups.SelectMany(group => group.Settings), setting =>
+            Assert.False(setting.ShowDescription));
+    }
+
+    [Fact]
+    public void AdvancedModeShowsEverythingAndFiltersByRendererKey()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+        viewModel.ShowAdvancedCommand.Execute(null);
+
+        FeatureGroupRowViewModel shadows = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "shadows-lighting");
+        Assert.Equal(18, shadows.Settings.Count);
+        Assert.All(shadows.Settings, setting => Assert.True(setting.ShowDescription));
+
+        viewModel.SearchText = "r.Shadow.MaxResolution";
+
+        FeatureGroupRowViewModel result = Assert.Single(viewModel.FeatureGroups);
+        FeatureSettingRowViewModel setting = Assert.Single(result.Settings);
+        Assert.Equal("Maximum shadow resolution", setting.Name);
+        Assert.True(result.IsExpanded);
+
+        viewModel.SearchText = "setting-that-does-not-exist";
+
+        Assert.Empty(viewModel.FeatureGroups);
+        Assert.True(viewModel.HasNoSearchResults);
+    }
+
     private static SettingEditorViewModel FindViewDistanceEditor(MainViewModel viewModel) =>
         Assert.Single(
                 viewModel.FeatureGroups.SelectMany(group => group.Settings),
