@@ -8,6 +8,8 @@ internal interface IReadOnlyFileSystem
 
     string ReadAllText(string path);
 
+    byte[] ReadAllBytes(string path);
+
     ReadOnlyFileMetadata GetFileMetadata(string path);
 
     IReadOnlyList<ReadOnlyFileMetadata> EnumerateFiles(string directoryPath, string searchPattern);

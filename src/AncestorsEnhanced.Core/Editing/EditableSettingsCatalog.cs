@@ -13,7 +13,8 @@ internal sealed record SettingEditorTemplate(
     decimal? Increment = null,
     IReadOnlyList<SettingChoice>? Choices = null,
     SettingFileTarget Target = SettingFileTarget.Ini,
-    string? Unit = null);
+    string? Unit = null,
+    bool IsDirect = false);
 
 public static class EditableSettingsCatalog
 {
@@ -104,6 +105,42 @@ public static class EditableSettingsCatalog
                 5,
                 Target: SettingFileTarget.Pak,
                 Unit: "%"),
+            [SystemSaveSettingKeys.FullscreenResolution] = SystemChoice(
+                "1280x720",
+                ResolutionChoices()),
+            [SystemSaveSettingKeys.WindowedResolution] = SystemChoice(
+                "1680x1050",
+                ResolutionChoices()),
+            [SystemSaveSettingKeys.Brightness] = new(
+                SettingEditorKind.Number,
+                "1",
+                "System.sav",
+                "GraphicsOptions",
+                0.5m,
+                1.5m,
+                0.05m,
+                Target: SettingFileTarget.SystemSave,
+                IsDirect: true),
+            [SystemSaveSettingKeys.FrameRateLimit] = SystemChoice(
+                "120",
+                [
+                    new SettingChoice("0", "Unlimited"),
+                    new SettingChoice("30", "30 FPS"),
+                    new SettingChoice("60", "60 FPS"),
+                    new SettingChoice("120", "120 FPS"),
+                    new SettingChoice("144", "144 FPS"),
+                    new SettingChoice("160", "160 FPS"),
+                    new SettingChoice("165", "165 FPS"),
+                    new SettingChoice("180", "180 FPS"),
+                    new SettingChoice("200", "200 FPS"),
+                    new SettingChoice("240", "240 FPS"),
+                ]),
+            [SystemSaveSettingKeys.ViewDistanceQuality] = SystemQuality("High"),
+            [SystemSaveSettingKeys.PostProcessingQuality] = SystemQuality("High"),
+            [SystemSaveSettingKeys.ShadowQuality] = SystemQuality("High"),
+            [SystemSaveSettingKeys.TextureQuality] = SystemQuality("High"),
+            [SystemSaveSettingKeys.VisualEffectsQuality] = SystemQuality("High"),
+            [SystemSaveSettingKeys.FoliageQuality] = SystemQuality("High"),
         };
 
     public static SettingEditSnapshot? Create(
@@ -129,7 +166,8 @@ public static class EditableSettingsCatalog
             template.Increment,
             template.Choices,
             template.Target,
-            template.Unit);
+            template.Unit,
+            template.IsDirect);
         return currentOverride is null || IsValidValue(editor, currentOverride)
             ? editor
             : null;
@@ -154,8 +192,8 @@ public static class EditableSettingsCatalog
 
         if (request.Value is null)
         {
-            error = null;
-            return true;
+            error = editor.IsDirect ? $"{request.Key} requires a value." : null;
+            return !editor.IsDirect;
         }
 
         bool valid = IsValidValue(editor, request.Value);
@@ -192,6 +230,33 @@ public static class EditableSettingsCatalog
                    installation.ContentSignature,
                    AncestorsScalabilityPresetCatalog.SupportedContentSignature,
                    StringComparison.Ordinal);
+    }
+
+    public static string? GetCurrentSystemValue(GameInspectionSnapshot snapshot, string key)
+    {
+        SystemGraphicsSettingsSnapshot? graphics = snapshot.BinarySettingsFile?.GraphicsSettings;
+        if (graphics is null)
+        {
+            return null;
+        }
+
+        return key switch
+        {
+            SystemSaveSettingKeys.FullscreenResolution =>
+                $"{graphics.FullscreenWidth}x{graphics.FullscreenHeight}",
+            SystemSaveSettingKeys.WindowedResolution =>
+                $"{graphics.WindowedWidth}x{graphics.WindowedHeight}",
+            SystemSaveSettingKeys.Brightness => Invariant((decimal)graphics.Brightness),
+            SystemSaveSettingKeys.FrameRateLimit =>
+                graphics.FrameRateLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            SystemSaveSettingKeys.ViewDistanceQuality => graphics.ViewDistanceQuality.ToString(),
+            SystemSaveSettingKeys.PostProcessingQuality => graphics.PostProcessingQuality.ToString(),
+            SystemSaveSettingKeys.ShadowQuality => graphics.ShadowQuality.ToString(),
+            SystemSaveSettingKeys.TextureQuality => graphics.TextureQuality.ToString(),
+            SystemSaveSettingKeys.VisualEffectsQuality => graphics.VisualEffectsQuality.ToString(),
+            SystemSaveSettingKeys.FoliageQuality => graphics.FoliageQuality.ToString(),
+            _ => null,
+        };
     }
 
     private static bool IsValidValue(SettingEditSnapshot editor, string value) =>
@@ -261,6 +326,45 @@ public static class EditableSettingsCatalog
             SettingEditorKind.Choice,
             defaultValue,
             Choices: choices.Select(choice => new SettingChoice(choice.Value, choice.Label)).ToArray());
+
+    private static SettingEditorTemplate SystemChoice(
+        string defaultValue,
+        IReadOnlyList<SettingChoice> choices) =>
+        new(
+            SettingEditorKind.Choice,
+            defaultValue,
+            "System.sav",
+            "GraphicsOptions",
+            Choices: choices,
+            Target: SettingFileTarget.SystemSave,
+            IsDirect: true);
+
+    private static SettingEditorTemplate SystemQuality(string defaultValue) =>
+        SystemChoice(
+            defaultValue,
+            [
+                new SettingChoice("Low", "Low"),
+                new SettingChoice("Medium", "Medium"),
+                new SettingChoice("High", "High"),
+            ]);
+
+    private static SettingChoice[] ResolutionChoices() =>
+    [
+        new("1024x576", "1024 × 576"),
+        new("1152x648", "1152 × 648"),
+        new("1280x720", "1280 × 720"),
+        new("1280x800", "1280 × 800"),
+        new("1366x768", "1366 × 768"),
+        new("1440x900", "1440 × 900"),
+        new("1600x900", "1600 × 900"),
+        new("1680x1050", "1680 × 1050"),
+        new("1920x1080", "1920 × 1080"),
+        new("1920x1200", "1920 × 1200"),
+        new("2560x1440", "2560 × 1440"),
+        new("2560x1600", "2560 × 1600"),
+        new("3840x2160", "3840 × 2160"),
+        new("7680x4320", "7680 × 4320"),
+    ];
 
     private static string Invariant(decimal value) =>
         value.ToString(System.Globalization.CultureInfo.InvariantCulture);

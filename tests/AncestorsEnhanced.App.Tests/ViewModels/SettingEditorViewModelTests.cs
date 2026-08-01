@@ -55,4 +55,28 @@ public sealed class SettingEditorViewModelTests
             "1.5",
             viewModel.CreateRequest("view-distance", "View distance").Value);
     }
+
+    [Fact]
+    public void DirectEditorCannotProduceAResetRequest()
+    {
+        var viewModel = new SettingEditorViewModel(new SettingEditSnapshot(
+            "System.sav",
+            "GraphicsOptions",
+            SystemSaveSettingKeys.FrameRateLimit,
+            SettingEditorKind.Choice,
+            "120",
+            "120",
+            Choices:
+            [
+                new SettingChoice("120", "120 FPS"),
+                new SettingChoice("144", "144 FPS"),
+            ],
+            Target: SettingFileTarget.SystemSave,
+            IsDirect: true));
+
+        viewModel.UseCustomValue = false;
+
+        Assert.False(viewModel.ShowOverrideToggle);
+        Assert.Equal("120", viewModel.CreateRequest("frame-rate", "Frame-rate limit").Value);
+    }
 }

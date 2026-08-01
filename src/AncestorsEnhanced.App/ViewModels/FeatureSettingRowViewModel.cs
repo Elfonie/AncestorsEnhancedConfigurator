@@ -9,6 +9,7 @@ public sealed record FeatureSettingRowViewModel(
     bool ShowDescription,
     bool ShowTechnicalDetails,
     IReadOnlyList<SettingPresetValueRowViewModel> PresetValues,
+    string? ActivePresetName,
     SettingEditorViewModel? Editor)
 {
     public bool IsEditable => Editor is not null;
@@ -17,7 +18,11 @@ public sealed record FeatureSettingRowViewModel(
 
     public bool HasPresetValues => PresetValues.Count > 0;
 
-    public string ValueLabel => HasPresetValues ? "Controlled by" : "Current";
+    public string ValueLabel => HasPresetValues && ActivePresetName is null ? "Controlled by" : "Current";
+
+    public string PresetExplanation => ActivePresetName is null
+        ? "The game selects one of these values from its Low, Medium or High preset. The active preset is not currently readable."
+        : $"Current game preset: {ActivePresetName}. The list below shows what Low, Medium and High would use.";
 }
 
 public sealed record SettingPresetValueRowViewModel(string Name, string Value);

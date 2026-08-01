@@ -1,3 +1,5 @@
+using AncestorsEnhanced.Core.Inspection;
+
 namespace AncestorsEnhanced.Core.Settings;
 
 internal sealed record ScalabilityPresetValues(
@@ -11,6 +13,14 @@ internal sealed record ScalabilityPresetValues(
         yield return ("Medium", Medium);
         yield return ("High", High);
     }
+
+    public string? Get(GameGraphicsQuality quality) => quality switch
+    {
+        GameGraphicsQuality.Low => Low,
+        GameGraphicsQuality.Medium => Medium,
+        GameGraphicsQuality.High => High,
+        _ => null,
+    };
 }
 
 internal static class AncestorsScalabilityPresetCatalog

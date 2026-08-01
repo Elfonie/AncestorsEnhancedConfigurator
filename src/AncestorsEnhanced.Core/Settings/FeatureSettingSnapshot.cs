@@ -13,6 +13,7 @@ public sealed record FeatureSettingSnapshot(
     bool IsAdvanced,
     double? Percentage = null,
     IReadOnlyList<SettingPresetValueSnapshot>? PresetValues = null,
+    string? ActivePresetName = null,
     SettingEditSnapshot? Editor = null);
 
 public sealed record SettingPresetValueSnapshot(string Name, string Value);

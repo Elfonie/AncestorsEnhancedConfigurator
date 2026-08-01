@@ -11,6 +11,7 @@ Portable graphics configurator for Ancestors The Humankind Odyssey
 * Simple and advanced graphics controls
 * Review before every write
 * Exact backups and undo
+* System.sav graphics controls
 * Startup video control
 * Vignette strength from 0 to 100 percent
 
@@ -18,7 +19,7 @@ The Vignette control reads the verified original asset from the installed game a
 
 Editing is enabled only when the executable and a known Steam build or known game content fingerprint match.
 
-System.sav is read only. HDR XeSS DirectX 12 and new game assets are not added.
+System.sav controls include resolutions brightness frame-rate limit and the six built-in quality categories. The base preset and custom-state flag are read automatically. HDR XeSS DirectX 12 and new game assets are not added.
 
 ## Development
 

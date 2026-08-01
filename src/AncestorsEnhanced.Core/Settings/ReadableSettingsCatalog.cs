@@ -8,6 +8,7 @@ public static class ReadableSettingsCatalog
 {
     private const string SystemSettingsSection = "SystemSettings";
     private const string MoviePlayerSection = "/Script/MoviePlayer.MoviePlayerSettings";
+
     public static IReadOnlyList<FeatureGroupSnapshot> CreateFeatureGroups(
         GameInspectionSnapshot snapshot)
     {
@@ -526,48 +527,75 @@ public static class ReadableSettingsCatalog
 
     private static FeatureGroupSnapshot CreateGameMenuGroup(GameInspectionSnapshot snapshot)
     {
-        bool exists = snapshot.BinarySettingsFile?.Exists == true;
-        string value = exists ? "Current value not readable yet" : "Not available";
-        string source = exists ? "System.sav custom binary data" : "System.sav not found";
+        SystemGraphicsSettingsSnapshot? graphics = snapshot.BinarySettingsFile?.GraphicsSettings;
+        if (graphics is null)
+        {
+            FeatureSettingSnapshot unavailable = Informational(
+                "game-menu-unavailable",
+                "System graphics settings",
+                snapshot.BinarySettingsFile?.Exists == true ? "Could not decode" : "Not available",
+                "The built-in settings are shown after a supported System.sav has been decoded.",
+                snapshot.BinarySettingsFile?.FormatStatus ?? "System.sav not found",
+                "System.sav");
+            return new FeatureGroupSnapshot(
+                "game-menu-settings",
+                "Game settings",
+                "Built-in graphics menu",
+                unavailable.Value,
+                "Settings saved directly by Ancestors in System.sav.",
+                IsEssential: false,
+                ReadableSettingState.Unknown,
+                [unavailable]);
+        }
 
-        string[] settings =
+        FeatureSettingSnapshot[] details =
         [
-            "Display mode",
-            "Windowed resolution",
-            "Fullscreen resolution",
-            "Vertical synchronization",
-            "Frame-rate limit",
-            "Brightness",
-            "Overall quality level",
-            "Custom-quality state",
-            "View-distance preset",
-            "Shadow preset",
-            "Post-processing preset",
-            "Texture preset",
-            "Visual-effects preset",
-            "Foliage preset",
+            SystemSetting(snapshot, "game-fullscreen-resolution", "Fullscreen resolution", $"{graphics.FullscreenWidth} × {graphics.FullscreenHeight}", SystemSaveSettingKeys.FullscreenResolution, $"{graphics.FullscreenWidth}x{graphics.FullscreenHeight}", "Resolution used by exclusive fullscreen mode."),
+            SystemSetting(snapshot, "game-windowed-resolution", "Windowed resolution", $"{graphics.WindowedWidth} × {graphics.WindowedHeight}", SystemSaveSettingKeys.WindowedResolution, $"{graphics.WindowedWidth}x{graphics.WindowedHeight}", "Resolution used by windowed mode.", isAdvanced: true),
+            SystemSetting(snapshot, "game-brightness", "Brightness", $"{graphics.Brightness * 100:0}%", SystemSaveSettingKeys.Brightness, graphics.Brightness.ToString("0.##", CultureInfo.InvariantCulture), "Built-in game brightness multiplier.", isAdvanced: true),
+            SystemSetting(snapshot, "game-frame-rate", "Frame-rate limit", graphics.FrameRateLimit == 0 ? "Unlimited" : $"{graphics.FrameRateLimit} FPS", SystemSaveSettingKeys.FrameRateLimit, graphics.FrameRateLimit.ToString(CultureInfo.InvariantCulture), "Frame-rate cap selected in the game menu."),
+            Informational("game-overall-quality", "Base quality preset", graphics.OverallQuality.ToString(), "Base preset selected by the game. Individual categories can override it.", "System.sav decoded value", "QualityLevel", isAdvanced: true),
+            SystemSetting(snapshot, "game-view-distance-preset", "View-distance preset", graphics.ViewDistanceQuality.ToString(), SystemSaveSettingKeys.ViewDistanceQuality, graphics.ViewDistanceQuality.ToString(), "Built-in preset for view distance.", isAdvanced: true),
+            SystemSetting(snapshot, "game-shadow-preset", "Shadow preset", graphics.ShadowQuality.ToString(), SystemSaveSettingKeys.ShadowQuality, graphics.ShadowQuality.ToString(), "Built-in preset for shadows and fog."),
+            SystemSetting(snapshot, "game-post-processing-preset", "Post-processing preset", graphics.PostProcessingQuality.ToString(), SystemSaveSettingKeys.PostProcessingQuality, graphics.PostProcessingQuality.ToString(), "Built-in preset for post-processing."),
+            SystemSetting(snapshot, "game-texture-preset", "Texture preset", graphics.TextureQuality.ToString(), SystemSaveSettingKeys.TextureQuality, graphics.TextureQuality.ToString(), "Built-in preset for texture filtering and streaming.", isAdvanced: true),
+            SystemSetting(snapshot, "game-effects-preset", "Visual-effects preset", graphics.VisualEffectsQuality.ToString(), SystemSaveSettingKeys.VisualEffectsQuality, graphics.VisualEffectsQuality.ToString(), "Built-in preset for effects and materials.", isAdvanced: true),
+            SystemSetting(snapshot, "game-foliage-preset", "Foliage preset", graphics.FoliageQuality.ToString(), SystemSaveSettingKeys.FoliageQuality, graphics.FoliageQuality.ToString(), "Built-in preset for grass and foliage density."),
+            Informational("game-custom-quality", "Preset mode", graphics.QualitySettingIsCustom ? "Custom" : "Single preset", "Shows whether individual quality categories differ from the base preset.", "System.sav decoded value", "QualitySettingIsCustom", isAdvanced: true),
         ];
-
-        FeatureSettingSnapshot[] details = settings
-            .Select((name, index) => Informational(
-                $"game-menu-{index}",
-                name,
-                value,
-                "The field exists in System.sav, but Ancestors' custom binary format is not yet read reliably enough to show its current value.",
-                source,
-                "System.sav"))
-            .ToArray();
 
         return new FeatureGroupSnapshot(
             "game-menu-settings",
             "Game settings",
             "Built-in graphics menu",
-            exists ? "Current values not readable yet" : "System.sav not found",
-            "Settings saved by Ancestors in its custom binary system file.",
-            IsEssential: false,
-            ReadableSettingState.Unknown,
+            graphics.QualitySettingIsCustom
+                ? $"{graphics.OverallQuality} base · Custom"
+                : graphics.OverallQuality.ToString(),
+            "Settings saved directly by Ancestors in System.sav.",
+            IsEssential: true,
+            ReadableSettingState.Modified,
             details);
     }
+
+    private static FeatureSettingSnapshot SystemSetting(
+        GameInspectionSnapshot snapshot,
+        string id,
+        string name,
+        string value,
+        string key,
+        string editorValue,
+        string description,
+        bool isAdvanced = false) =>
+        new(
+            id,
+            name,
+            value,
+            description,
+            "System.sav decoded value",
+            key,
+            ReadableSettingState.Modified,
+            isAdvanced,
+            Editor: EditableSettingsCatalog.Create(snapshot, key, editorValue));
 
     private static FeatureGroupSnapshot CreateConvenienceGroup(GameInspectionSnapshot snapshot)
     {
@@ -790,18 +818,92 @@ public static class ReadableSettingsCatalog
                     : format(preset.RawValue) ?? $"Raw value {preset.RawValue}"))
             .ToArray();
 
+        GameGraphicsQuality? activeQuality = GetActivePresetQuality(snapshot, key);
+        string? activeRawValue = activeQuality is null ? null : presetValues.Get(activeQuality.Value);
+        string? activeValue = activeRawValue is null ? null : format(activeRawValue);
+        string activeName = activeQuality?.ToString() ?? string.Empty;
+
         return new FeatureSettingSnapshot(
             id,
             name,
-            "Game preset",
+            activeValue ?? "Game preset",
             description,
-            $"Ancestors build {AncestorsScalabilityPresetCatalog.SupportedBuildId} preset table; active level not read from System.sav",
+            activeValue is null
+                ? $"Ancestors build {AncestorsScalabilityPresetCatalog.SupportedBuildId} preset table; active level not read from System.sav"
+                : $"System.sav · {activeName} game preset",
             key,
             ReadableSettingState.Unknown,
             isAdvanced,
             Percentage: null,
-            PresetValues: values);
+            PresetValues: values,
+            ActivePresetName: activeValue is null ? null : activeName);
     }
+
+    private static GameGraphicsQuality? GetActivePresetQuality(
+        GameInspectionSnapshot snapshot,
+        string key)
+    {
+        SystemGraphicsSettingsSnapshot? graphics = snapshot.BinarySettingsFile?.GraphicsSettings;
+        if (graphics is null)
+        {
+            return null;
+        }
+
+        if (key is "r.SkeletalMeshLODBias" or "r.ViewDistanceScale")
+        {
+            return graphics.ViewDistanceQuality;
+        }
+
+        if (key is "foliage.DensityScale" or "grass.DensityScale")
+        {
+            return graphics.FoliageQuality;
+        }
+
+        if (key == "r.MaxAnisotropy" || key.StartsWith("r.Streaming.", StringComparison.Ordinal))
+        {
+            return graphics.TextureQuality;
+        }
+
+        if (IsShadowPresetKey(key))
+        {
+            return graphics.ShadowQuality;
+        }
+
+        if (IsPostProcessingPresetKey(key))
+        {
+            return graphics.PostProcessingQuality;
+        }
+
+        return key == "r.PostProcessAAQuality"
+            ? graphics.OverallQuality
+            : graphics.VisualEffectsQuality;
+    }
+
+    private static bool IsShadowPresetKey(string key) =>
+        key.StartsWith("r.Shadow", StringComparison.Ordinal) ||
+        key.StartsWith("r.VolumetricFog", StringComparison.Ordinal) ||
+        key is "r.AOQuality" or
+            "r.CapsuleShadows" or
+            "r.DistanceFieldAO" or
+            "r.DistanceFieldShadowing" or
+            "r.LightFunctionQuality" or
+            "r.LightMaxDrawDistanceScale";
+
+    private static bool IsPostProcessingPresetKey(string key) =>
+        key.StartsWith("r.AmbientOcclusion", StringComparison.Ordinal) ||
+        key.StartsWith("r.DOF.", StringComparison.Ordinal) ||
+        key.StartsWith("r.Tonemapper.", StringComparison.Ordinal) ||
+        key is "r.BloomQuality" or
+            "r.DepthOfFieldQuality" or
+            "r.EyeAdaptationQuality" or
+            "r.FastBlurThreshold" or
+            "r.Filter.SizeScale" or
+            "r.LensFlareQuality" or
+            "r.LightShaftQuality" or
+            "r.MotionBlurQuality" or
+            "r.RenderTargetPoolMin" or
+            "r.SceneColorFringeQuality" or
+            "r.Upscale.Quality";
 
     private static FeatureSettingSnapshot Informational(
         string id,

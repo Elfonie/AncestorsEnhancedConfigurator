@@ -6,4 +6,5 @@ public sealed record BinarySettingsFileSnapshot(
     bool Exists,
     long? SizeBytes,
     DateTimeOffset? LastWriteTimeUtc,
-    string FormatStatus);
+    string FormatStatus,
+    SystemGraphicsSettingsSnapshot? GraphicsSettings = null);

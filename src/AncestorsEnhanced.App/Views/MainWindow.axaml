@@ -238,6 +238,7 @@
                                           ColumnDefinitions="Auto,*"
                                           ColumnSpacing="12">
                                       <CheckBox IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
+                                                IsVisible="{Binding ShowOverrideToggle}"
                                                 VerticalAlignment="Center"
                                                 Content="Custom" />
 
@@ -298,7 +299,7 @@
                                       FontSize="11"
                                       Foreground="#91A4AF">
                               <StackPanel Margin="0,8,0,2" Spacing="8">
-                                <TextBlock Text="The game selects one of these values from its Low, Medium or High preset. The active preset is not currently readable."
+                                <TextBlock Text="{Binding PresetExplanation}"
                                            TextWrapping="Wrap"
                                            Foreground="#81929D" />
                                 <ItemsControl ItemsSource="{Binding PresetValues}">

@@ -4,6 +4,7 @@ using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Paks;
 using AncestorsEnhanced.Infrastructure.Parsing;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.Inspection;
 
@@ -12,6 +13,7 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
     private const string SteamAppId = "536270";
     private const long MaximumTextFileSizeBytes = 4 * 1024 * 1024;
     private const long MaximumPakHashSizeBytes = 1024 * 1024;
+    private const long MaximumSystemSaveSizeBytes = 1024 * 1024;
 
     private readonly IReadOnlyFileSystem _fileSystem;
     private readonly IHostEnvironment _environment;
@@ -518,13 +520,27 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
         try
         {
             ReadOnlyFileMetadata metadata = _fileSystem.GetFileMetadata(path);
+            if (metadata.SizeBytes > MaximumSystemSaveSizeBytes)
+            {
+                return new BinarySettingsFileSnapshot(
+                    metadata.Name,
+                    metadata.FullPath,
+                    Exists: true,
+                    metadata.SizeBytes,
+                    metadata.LastWriteTimeUtc,
+                    "File is unexpectedly large and was not decoded");
+            }
+
+            SystemGraphicsSettingsSnapshot graphics = AncestorsSystemSaveCodec.Read(
+                _fileSystem.ReadAllBytes(path));
             return new BinarySettingsFileSnapshot(
                 metadata.Name,
                 metadata.FullPath,
                 Exists: true,
                 metadata.SizeBytes,
                 metadata.LastWriteTimeUtc,
-                "Detected; current graphics-setting values are not readable yet");
+                "Decoded and verified",
+                graphics);
         }
         catch (Exception exception) when (IsExpectedReadException(exception))
         {
@@ -534,7 +550,7 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
                 Exists: true,
                 null,
                 null,
-                $"Metadata could not be read: {exception.Message}");
+                $"Could not decode: {exception.Message}");
         }
     }
 

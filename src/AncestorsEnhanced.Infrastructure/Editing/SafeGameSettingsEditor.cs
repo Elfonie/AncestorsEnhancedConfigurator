@@ -4,6 +4,7 @@ using System.Text.Json;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Paks;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
@@ -11,6 +12,7 @@ namespace AncestorsEnhanced.Infrastructure.Editing;
 public sealed class SafeGameSettingsEditor : IGameSettingsEditor
 {
     private const int MaximumIniSizeBytes = 4 * 1024 * 1024;
+    private const int MaximumSystemSaveSizeBytes = 1024 * 1024;
     private const string SupportedBuildId = "5495393";
 
     private readonly Func<DateTimeOffset> _utcNow;
@@ -80,8 +82,12 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         List<ConfigurationFileChangePlan> filePlans = [];
         List<SettingChangePreview> previews = [];
 
+        Dictionary<SettingChangeRequest, SettingFileTarget> targets = requests.ToDictionary(
+            request => request,
+            request => EditableSettingsCatalog.Create(snapshot, request.Key, null)!.Target);
+
         SettingChangeRequest[] iniRequests = requests
-            .Where(request => !string.Equals(request.Key, "mod.VignettePercent", StringComparison.OrdinalIgnoreCase))
+            .Where(request => targets[request] == SettingFileTarget.Ini)
             .ToArray();
         foreach (IGrouping<string, SettingChangeRequest> fileGroup in iniRequests.GroupBy(
                      request => request.FileName,
@@ -135,8 +141,64 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
             }
         }
 
+        SettingChangeRequest[] systemRequests = requests
+            .Where(request => targets[request] == SettingFileTarget.SystemSave)
+            .ToArray();
+        if (systemRequests.Length > 0)
+        {
+            string systemSaveDirectory = GetSystemSaveDirectory(userDataDirectory);
+            ValidateConfigurationPath(userDataDirectory, systemSaveDirectory);
+            string fullPath = GetTargetPath(
+                userDataDirectory,
+                snapshot.Installation?.InstallDirectory,
+                "System.sav",
+                SettingFileTarget.SystemSave);
+            ValidateWritableTarget(fullPath);
+            if (!File.Exists(fullPath))
+            {
+                throw new InvalidOperationException("System.sav was not found and cannot be created safely.");
+            }
+
+            byte[] original = File.ReadAllBytes(fullPath);
+            if (original.Length > MaximumSystemSaveSizeBytes)
+            {
+                throw new InvalidOperationException("System.sav is unexpectedly large and will not be changed.");
+            }
+
+            var changes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (SettingChangeRequest change in systemRequests)
+            {
+                string before = EditableSettingsCatalog.GetCurrentSystemValue(snapshot, change.Key)
+                    ?? throw new InvalidOperationException("The current System.sav graphics settings could not be read.");
+                string after = change.Value!;
+                if (!string.Equals(before, after, StringComparison.Ordinal))
+                {
+                    previews.Add(new SettingChangePreview(
+                        change.DisplayName,
+                        "System.sav",
+                        change.Key,
+                        before,
+                        after));
+                    changes.Add(change.Key, after);
+                }
+            }
+
+            if (changes.Count > 0)
+            {
+                byte[] updated = AncestorsSystemSaveCodec.Apply(original, changes);
+                filePlans.Add(new ConfigurationFileChangePlan(
+                    "System.sav",
+                    fullPath,
+                    Existed: true,
+                    Sha256(original),
+                    original,
+                    updated,
+                    SettingFileTarget.SystemSave));
+            }
+        }
+
         SettingChangeRequest? vignetteRequest = requests.SingleOrDefault(request =>
-            string.Equals(request.Key, "mod.VignettePercent", StringComparison.OrdinalIgnoreCase));
+            targets[request] == SettingFileTarget.Pak);
         if (vignetteRequest is not null)
         {
             ConfigurationFileChangePlan vignette = VignettePakEditor.CreatePlan(
@@ -311,7 +373,7 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
                 SupportedBuildId);
             if (operation is null)
             {
-                return Failure("There is no unchanged 0.3 operation that can be restored safely.");
+                return Failure("There is no unchanged configurator operation that can be restored safely.");
             }
 
             List<(ManifestFile File, byte[] Current)> restored = [];
@@ -429,6 +491,12 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         ValidateConfigurationPath(
             plan.UserDataDirectory,
             GetConfigurationDirectory(plan.UserDataDirectory));
+        if (plan.Files.Any(file => file.Target == SettingFileTarget.SystemSave))
+        {
+            ValidateConfigurationPath(
+                plan.UserDataDirectory,
+                GetSystemSaveDirectory(plan.UserDataDirectory));
+        }
         if (plan.Files.Any(file => file.Target == SettingFileTarget.Pak))
         {
             if (string.IsNullOrWhiteSpace(plan.InstallDirectory))

@@ -24,6 +24,9 @@ internal static class ConfigurationFileOperations
     public static string GetPakDirectory(string installDirectory) =>
         Path.GetFullPath(Path.Combine(installDirectory, "Ancestors", "Content", "Paks"));
 
+    public static string GetSystemSaveDirectory(string userDataDirectory) =>
+        Path.GetFullPath(Path.Combine(userDataDirectory, "SaveGames"));
+
     public static string GetOperationDirectory(string userDataDirectory, string operationId)
     {
         if (operationId.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
@@ -67,6 +70,15 @@ internal static class ConfigurationFileOperations
         }
     }
 
+    public static void ValidateSystemSaveFileName(string fileName)
+    {
+        if (!string.Equals(fileName, "System.sav", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"{fileName} is not an allowed save target.");
+        }
+    }
+
     public static string GetTargetPath(
         string userDataDirectory,
         string? installDirectory,
@@ -76,6 +88,24 @@ internal static class ConfigurationFileOperations
         if (target == SettingFileTarget.Ini)
         {
             return GetTargetPath(GetConfigurationDirectory(userDataDirectory), fileName);
+        }
+
+        if (target == SettingFileTarget.SystemSave)
+        {
+            ValidateSystemSaveFileName(fileName);
+            string saveDirectory = GetSystemSaveDirectory(userDataDirectory);
+            string savePath = Path.GetFullPath(Path.Combine(saveDirectory, fileName));
+            if (!string.Equals(Path.GetDirectoryName(savePath), saveDirectory, PathComparison))
+            {
+                throw new InvalidOperationException("The target path leaves the save directory.");
+            }
+
+            return savePath;
+        }
+
+        if (target != SettingFileTarget.Pak)
+        {
+            throw new InvalidOperationException("The target type is not supported.");
         }
 
         if (string.IsNullOrWhiteSpace(installDirectory))

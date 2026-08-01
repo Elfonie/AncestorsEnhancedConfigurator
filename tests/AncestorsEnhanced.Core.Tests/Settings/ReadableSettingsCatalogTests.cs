@@ -143,6 +143,48 @@ public sealed class ReadableSettingsCatalogTests
         Assert.Equal(ReadableSettingState.Unknown, bloom.State);
     }
 
+    [Fact]
+    public void CreateFeatureGroupsUsesDecodedActiveCategoryPresets()
+    {
+        var graphics = new SystemGraphicsSettingsSnapshot(
+            2560,
+            1440,
+            1680,
+            1050,
+            1.05,
+            GameGraphicsQuality.High,
+            GameGraphicsQuality.High,
+            GameGraphicsQuality.Low,
+            GameGraphicsQuality.Medium,
+            GameGraphicsQuality.High,
+            GameGraphicsQuality.High,
+            GameGraphicsQuality.High,
+            3,
+            120,
+            true);
+        IReadOnlyList<FeatureGroupSnapshot> groups =
+            ReadableSettingsCatalog.CreateFeatureGroups(
+                CreateSnapshot([], [], buildId: "5495393", graphics: graphics));
+
+        FeatureSettingSnapshot foliage = FindSetting(
+            FindGroup(groups, "view-distance-foliage"),
+            "foliage-density");
+        FeatureSettingSnapshot bloom = FindSetting(
+            FindGroup(groups, "post-processing"),
+            "bloom-quality");
+        FeatureSettingSnapshot shadow = FindSetting(
+            FindGroup(groups, "shadows-lighting"),
+            "shadow-quality");
+
+        Assert.Equal("150%", foliage.Value);
+        Assert.Equal("High", foliage.ActivePresetName);
+        Assert.Equal("Level 4", bloom.Value);
+        Assert.Equal("Low", bloom.ActivePresetName);
+        Assert.Equal("Quality 4", shadow.Value);
+        Assert.Equal("Medium", shadow.ActivePresetName);
+        Assert.Equal("High base · Custom", FindGroup(groups, "game-menu-settings").Summary);
+    }
+
     private static FeatureGroupSnapshot FindGroup(
         IReadOnlyList<FeatureGroupSnapshot> groups,
         string id) => Assert.Single(groups, group => group.Id == id);
@@ -155,7 +197,8 @@ public sealed class ReadableSettingsCatalogTests
         IReadOnlyList<IniSettingSnapshot> iniSettings,
         IReadOnlyList<PakFileSnapshot> pakFiles,
         string? buildId = null,
-        VignetteModSnapshot? vignette = null)
+        VignetteModSnapshot? vignette = null,
+        SystemGraphicsSettingsSnapshot? graphics = null)
     {
         return new GameInspectionSnapshot(
             DateTimeOffset.UnixEpoch,
@@ -182,7 +225,16 @@ public sealed class ReadableSettingsCatalogTests
                     iniSettings,
                     null),
             ],
-            null,
+            graphics is null
+                ? null
+                : new BinarySettingsFileSnapshot(
+                    "System.sav",
+                    "System.sav",
+                    true,
+                    1,
+                    DateTimeOffset.UnixEpoch,
+                    "Decoded and verified",
+                    graphics),
             pakFiles,
             [],
             vignette);

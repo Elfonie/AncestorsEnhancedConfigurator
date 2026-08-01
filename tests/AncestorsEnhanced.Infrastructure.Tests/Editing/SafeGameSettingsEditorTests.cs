@@ -2,6 +2,8 @@ using System.Text;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Editing;
+using AncestorsEnhanced.Infrastructure.SystemSave;
+using AncestorsEnhanced.Infrastructure.Tests.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.Editing;
 
@@ -47,6 +49,60 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         Assert.True(reverted.Succeeded, reverted.Message);
         Assert.Equal(Original, File.ReadAllText(engineIni));
         Assert.False(editor.CanRevertLast(snapshot));
+    }
+
+    [Fact]
+    public void ApplyEditsSystemSaveAndRevertRestoresExactOriginal()
+    {
+        string userData = CreateUserData();
+        string saveDirectory = Directory.CreateDirectory(Path.Combine(userData, "SaveGames")).FullName;
+        string systemSave = Path.Combine(saveDirectory, "System.sav");
+        byte[] original = SystemSaveTestData.Create();
+        File.WriteAllBytes(systemSave, original);
+
+        var editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData) with
+        {
+            BinarySettingsFile = new BinarySettingsFileSnapshot(
+                "System.sav",
+                systemSave,
+                true,
+                original.Length,
+                DateTimeOffset.UnixEpoch,
+                "Decoded and verified",
+                AncestorsSystemSaveCodec.Read(original)),
+        };
+        SettingsChangePlan plan = editor.CreatePlan(
+            snapshot,
+            [
+                SystemChange(
+                    "game-fullscreen-resolution",
+                    "Fullscreen resolution",
+                    SystemSaveSettingKeys.FullscreenResolution,
+                    "2560x1440"),
+                SystemChange(
+                    "game-shadow-preset",
+                    "Shadow preset",
+                    SystemSaveSettingKeys.ShadowQuality,
+                    "High"),
+            ]);
+
+        Assert.Single(plan.Files);
+        Assert.Equal(SettingFileTarget.SystemSave, plan.Files[0].Target);
+        Assert.Equal(original, File.ReadAllBytes(systemSave));
+
+        SettingsOperationResult applied = editor.Apply(plan);
+
+        Assert.True(applied.Succeeded, applied.Message);
+        SystemGraphicsSettingsSnapshot updated = AncestorsSystemSaveCodec.Read(File.ReadAllBytes(systemSave));
+        Assert.Equal((2560, 1440), (updated.FullscreenWidth, updated.FullscreenHeight));
+        Assert.Equal(GameGraphicsQuality.High, updated.ShadowQuality);
+        Assert.True(editor.CanRevertLast(snapshot));
+
+        SettingsOperationResult reverted = editor.RevertLast(snapshot);
+
+        Assert.True(reverted.Succeeded, reverted.Message);
+        Assert.Equal(original, File.ReadAllBytes(systemSave));
     }
 
     [Fact]
@@ -461,6 +517,13 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         string key,
         string? value) =>
         new(id, name, "Engine.ini", "SystemSettings", key, value);
+
+    private static SettingChangeRequest SystemChange(
+        string id,
+        string name,
+        string key,
+        string value) =>
+        new(id, name, "System.sav", "GraphicsOptions", key, value);
 
     private static GameInspectionSnapshot CreateSnapshot(string userData) =>
         new(

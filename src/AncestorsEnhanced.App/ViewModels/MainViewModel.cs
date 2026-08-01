@@ -25,6 +25,11 @@ public partial class MainViewModel : ViewModelBase
         "light-shafts",
         "shadow-quality",
         "startup-videos",
+        "game-fullscreen-resolution",
+        "game-frame-rate",
+        "game-shadow-preset",
+        "game-post-processing-preset",
+        "game-foliage-preset",
     };
 
     private readonly IReadOnlyGameInspector _inspector;
@@ -111,7 +116,7 @@ public partial class MainViewModel : ViewModelBase
         _settingsEditor = settingsEditor;
 
         ProductName = "Ancestors Enhanced Configurator";
-        Phase = "0.3 · review and safe editing";
+        Phase = "0.4 · System.sav editing";
         RefreshFromDisk();
     }
 
@@ -381,6 +386,7 @@ public partial class MainViewModel : ViewModelBase
                 setting.PresetValues?
                     .Select(value => new SettingPresetValueRowViewModel(value.Name, value.Value))
                     .ToArray() ?? [],
+                setting.ActivePresetName,
                 _editors.GetValueOrDefault(setting.Id)))
             .ToArray();
 

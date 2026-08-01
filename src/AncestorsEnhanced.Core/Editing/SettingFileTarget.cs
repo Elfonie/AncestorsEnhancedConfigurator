@@ -4,4 +4,5 @@ public enum SettingFileTarget
 {
     Ini,
     Pak,
+    SystemSave,
 }

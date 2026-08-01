@@ -12,4 +12,5 @@ public sealed record SettingEditSnapshot(
     decimal? Increment = null,
     IReadOnlyList<SettingChoice>? Choices = null,
     SettingFileTarget Target = SettingFileTarget.Ini,
-    string? Unit = null);
+    string? Unit = null,
+    bool IsDirect = false);

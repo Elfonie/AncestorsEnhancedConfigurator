@@ -71,6 +71,8 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public bool HasUnit => _snapshot.Unit is not null;
 
+    public bool ShowOverrideToggle => !_snapshot.IsDirect;
+
     public string ToggleLabel => ToggleValue ? "On" : "Off";
 
     public string ModeLabel => IsPresence
@@ -78,7 +80,7 @@ public partial class SettingEditorViewModel : ViewModelBase
         : UseCustomValue ? "Custom value" : "Game controlled";
 
     public bool HasChanges => !string.Equals(
-        UseCustomValue ? DesiredValue : null,
+            _snapshot.IsDirect || UseCustomValue ? DesiredValue : null,
         _initialValue,
         StringComparison.Ordinal);
 
@@ -99,7 +101,7 @@ public partial class SettingEditorViewModel : ViewModelBase
             _snapshot.FileName,
             _snapshot.Section,
             _snapshot.Key,
-            UseCustomValue ? DesiredValue : null);
+            _snapshot.IsDirect || UseCustomValue ? DesiredValue : null);
 
     public void Reset()
     {
