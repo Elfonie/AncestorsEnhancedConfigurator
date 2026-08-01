@@ -781,31 +781,26 @@ public static class ReadableSettingsCatalog
             return null;
         }
 
-        (string Name, string Value)[] values = presetValues
+        SettingPresetValueSnapshot[] values = presetValues
             .Enumerate()
-            .Select(preset => (
+            .Select(preset => new SettingPresetValueSnapshot(
                 preset.Name,
                 preset.RawValue is null
                     ? "Not set by this preset"
                     : format(preset.RawValue) ?? $"Raw value {preset.RawValue}"))
             .ToArray();
 
-        string[] distinctValues = values
-            .Select(value => value.Value)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
         return new FeatureSettingSnapshot(
             id,
             name,
-            $"Game preset · {string.Join(" / ", distinctValues)}",
+            "Game preset",
             description,
             $"Ancestors build {AncestorsScalabilityPresetCatalog.SupportedBuildId} preset table; active level not read from System.sav",
             key,
             ReadableSettingState.Unknown,
             isAdvanced,
             Percentage: null,
-            PresetDetails: string.Join(" · ", values.Select(value => $"{value.Name}: {value.Value}")));
+            PresetValues: values);
     }
 
     private static FeatureSettingSnapshot Informational(

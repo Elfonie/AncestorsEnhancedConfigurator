@@ -12,5 +12,7 @@ public sealed record FeatureSettingSnapshot(
     ReadableSettingState State,
     bool IsAdvanced,
     double? Percentage = null,
-    string? PresetDetails = null,
+    IReadOnlyList<SettingPresetValueSnapshot>? PresetValues = null,
     SettingEditSnapshot? Editor = null);
+
+public sealed record SettingPresetValueSnapshot(string Name, string Value);

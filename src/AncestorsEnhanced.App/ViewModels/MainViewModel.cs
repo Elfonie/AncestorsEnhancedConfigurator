@@ -378,6 +378,9 @@ public partial class MainViewModel : ViewModelBase
                 GetAccentColor(setting.State),
                 IsAdvancedMode,
                 IsAdvancedMode,
+                setting.PresetValues?
+                    .Select(value => new SettingPresetValueRowViewModel(value.Name, value.Value))
+                    .ToArray() ?? [],
                 _editors.GetValueOrDefault(setting.Id)))
             .ToArray();
 

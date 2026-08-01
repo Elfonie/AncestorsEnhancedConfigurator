@@ -129,12 +129,16 @@ public sealed class ReadableSettingsCatalogTests
             FindGroup(groups, "post-processing"),
             "bloom-quality");
 
-        Assert.Equal("Game preset · Off / Quality 3", motionBlur.Value);
-        Assert.Equal("Low: Off · Medium: Quality 3 · High: Quality 3", motionBlur.PresetDetails);
+        Assert.Equal("Game preset", motionBlur.Value);
+        Assert.Collection(
+            motionBlur.PresetValues!,
+            low => Assert.Equal(new SettingPresetValueSnapshot("Low", "Off"), low),
+            medium => Assert.Equal(new SettingPresetValueSnapshot("Medium", "Quality 3"), medium),
+            high => Assert.Equal(new SettingPresetValueSnapshot("High", "Quality 3"), high));
         Assert.NotNull(motionBlur.Editor);
         Assert.Equal("0", motionBlur.Editor.DefaultValue);
         Assert.Null(motionBlur.Editor.CurrentOverride);
-        Assert.Equal("Game preset · Level 4 / Level 5", bloom.Value);
+        Assert.Equal("Game preset", bloom.Value);
         Assert.Contains("active level not read", bloom.Source, StringComparison.Ordinal);
         Assert.Equal(ReadableSettingState.Unknown, bloom.State);
     }

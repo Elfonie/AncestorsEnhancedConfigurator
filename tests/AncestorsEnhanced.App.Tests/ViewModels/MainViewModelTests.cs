@@ -61,6 +61,17 @@ public sealed class MainViewModelTests
         Assert.Equal("Shadow quality", shadows.Settings[0].Name);
         Assert.All(viewModel.FeatureGroups.SelectMany(group => group.Settings), setting =>
             Assert.False(setting.ShowDescription));
+
+        FeatureSettingRowViewModel foliage = Assert.Single(
+            viewModel.FeatureGroups.SelectMany(group => group.Settings),
+            setting => setting.Name == "Foliage density");
+        Assert.Equal("Controlled by", foliage.ValueLabel);
+        Assert.Equal("Game preset", foliage.Value);
+        Assert.Collection(
+            foliage.PresetValues,
+            low => Assert.Equal(new SettingPresetValueRowViewModel("Low", "100%"), low),
+            medium => Assert.Equal(new SettingPresetValueRowViewModel("Medium", "125%"), medium),
+            high => Assert.Equal(new SettingPresetValueRowViewModel("High", "150%"), high));
     }
 
     [Fact]
