@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:AncestorsEnhanced.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="960" d:DesignHeight="640"
+        x:Class="AncestorsEnhanced.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Width="960"
+        Height="640"
+        MinWidth="760"
+        MinHeight="520"
+        Title="Ancestors Enhanced Configurator">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <vm:MainViewModel />
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,*" Background="#11151A">
+        <Border Grid.Row="0" Background="#192028" Padding="32,24">
+            <StackPanel Spacing="6">
+                <TextBlock Text="{Binding ProductName}"
+                           FontSize="28"
+                           FontWeight="SemiBold"
+                           Foreground="#F3F6F8" />
+                <TextBlock Text="{Binding Phase}"
+                           FontSize="14"
+                           Foreground="#9FB0BD" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="32" RowDefinitions="Auto,Auto,*" RowSpacing="20">
+            <Border Grid.Row="0"
+                    Padding="18"
+                    CornerRadius="8"
+                    Background="#17392F"
+                    BorderBrush="#2B7A63"
+                    BorderThickness="1">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Safety state"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="#9ED8C5" />
+                    <TextBlock Text="{Binding SafetyStatus}"
+                               FontSize="18"
+                               Foreground="#E7FFF7" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Grid.Row="1"
+                       Text="{Binding Description}"
+                       TextWrapping="Wrap"
+                       FontSize="16"
+                       LineHeight="24"
+                       Foreground="#D4DCE2" />
+
+            <Border Grid.Row="2"
+                    Padding="20"
+                    CornerRadius="8"
+                    Background="#171D23"
+                    BorderBrush="#2A343D"
+                    BorderThickness="1">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Next milestone"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Foreground="#F3F6F8" />
+                    <TextBlock Text="Detect the Windows Steam installation and Ancestors user-data directory without modifying either location."
+                               TextWrapping="Wrap"
+                               FontSize="15"
+                               Foreground="#AEBCC6" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+
+</Window>

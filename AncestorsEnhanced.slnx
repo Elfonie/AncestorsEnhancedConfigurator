@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj" />
+    <Project Path="src/AncestorsEnhanced.Core/AncestorsEnhanced.Core.csproj" />
+    <Project Path="src/AncestorsEnhanced.Infrastructure/AncestorsEnhanced.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AncestorsEnhanced.Core.Tests/AncestorsEnhanced.Core.Tests.csproj" />
+    <Project Path="tests/AncestorsEnhanced.Infrastructure.Tests/AncestorsEnhanced.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>
