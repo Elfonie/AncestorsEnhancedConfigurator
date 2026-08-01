@@ -532,7 +532,7 @@ public static class ReadableSettingsCatalog
     private static FeatureGroupSnapshot CreateGameMenuGroup(GameInspectionSnapshot snapshot)
     {
         bool exists = snapshot.BinarySettingsFile?.Exists == true;
-        string value = exists ? "Detected; value not decoded" : "Not available";
+        string value = exists ? "Current value not readable yet" : "Not available";
         string source = exists ? "System.sav custom binary data" : "System.sav not found";
 
         string[] settings =
@@ -558,7 +558,7 @@ public static class ReadableSettingsCatalog
                 $"game-menu-{index}",
                 name,
                 value,
-                "The field is known to exist, but its current binary value is not presented until the decoder is verified.",
+                "The field exists in System.sav, but Ancestors' custom binary format is not yet read reliably enough to show its current value.",
                 source,
                 "System.sav"))
             .ToArray();
@@ -567,7 +567,7 @@ public static class ReadableSettingsCatalog
             "game-menu-settings",
             "Game settings",
             "Built-in graphics menu",
-            exists ? "Values not decoded" : "System.sav not found",
+            exists ? "Current values not readable yet" : "System.sav not found",
             "Settings saved by Ancestors in its custom binary system file.",
             IsEssential: false,
             ReadableSettingState.Unknown,
@@ -649,9 +649,40 @@ public static class ReadableSettingsCatalog
         int? maximum = null)
     {
         IniSettingSnapshot? entry = FindSetting(snapshot, SystemSettingsSection, key);
-        if (!int.TryParse(entry?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
+        if (entry is null)
         {
+            FeatureSettingSnapshot? preset = CreatePresetSetting(
+                snapshot,
+                id,
+                name,
+                key,
+                description,
+                isAdvanced,
+                rawValue => int.TryParse(
+                    rawValue,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out int presetValue)
+                    ? format(presetValue)
+                    : null);
+            if (preset is not null)
+            {
+                return preset;
+            }
+
             return Unknown(id, name, missingValue, description, missingSource, key, isAdvanced);
+        }
+
+        if (!int.TryParse(entry.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
+        {
+            return Unknown(
+                id,
+                name,
+                $"Unreadable override: {entry.Value}",
+                description,
+                "Engine.ini value is not a valid integer",
+                key,
+                isAdvanced);
         }
 
         return new FeatureSettingSnapshot(
@@ -679,9 +710,40 @@ public static class ReadableSettingsCatalog
         double? maximum = null)
     {
         IniSettingSnapshot? entry = FindSetting(snapshot, SystemSettingsSection, key);
-        if (!double.TryParse(entry?.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+        if (entry is null)
         {
+            FeatureSettingSnapshot? preset = CreatePresetSetting(
+                snapshot,
+                id,
+                name,
+                key,
+                description,
+                isAdvanced,
+                rawValue => double.TryParse(
+                    rawValue,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double presetValue)
+                    ? format(presetValue)
+                    : null);
+            if (preset is not null)
+            {
+                return preset;
+            }
+
             return Unknown(id, name, missingValue, description, missingSource, key, isAdvanced);
+        }
+
+        if (!double.TryParse(entry.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
+        {
+            return Unknown(
+                id,
+                name,
+                $"Unreadable override: {entry.Value}",
+                description,
+                "Engine.ini value is not a valid number",
+                key,
+                isAdvanced);
         }
 
         return new FeatureSettingSnapshot(
@@ -694,6 +756,50 @@ public static class ReadableSettingsCatalog
             value == 0 ? ReadableSettingState.Disabled : ReadableSettingState.Modified,
             isAdvanced,
             maximum is > 0 ? Math.Clamp(value / maximum.Value, 0, 1) : null);
+    }
+
+    private static FeatureSettingSnapshot? CreatePresetSetting(
+        GameInspectionSnapshot snapshot,
+        string id,
+        string name,
+        string key,
+        string description,
+        bool isAdvanced,
+        Func<string, string?> format)
+    {
+        if (!AncestorsScalabilityPresetCatalog.TryGet(
+                snapshot.Installation?.BuildId,
+                key,
+                out ScalabilityPresetValues? presetValues))
+        {
+            return null;
+        }
+
+        (string Name, string Value)[] values = presetValues
+            .Enumerate()
+            .Select(preset => (
+                preset.Name,
+                preset.RawValue is null
+                    ? "Not set by this preset"
+                    : format(preset.RawValue) ?? $"Raw value {preset.RawValue}"))
+            .ToArray();
+
+        string[] distinctValues = values
+            .Select(value => value.Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return new FeatureSettingSnapshot(
+            id,
+            name,
+            $"Game preset · {string.Join(" / ", distinctValues)}",
+            description,
+            $"Ancestors build {AncestorsScalabilityPresetCatalog.SupportedBuildId} preset table; active level not read from System.sav",
+            key,
+            ReadableSettingState.Unknown,
+            isAdvanced,
+            Percentage: null,
+            PresetDetails: string.Join(" · ", values.Select(value => $"{value.Name}: {value.Value}")));
     }
 
     private static FeatureSettingSnapshot Informational(

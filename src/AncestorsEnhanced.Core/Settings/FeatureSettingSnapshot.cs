@@ -9,4 +9,5 @@ public sealed record FeatureSettingSnapshot(
     string? TechnicalKey,
     ReadableSettingState State,
     bool IsAdvanced,
-    double? Percentage = null);
+    double? Percentage = null,
+    string? PresetDetails = null);

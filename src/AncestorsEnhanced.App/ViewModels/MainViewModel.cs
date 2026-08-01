@@ -107,8 +107,10 @@ public partial class MainViewModel : ViewModelBase
         BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
         BinarySettingsStatus = snapshot.BinarySettingsFile?.FormatStatus ?? "Not inspected";
         GameMenuSettingsSummary = snapshot.BinarySettingsFile?.Exists == true
-            ? "The game's own resolution and quality presets were found in System.sav. " +
-              "Their custom binary values are not shown until the decoder is verified."
+            ? "Ancestors stores the currently selected resolution and quality levels in its own " +
+              "binary System.sav format. The configurator can locate these fields, but cannot yet " +
+              "read their current values reliably. Verified Low, Medium and High preset values " +
+              "from this game build are shown instead."
             : "The game's own graphics-settings file has not been created yet.";
 
         _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
@@ -186,14 +188,23 @@ public partial class MainViewModel : ViewModelBase
                             setting.Value,
                             setting.Description,
                             setting.Source,
-                            setting.TechnicalKey is null
-                                ? setting.Source
-                                : $"{setting.TechnicalKey} · {setting.Source}",
+                            CreateTechnicalDetails(setting),
                             GetAccentColor(setting.State),
                             IsAdvancedMode))
                         .ToArray());
             })
             .ToArray();
+    }
+
+    private static string CreateTechnicalDetails(FeatureSettingSnapshot setting)
+    {
+        string source = setting.TechnicalKey is null
+            ? setting.Source
+            : $"{setting.TechnicalKey} · {setting.Source}";
+
+        return setting.PresetDetails is null
+            ? source
+            : $"{source}{Environment.NewLine}{setting.PresetDetails}";
     }
 
     private static string GetAccentColor(ReadableSettingState state) => state switch

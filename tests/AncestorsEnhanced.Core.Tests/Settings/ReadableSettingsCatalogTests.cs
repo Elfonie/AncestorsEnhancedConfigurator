@@ -114,6 +114,27 @@ public sealed class ReadableSettingsCatalogTests
         Assert.Equal(ReadableSettingState.Unknown, bloom.State);
     }
 
+    [Fact]
+    public void CreateFeatureGroupsShowsVerifiedPresetValuesForSupportedBuild()
+    {
+        IReadOnlyList<FeatureGroupSnapshot> groups =
+            ReadableSettingsCatalog.CreateFeatureGroups(
+                CreateSnapshot([], [], buildId: "5495393"));
+
+        FeatureSettingSnapshot motionBlur = FindSetting(
+            FindGroup(groups, "motion-blur"),
+            "motion-blur-quality");
+        FeatureSettingSnapshot bloom = FindSetting(
+            FindGroup(groups, "post-processing"),
+            "bloom-quality");
+
+        Assert.Equal("Game preset · Off / Quality 3", motionBlur.Value);
+        Assert.Equal("Low: Off · Medium: Quality 3 · High: Quality 3", motionBlur.PresetDetails);
+        Assert.Equal("Game preset · Level 4 / Level 5", bloom.Value);
+        Assert.Contains("active level not read", bloom.Source, StringComparison.Ordinal);
+        Assert.Equal(ReadableSettingState.Unknown, bloom.State);
+    }
+
     private static FeatureGroupSnapshot FindGroup(
         IReadOnlyList<FeatureGroupSnapshot> groups,
         string id) => Assert.Single(groups, group => group.Id == id);
@@ -124,11 +145,23 @@ public sealed class ReadableSettingsCatalogTests
 
     private static GameInspectionSnapshot CreateSnapshot(
         IReadOnlyList<IniSettingSnapshot> iniSettings,
-        IReadOnlyList<PakFileSnapshot> pakFiles)
+        IReadOnlyList<PakFileSnapshot> pakFiles,
+        string? buildId = null)
     {
         return new GameInspectionSnapshot(
             DateTimeOffset.UnixEpoch,
-            null,
+            buildId is null
+                ? null
+                : new GameInstallationSnapshot(
+                    StoreKind.Steam,
+                    HostKind.Windows,
+                    CompatibilityLayerKind.None,
+                    "store",
+                    "library",
+                    "install",
+                    "Ancestors-Win64-Shipping.exe",
+                    buildId,
+                    ExecutableExists: true),
             null,
             [
                 new ConfigurationFileSnapshot(

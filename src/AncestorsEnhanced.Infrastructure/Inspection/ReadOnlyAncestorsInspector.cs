@@ -383,7 +383,7 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
                 Exists: true,
                 metadata.SizeBytes,
                 metadata.LastWriteTimeUtc,
-                "Detected; binary graphics-setting values are not decoded in 0.2");
+                "Detected; current graphics-setting values are not readable yet in 0.2");
         }
         catch (Exception exception) when (IsExpectedReadException(exception))
         {

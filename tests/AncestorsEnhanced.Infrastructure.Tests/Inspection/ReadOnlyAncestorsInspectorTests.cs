@@ -35,7 +35,7 @@ public sealed class ReadOnlyAncestorsInspectorTests
             setting.Key == "r.MaxAnisotropy" &&
             setting.Value == "16");
         Assert.True(snapshot.BinarySettingsFile?.Exists);
-        Assert.Contains("not decoded", snapshot.BinarySettingsFile?.FormatStatus, StringComparison.Ordinal);
+        Assert.Contains("not readable yet", snapshot.BinarySettingsFile?.FormatStatus, StringComparison.Ordinal);
         Assert.Equal(2, snapshot.PakFiles.Count);
         Assert.Contains(snapshot.PakFiles, pak => pak.Classification == PakClassification.BaseGame);
         PakFileSnapshot patch = Assert.Single(
