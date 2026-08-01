@@ -10,6 +10,8 @@ public interface IGameSettingsEditor
 
     SettingsOperationResult Apply(SettingsChangePlan plan);
 
+    void DiscardPlan(SettingsChangePlan plan);
+
     bool CanRevertLast(GameInspectionSnapshot snapshot);
 
     SettingsOperationResult RevertLast(GameInspectionSnapshot snapshot);

@@ -6,7 +6,7 @@ internal static class ConfigurationFileOperations
 {
     private const string BackupFolderName = "AncestorsEnhanced";
     private static readonly HashSet<string> AllowedFiles =
-        new(StringComparer.OrdinalIgnoreCase) { "Engine.ini" };
+        new(StringComparer.OrdinalIgnoreCase) { "Engine.ini", "Game.ini" };
 
     public static string GetConfigurationDirectory(string userDataDirectory) =>
         Path.GetFullPath(Path.Combine(userDataDirectory, "Config", "WindowsNoEditor"));
@@ -54,7 +54,15 @@ internal static class ConfigurationFileOperations
     {
         string root = Path.GetFullPath(userDataDirectory);
         string current = Path.GetFullPath(configurationDirectory);
-        while (current.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        string relative = Path.GetRelativePath(root, current);
+        if (Path.IsPathRooted(relative) ||
+            relative.Equals("..", StringComparison.Ordinal) ||
+            relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The configuration path leaves the user-data directory.");
+        }
+
+        while (true)
         {
             if (Directory.Exists(current) &&
                 File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
@@ -82,6 +90,7 @@ internal static class ConfigurationFileOperations
 
     public static void WriteBytesAtomically(string path, byte[] content)
     {
+        ValidateWritableTarget(path);
         string directory = Path.GetDirectoryName(path)
             ?? throw new InvalidOperationException("The target directory is missing.");
         Directory.CreateDirectory(directory);

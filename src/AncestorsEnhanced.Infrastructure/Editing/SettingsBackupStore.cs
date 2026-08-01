@@ -24,9 +24,17 @@ internal static class SettingsBackupStore
 
         foreach (ConfigurationFileChangePlan file in plan.Files.Where(file => file.Existed))
         {
+            string backupPath = Path.Combine(directory, $"{file.FileName}.before");
             WriteBytesAtomically(
-                Path.Combine(directory, $"{file.FileName}.before"),
+                backupPath,
                 file.OriginalContent);
+            if (!string.Equals(
+                    Sha256(File.ReadAllBytes(backupPath)),
+                    file.OriginalSha256,
+                    StringComparison.Ordinal))
+            {
+                throw new IOException($"Validation failed after backing up {file.FileName}.");
+            }
         }
 
         return directory;
@@ -36,16 +44,14 @@ internal static class SettingsBackupStore
         Path.Combine(directory, ManifestFileName);
 
     public static void MarkApplied(string directory, DateTimeOffset createdAtUtc) =>
-        File.WriteAllText(
+        WriteBytesAtomically(
             Path.Combine(directory, AppliedMarkerName),
-            createdAtUtc.ToString("O"),
-            Encoding.UTF8);
+            Encoding.UTF8.GetBytes(createdAtUtc.ToString("O")));
 
     public static void MarkReverted(string directory, DateTimeOffset revertedAtUtc) =>
-        File.WriteAllText(
+        WriteBytesAtomically(
             Path.Combine(directory, RevertedMarkerName),
-            revertedAtUtc.ToString("O"),
-            Encoding.UTF8);
+            Encoding.UTF8.GetBytes(revertedAtUtc.ToString("O")));
 
     public static StoredSettingsOperation? FindLast(
         GameInspectionSnapshot snapshot,
@@ -60,6 +66,11 @@ internal static class SettingsBackupStore
         foreach (string directory in Directory.EnumerateDirectories(backupRoot)
                      .OrderByDescending(path => path, StringComparer.Ordinal))
         {
+            if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
+            {
+                return null;
+            }
+
             if (!File.Exists(Path.Combine(directory, AppliedMarkerName)) ||
                 File.Exists(Path.Combine(directory, RevertedMarkerName)))
             {
@@ -86,7 +97,7 @@ internal static class SettingsBackupStore
                     file.BackupFileName,
                     expectedBackup,
                     StringComparison.OrdinalIgnoreCase) &&
-                    (!file.Existed || File.Exists(Path.Combine(directory, expectedBackup!)));
+                    (!file.Existed || IsNormalFile(Path.Combine(directory, expectedBackup!)));
             });
             if (!validFiles)
             {
@@ -127,10 +138,13 @@ internal static class SettingsBackupStore
     private static OperationManifest? ReadManifest(string directory)
     {
         string path = Path.Combine(directory, ManifestFileName);
-        return File.Exists(path)
+        return IsNormalFile(path)
             ? JsonSerializer.Deserialize<OperationManifest>(File.ReadAllText(path, Encoding.UTF8))
             : null;
     }
+
+    private static bool IsNormalFile(string path) =>
+        File.Exists(path) && !File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
 
     private static void WriteManifest(string directory, OperationManifest manifest)
     {

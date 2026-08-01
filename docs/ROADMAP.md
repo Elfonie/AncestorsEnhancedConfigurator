@@ -30,7 +30,11 @@ Epic, GOG, Proton, Wine, and manual-path discovery remain future compatibility w
 - [x] Separate readable values from typed editing rules
 - [x] Essential and advanced editing interface
 - [x] Pending changes before apply
+- [x] Separate old-to-new review and confirmation step
 - [x] 44 bounded `Engine.ini` controls for verified build 5495393
+- [x] Typed No-Intro control in `Game.ini`
+- [x] Single-use, fingerprinted change plans
+- [x] Coordinated multi-file apply and rollback tests
 - [x] Preserve unrelated INI content and text format
 - [x] Hash-based conflict detection
 - [x] Backup and operation manifest

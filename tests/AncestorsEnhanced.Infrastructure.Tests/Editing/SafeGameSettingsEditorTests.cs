@@ -125,6 +125,29 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     }
 
     [Fact]
+    public void RevertRefusesACorruptedBackupAndKeepsTheAppliedFile()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        var editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SettingsChangePlan plan = editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+        SettingsOperationResult applied = editor.Apply(plan);
+        string appliedContent = File.ReadAllText(engineIni);
+        string operationDirectory = Path.GetDirectoryName(applied.ManifestPath!)!;
+        File.WriteAllText(Path.Combine(operationDirectory, "Engine.ini.before"), "corrupted");
+
+        SettingsOperationResult result = editor.RevertLast(snapshot);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("failed validation", result.Message, StringComparison.Ordinal);
+        Assert.Equal(appliedContent, File.ReadAllText(engineIni));
+    }
+
+    [Fact]
     public void ApplyPreservesUtf16Encoding()
     {
         string userData = CreateUserData();
@@ -165,6 +188,188 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         Assert.Contains("not editable", unknown.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ApplyAcceptsAnIssuedPlanOnlyOnce()
+    {
+        string userData = CreateUserData();
+        File.WriteAllText(EngineIniPath(userData), "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        var editor = CreateEditor(gameRunning: false);
+        SettingsChangePlan plan = editor.CreatePlan(
+            CreateSnapshot(userData),
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+
+        Assert.True(editor.Apply(plan).Succeeded);
+        SettingsOperationResult replay = editor.Apply(plan);
+
+        Assert.False(replay.Succeeded);
+        Assert.Contains("already been used", replay.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreatingANewPlanInvalidatesThePreviousPlan()
+    {
+        string userData = CreateUserData();
+        File.WriteAllText(EngineIniPath(userData), "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        var editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SettingsChangePlan oldPlan = editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+        SettingsChangePlan currentPlan = editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.5")]);
+
+        Assert.False(editor.Apply(oldPlan).Succeeded);
+        Assert.True(editor.Apply(currentPlan).Succeeded);
+        Assert.Contains("r.ViewDistanceScale=1.5", File.ReadAllText(EngineIniPath(userData)));
+    }
+
+    [Fact]
+    public void ApplyRejectsAModifiedIssuedPlan()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        const string Original = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        File.WriteAllText(engineIni, Original);
+        var editor = CreateEditor(gameRunning: false);
+        SettingsChangePlan plan = editor.CreatePlan(
+            CreateSnapshot(userData),
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+        plan.Files[0].UpdatedContent[0] ^= 1;
+
+        SettingsOperationResult result = editor.Apply(plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("modified", result.Message, StringComparison.Ordinal);
+        Assert.Equal(Original, File.ReadAllText(engineIni));
+    }
+
+    [Fact]
+    public void DiscardedPlanCannotBeApplied()
+    {
+        string userData = CreateUserData();
+        File.WriteAllText(EngineIniPath(userData), "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        var editor = CreateEditor(gameRunning: false);
+        SettingsChangePlan plan = editor.CreatePlan(
+            CreateSnapshot(userData),
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+
+        editor.DiscardPlan(plan);
+
+        Assert.False(editor.Apply(plan).Succeeded);
+    }
+
+    [Fact]
+    public void ApplyAndRevertTreatEngineAndGameIniAsOneOperation()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        const string OriginalEngine = "; engine\r\n[SystemSettings]\r\nr.ViewDistanceScale=1.0\r\n";
+        const string OriginalGame = "; game\r\n[/Script/MoviePlayer.MoviePlayerSettings]\r\nKeepThis=True\r\n";
+        File.WriteAllText(engineIni, OriginalEngine, new UTF8Encoding(false));
+        File.WriteAllText(gameIni, OriginalGame, new UTF8Encoding(false));
+        var editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SettingsChangePlan plan = editor.CreatePlan(
+            snapshot,
+            [
+                Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2"),
+                new SettingChangeRequest(
+                    "startup-videos",
+                    "Startup splash videos",
+                    "Game.ini",
+                    "/Script/MoviePlayer.MoviePlayerSettings",
+                    "!StartupMovies",
+                    "ClearArray"),
+            ]);
+
+        SettingsOperationResult applied = editor.Apply(plan);
+
+        Assert.True(applied.Succeeded, applied.Message);
+        Assert.Contains("r.ViewDistanceScale=1.2", File.ReadAllText(engineIni));
+        Assert.Contains("!StartupMovies=ClearArray", File.ReadAllText(gameIni));
+        Assert.True(editor.RevertLast(snapshot).Succeeded);
+        Assert.Equal(OriginalEngine, File.ReadAllText(engineIni));
+        Assert.Equal(OriginalGame, File.ReadAllText(gameIni));
+    }
+
+    [Fact]
+    public void ApplyCanRemoveTheNoIntroOverrideWithoutChangingOtherGameIniValues()
+    {
+        string userData = CreateUserData();
+        string gameIni = GameIniPath(userData);
+        File.WriteAllText(
+            gameIni,
+            "; keep\n[/Script/MoviePlayer.MoviePlayerSettings]\n!StartupMovies=ClearArray\nKeepThis=True\n");
+        var editor = CreateEditor(gameRunning: false);
+        SettingsChangePlan plan = editor.CreatePlan(
+            CreateSnapshot(userData),
+            [
+                new SettingChangeRequest(
+                    "startup-videos",
+                    "Startup splash videos",
+                    "Game.ini",
+                    "/Script/MoviePlayer.MoviePlayerSettings",
+                    "!StartupMovies",
+                    null),
+            ]);
+
+        Assert.True(editor.Apply(plan).Succeeded);
+        string result = File.ReadAllText(gameIni);
+        Assert.DoesNotContain("!StartupMovies", result, StringComparison.Ordinal);
+        Assert.Contains("; keep", result, StringComparison.Ordinal);
+        Assert.Contains("KeepThis=True", result, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(StoreKind.EpicGames, HostKind.Windows, CompatibilityLayerKind.None, true)]
+    [InlineData(StoreKind.Steam, HostKind.Linux, CompatibilityLayerKind.Proton, true)]
+    [InlineData(StoreKind.Steam, HostKind.Windows, CompatibilityLayerKind.None, false)]
+    public void CreatePlanRejectsUnverifiedTargets(
+        StoreKind store,
+        HostKind host,
+        CompatibilityLayerKind compatibilityLayer,
+        bool executableExists)
+    {
+        string userData = CreateUserData();
+        GameInspectionSnapshot valid = CreateSnapshot(userData);
+        GameInspectionSnapshot unsupported = valid with
+        {
+            Installation = valid.Installation! with
+            {
+                Store = store,
+                Host = host,
+                CompatibilityLayer = compatibilityLayer,
+                ExecutableExists = executableExists,
+            },
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            CreateEditor(gameRunning: false).CreatePlan(
+                unsupported,
+                [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]));
+
+        Assert.Contains("verified native Windows Steam build", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProductionPathGateRejectsAnUnexpectedUserDataDirectory()
+    {
+        string userData = CreateUserData();
+        var editor = new SafeGameSettingsEditor(
+            () => DateTimeOffset.UnixEpoch,
+            () => false,
+            path => path == "expected-native-path");
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            editor.CreatePlan(
+                CreateSnapshot(userData),
+                [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]));
+
+        Assert.Contains("not the native Ancestors location", exception.Message, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_temporaryDirectory))
@@ -182,6 +387,9 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
 
     private static string EngineIniPath(string userData) =>
         Path.Combine(userData, "Config", "WindowsNoEditor", "Engine.ini");
+
+    private static string GameIniPath(string userData) =>
+        Path.Combine(userData, "Config", "WindowsNoEditor", "Game.ini");
 
     private static SafeGameSettingsEditor CreateEditor(bool gameRunning) =>
         new(

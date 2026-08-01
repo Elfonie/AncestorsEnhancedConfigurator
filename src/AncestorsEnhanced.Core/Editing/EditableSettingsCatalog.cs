@@ -6,6 +6,8 @@ namespace AncestorsEnhanced.Core.Editing;
 internal sealed record SettingEditorTemplate(
     SettingEditorKind Kind,
     string DefaultValue,
+    string FileName = "Engine.ini",
+    string Section = "SystemSettings",
     decimal? Minimum = null,
     decimal? Maximum = null,
     decimal? Increment = null,
@@ -13,9 +15,6 @@ internal sealed record SettingEditorTemplate(
 
 public static class EditableSettingsCatalog
 {
-    private const string EngineIni = "Engine.ini";
-    private const string SystemSettings = "SystemSettings";
-
     private static readonly Dictionary<string, SettingEditorTemplate> Settings =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -88,6 +87,11 @@ public static class EditableSettingsCatalog
             ["r.DetailMode"] = Quality(defaultValue: 1, maximum: 2),
             ["r.EmitterSpawnRateScale"] = Number(0.5m, 0, 2, 0.05m),
             ["r.ParticleLightQuality"] = Toggle(defaultValue: true),
+            ["!StartupMovies"] = new(
+                SettingEditorKind.Presence,
+                "ClearArray",
+                "Game.ini",
+                "/Script/MoviePlayer.MoviePlayerSettings"),
         };
 
     public static SettingEditSnapshot? Create(
@@ -95,18 +99,15 @@ public static class EditableSettingsCatalog
         string key,
         string? currentOverride)
     {
-        if (!string.Equals(
-                snapshot.Installation?.BuildId,
-                AncestorsScalabilityPresetCatalog.SupportedBuildId,
-                StringComparison.Ordinal) ||
+        if (!IsVerifiedEditingTarget(snapshot) ||
             !Settings.TryGetValue(key, out SettingEditorTemplate? template))
         {
             return null;
         }
 
-        return new SettingEditSnapshot(
-            EngineIni,
-            SystemSettings,
+        var editor = new SettingEditSnapshot(
+            template.FileName,
+            template.Section,
             key,
             template.Kind,
             template.DefaultValue,
@@ -115,6 +116,9 @@ public static class EditableSettingsCatalog
             template.Maximum,
             template.Increment,
             template.Choices);
+        return currentOverride is null || IsValidValue(editor, currentOverride)
+            ? editor
+            : null;
     }
 
     public static bool TryValidate(
@@ -140,18 +144,41 @@ public static class EditableSettingsCatalog
             return true;
         }
 
-        bool valid = editor.Kind switch
-        {
-            SettingEditorKind.Toggle => request.Value is "0" or "1",
-            SettingEditorKind.Choice => editor.Choices?.Any(choice =>
-                string.Equals(choice.Value, request.Value, StringComparison.Ordinal)) == true,
-            SettingEditorKind.Number => IsValidNumber(editor, request.Value),
-            _ => false,
-        };
+        bool valid = IsValidValue(editor, request.Value);
 
         error = valid ? null : $"{request.Value} is not a valid value for {request.Key}.";
         return valid;
     }
+
+    public static bool IsVerifiedEditingTarget(GameInspectionSnapshot snapshot)
+    {
+        GameInstallationSnapshot? installation = snapshot.Installation;
+        return installation is
+        {
+            Store: StoreKind.Steam,
+            Host: HostKind.Windows,
+            CompatibilityLayer: CompatibilityLayerKind.None,
+            ExecutableExists: true,
+        } &&
+               string.Equals(
+                   installation.BuildId,
+                   AncestorsScalabilityPresetCatalog.SupportedBuildId,
+                   StringComparison.Ordinal);
+    }
+
+    private static bool IsValidValue(SettingEditSnapshot editor, string value) =>
+        editor.Kind switch
+        {
+            SettingEditorKind.Toggle => value is "0" or "1",
+            SettingEditorKind.Choice => editor.Choices?.Any(choice =>
+                string.Equals(choice.Value, value, StringComparison.Ordinal)) == true,
+            SettingEditorKind.Number => IsValidNumber(editor, value),
+            SettingEditorKind.Presence => string.Equals(
+                value,
+                editor.DefaultValue,
+                StringComparison.Ordinal),
+            _ => false,
+        };
 
     private static bool IsValidNumber(SettingEditSnapshot editor, string value)
     {
@@ -186,9 +213,9 @@ public static class EditableSettingsCatalog
         new(
             SettingEditorKind.Number,
             Invariant(defaultValue),
-            minimum,
-            maximum,
-            increment);
+            Minimum: minimum,
+            Maximum: maximum,
+            Increment: increment);
 
     private static SettingEditorTemplate Quality(int defaultValue, int maximum) =>
         Choice(

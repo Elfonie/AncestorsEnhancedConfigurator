@@ -14,18 +14,31 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
 
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly Func<bool> _isGameRunning;
+    private readonly Func<string, bool> _isExpectedUserDataDirectory;
+    private readonly object _planLock = new();
+    private SettingsChangePlan? _issuedPlan;
+    private string? _issuedPlanFingerprint;
 
     public SafeGameSettingsEditor()
-        : this(() => DateTimeOffset.UtcNow, IsAncestorsRunning)
+        : this(() => DateTimeOffset.UtcNow, IsAncestorsRunning, IsExpectedNativeUserDataDirectory)
     {
     }
 
     internal SafeGameSettingsEditor(
         Func<DateTimeOffset> utcNow,
         Func<bool> isGameRunning)
+        : this(utcNow, isGameRunning, _ => true)
+    {
+    }
+
+    internal SafeGameSettingsEditor(
+        Func<DateTimeOffset> utcNow,
+        Func<bool> isGameRunning,
+        Func<string, bool> isExpectedUserDataDirectory)
     {
         _utcNow = utcNow;
         _isGameRunning = isGameRunning;
+        _isExpectedUserDataDirectory = isExpectedUserDataDirectory;
     }
 
     public SettingsChangePlan CreatePlan(
@@ -125,18 +138,41 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
 
         DateTimeOffset createdAt = _utcNow();
         string operationId = $"{createdAt:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}"[..32];
-        return new SettingsChangePlan(
+        var plan = new SettingsChangePlan(
             operationId,
             createdAt,
             SupportedBuildId,
             userDataDirectory,
             previews,
             filePlans);
+        lock (_planLock)
+        {
+            _issuedPlan = plan;
+            _issuedPlanFingerprint = Fingerprint(plan);
+        }
+
+        return plan;
     }
 
     public SettingsOperationResult Apply(SettingsChangePlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
+
+        lock (_planLock)
+        {
+            if (!ReferenceEquals(_issuedPlan, plan))
+            {
+                return Failure("This change plan was not created by this editor or has already been used.");
+            }
+
+            _issuedPlan = null;
+            string? expectedFingerprint = _issuedPlanFingerprint;
+            _issuedPlanFingerprint = null;
+            if (!string.Equals(expectedFingerprint, Fingerprint(plan), StringComparison.Ordinal))
+            {
+                return Failure("The reviewed change plan was modified and will not be applied.");
+            }
+        }
 
         if (_isGameRunning())
         {
@@ -162,6 +198,7 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
                 foreach (ConfigurationFileChangePlan file in plan.Files)
                 {
                     WriteBytesAtomically(file.FullPath, file.UpdatedContent);
+                    applied.Add(file);
                     if (!string.Equals(
                             Sha256(File.ReadAllBytes(file.FullPath)),
                             Sha256(file.UpdatedContent),
@@ -169,8 +206,6 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
                     {
                         throw new IOException($"Validation failed after writing {file.FileName}.");
                     }
-
-                    applied.Add(file);
                 }
 
                 SettingsBackupStore.MarkApplied(operationDirectory, plan.CreatedAtUtc);
@@ -189,6 +224,19 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         catch (Exception exception) when (IsExpectedWriteException(exception))
         {
             return Failure($"No changes were kept: {exception.Message}");
+        }
+    }
+
+    public void DiscardPlan(SettingsChangePlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        lock (_planLock)
+        {
+            if (ReferenceEquals(_issuedPlan, plan))
+            {
+                _issuedPlan = null;
+                _issuedPlanFingerprint = null;
+            }
         }
     }
 
@@ -234,18 +282,36 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
                         GetConfigurationDirectory(operation.Manifest.UserDataDirectory),
                         file.FileName);
                     byte[] current = File.ReadAllBytes(targetPath);
+                    restored.Add((file, current));
                     if (file.Existed)
                     {
                         byte[] original = File.ReadAllBytes(
                             Path.Combine(operation.Directory, file.BackupFileName!));
+                        if (!string.Equals(
+                                Sha256(original),
+                                file.OriginalSha256,
+                                StringComparison.Ordinal))
+                        {
+                            throw new IOException($"The backup for {file.FileName} failed validation.");
+                        }
+
                         WriteBytesAtomically(targetPath, original);
+                        if (!string.Equals(
+                                Sha256(File.ReadAllBytes(targetPath)),
+                                file.OriginalSha256,
+                                StringComparison.Ordinal))
+                        {
+                            throw new IOException($"Validation failed after restoring {file.FileName}.");
+                        }
                     }
                     else
                     {
                         File.Delete(targetPath);
+                        if (File.Exists(targetPath))
+                        {
+                            throw new IOException($"Validation failed after removing {file.FileName}.");
+                        }
                     }
-
-                    restored.Add((file, current));
                 }
             }
             catch
@@ -261,7 +327,16 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
                 throw;
             }
 
-            SettingsBackupStore.MarkReverted(operation.Directory, _utcNow());
+            try
+            {
+                SettingsBackupStore.MarkReverted(operation.Directory, _utcNow());
+            }
+            catch (Exception exception) when (IsExpectedWriteException(exception))
+            {
+                return new SettingsOperationResult(
+                    true,
+                    $"The configuration was restored, but its history marker could not be written: {exception.Message}");
+            }
 
             return new SettingsOperationResult(true, "The last configurator change was restored from its backup.");
         }
@@ -271,16 +346,22 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         }
     }
 
-    private static void ValidateSnapshot(GameInspectionSnapshot snapshot)
+    private void ValidateSnapshot(GameInspectionSnapshot snapshot)
     {
-        if (!string.Equals(snapshot.Installation?.BuildId, SupportedBuildId, StringComparison.Ordinal))
+        if (!EditableSettingsCatalog.IsVerifiedEditingTarget(snapshot))
         {
-            throw new InvalidOperationException("Editing is only enabled for verified build 5495393.");
+            throw new InvalidOperationException(
+                "Editing is enabled only for the verified native Windows Steam build 5495393.");
         }
 
         if (string.IsNullOrWhiteSpace(snapshot.UserDataDirectory))
         {
             throw new InvalidOperationException("The Ancestors user-data directory was not detected.");
+        }
+
+        if (!_isExpectedUserDataDirectory(snapshot.UserDataDirectory))
+        {
+            throw new InvalidOperationException("The detected user-data directory is not the native Ancestors location.");
         }
     }
 
@@ -319,6 +400,9 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         return string.Equals(Sha256(current), file.OriginalSha256, StringComparison.Ordinal);
     }
 
+    private static string Fingerprint(SettingsChangePlan plan) =>
+        Sha256(JsonSerializer.SerializeToUtf8Bytes(plan));
+
     private static void RestoreFiles(
         IEnumerable<ConfigurationFileChangePlan> files,
         bool useOriginal)
@@ -350,6 +434,19 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         {
             return true;
         }
+    }
+
+    private static bool IsExpectedNativeUserDataDirectory(string path)
+    {
+        string localApplicationData = System.Environment.GetFolderPath(
+            System.Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localApplicationData))
+        {
+            return false;
+        }
+
+        string expected = Path.GetFullPath(Path.Combine(localApplicationData, "Ancestors", "Saved"));
+        return string.Equals(expected, Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsExpectedWriteException(Exception exception) =>

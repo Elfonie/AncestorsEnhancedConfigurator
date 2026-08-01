@@ -15,13 +15,21 @@ The configurator will not require administrator privileges for normal use.
 
 ## Version 0.3 write boundary
 
-- Writes are limited to reviewed keys in `Engine.ini` for build 5495393.
+- Writes are limited to reviewed keys in `Engine.ini` and the No-Intro key in
+  `Game.ini` for the native Windows Steam build 5495393.
 - The target must be a normal file in the detected `WindowsNoEditor` directory;
   linked targets and linked configuration directories are rejected.
+- The user-data root must match the current Windows user's native
+  `%LOCALAPPDATA%\Ancestors\Saved` path.
 - The game must not be running.
 - Values are validated against typed choices or bounded numeric ranges.
+- A visible review is required before writing; its internally fingerprinted plan
+  is valid once and is rejected if replaced, replayed, or modified.
 - The current file hash must match the preview hash.
+- Changes spanning both allowed INI files are backed up, applied, and rolled back
+  as one operation.
 - The existing file is backed up before replacement and the written hash is checked.
+- Backup bytes are hash-checked before use; linked backup history is rejected.
 - Rollback is offered only for the newest owned operation and only while its
   resulting file hash is unchanged.
 - `System.sav` and PAK files are never write targets.

@@ -15,6 +15,7 @@ public partial class MainViewModel : ViewModelBase
         new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
     private GameInspectionSnapshot? _snapshot;
+    private SettingsChangePlan? _reviewPlan;
 
     [ObservableProperty]
     private string _detectionStatus = "Not checked yet";
@@ -53,7 +54,13 @@ public partial class MainViewModel : ViewModelBase
     private IReadOnlyList<PendingChangeRowViewModel> _pendingChanges = [];
 
     [ObservableProperty]
-    private string _operationMessage = "Ready. Nothing is written until you choose Apply changes.";
+    private IReadOnlyList<ChangeReviewRowViewModel> _reviewChanges = [];
+
+    [ObservableProperty]
+    private bool _isReviewingChanges;
+
+    [ObservableProperty]
+    private string _operationMessage = "Ready. Nothing is written until you review and confirm.";
 
     [ObservableProperty]
     private string _operationAccent = "#8FA1AD";
@@ -83,7 +90,7 @@ public partial class MainViewModel : ViewModelBase
         _settingsEditor = settingsEditor;
 
         ProductName = "Ancestors Enhanced Configurator";
-        Phase = "0.3 · safe editing preview";
+        Phase = "0.3 · review and safe editing";
         RefreshFromDisk();
     }
 
@@ -93,7 +100,17 @@ public partial class MainViewModel : ViewModelBase
 
     public bool HasPendingChanges => PendingChanges.Count > 0;
 
-    public bool CanUndo => CanRevertLast && !HasPendingChanges;
+    public bool CanUndo => CanRevertLast && !HasPendingChanges && !IsReviewingChanges;
+
+    public bool ShowPendingActions => HasPendingChanges && !IsReviewingChanges;
+
+    public bool ShowReviewActions => IsReviewingChanges;
+
+    public bool CanEditSettings => !IsReviewingChanges;
+
+    public string ReviewSummary => ReviewChanges.Count == 1
+        ? "Review 1 change before writing"
+        : $"Review {ReviewChanges.Count} changes before writing";
 
     public string PendingSummary => PendingChanges.Count switch
     {
@@ -129,6 +146,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void DiscardChanges()
     {
+        CloseReview();
         foreach (SettingEditorViewModel editor in _editors.Values)
         {
             editor.Reset();
@@ -139,7 +157,7 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void ApplyChanges()
+    private void OpenReview()
     {
         if (_snapshot is null || !HasPendingChanges)
         {
@@ -154,27 +172,64 @@ public partial class MainViewModel : ViewModelBase
                     pair.Key,
                     FindSettingName(pair.Key)))
                 .ToArray();
-            SettingsChangePlan plan = _settingsEditor.CreatePlan(_snapshot, requests);
-            SettingsOperationResult result = _settingsEditor.Apply(plan);
-            if (!result.Succeeded)
-            {
-                ShowMessage(result.Message, "#D6BC84");
-                return;
-            }
-
-            RefreshFromDisk();
-            ShowMessage(result.Message, "#62C9A7");
+            _reviewPlan = _settingsEditor.CreatePlan(_snapshot, requests);
+            ReviewChanges = _reviewPlan.Changes
+                .Select(change => new ChangeReviewRowViewModel(
+                    change.DisplayName,
+                    $"{change.FileName} · {change.Key}",
+                    change.Before ?? "Game preset",
+                    change.After ?? "Game preset"))
+                .ToArray();
+            IsReviewingChanges = true;
+            ShowMessage("Check every value, then confirm the write.", "#78AEE8");
         }
-        catch (InvalidOperationException exception)
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
             ShowMessage(exception.Message, "#D6BC84");
         }
     }
 
     [RelayCommand]
+    private void CancelReview()
+    {
+        CloseReview();
+        ShowMessage("Review closed. Your pending values are unchanged.", "#8FA1AD");
+    }
+
+    [RelayCommand]
+    private void ConfirmApply()
+    {
+        SettingsChangePlan? plan = _reviewPlan;
+        if (plan is null || !IsReviewingChanges)
+        {
+            return;
+        }
+
+        _reviewPlan = null;
+        IsReviewingChanges = false;
+        ReviewChanges = [];
+        SettingsOperationResult result;
+        try
+        {
+            result = _settingsEditor.Apply(plan);
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"No changes were kept: {exception.Message}", "#D6BC84");
+            return;
+        }
+        if (result.Succeeded)
+        {
+            RefreshFromDisk();
+        }
+
+        ShowMessage(result.Message, result.Succeeded ? "#62C9A7" : "#D6BC84");
+    }
+
+    [RelayCommand]
     private void RevertLast()
     {
-        if (_snapshot is null || HasPendingChanges)
+        if (_snapshot is null || HasPendingChanges || IsReviewingChanges)
         {
             return;
         }
@@ -192,8 +247,20 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnCanRevertLastChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
 
+    partial void OnIsReviewingChangesChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(ShowPendingActions));
+        OnPropertyChanged(nameof(ShowReviewActions));
+        OnPropertyChanged(nameof(CanEditSettings));
+    }
+
+    partial void OnReviewChangesChanged(IReadOnlyList<ChangeReviewRowViewModel> value) =>
+        OnPropertyChanged(nameof(ReviewSummary));
+
     private void RefreshFromDisk()
     {
+        CloseReview();
         _snapshot = _inspector.Inspect();
         GameInspectionSnapshot snapshot = _snapshot;
 
@@ -324,6 +391,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void OnEditorChanged(object? sender, EventArgs eventArgs)
     {
+        CloseReview();
         UpdatePendingChanges();
         if (HasPendingChanges)
         {
@@ -343,6 +411,19 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(PendingSummary));
         OnPropertyChanged(nameof(PendingDetails));
         OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(ShowPendingActions));
+    }
+
+    private void CloseReview()
+    {
+        if (_reviewPlan is not null)
+        {
+            _settingsEditor.DiscardPlan(_reviewPlan);
+            _reviewPlan = null;
+        }
+
+        ReviewChanges = [];
+        IsReviewingChanges = false;
     }
 
     private string FindSettingName(string settingId) =>
@@ -374,6 +455,11 @@ public partial class MainViewModel : ViewModelBase
         ReadableSettingState.Modified => "#78AEE8",
         _ => "#C3A66A",
     };
+
+    private static bool IsExpectedUserOperationException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or InvalidOperationException or
+            ArgumentException or NotSupportedException or System.Text.DecoderFallbackException or
+            System.Text.Json.JsonException;
 
     private static string FormatBytes(long bytes)
     {

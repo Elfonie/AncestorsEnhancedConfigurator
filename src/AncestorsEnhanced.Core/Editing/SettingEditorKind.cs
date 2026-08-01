@@ -5,4 +5,5 @@ public enum SettingEditorKind
     Toggle,
     Number,
     Choice,
+    Presence,
 }

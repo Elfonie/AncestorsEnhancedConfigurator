@@ -587,7 +587,8 @@ public static class ReadableSettingsCatalog
             skipped ? "Game.ini override" : "No verified override",
             "!StartupMovies",
             skipped ? ReadableSettingState.Enabled : ReadableSettingState.Unknown,
-            IsAdvanced: false);
+            IsAdvanced: false,
+            Editor: EditableSettingsCatalog.Create(snapshot, "!StartupMovies", clearMovies?.Value));
 
         return new FeatureGroupSnapshot(
             "convenience",

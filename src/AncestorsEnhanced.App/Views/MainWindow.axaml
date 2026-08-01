@@ -83,7 +83,8 @@
           </Grid>
         </Border>
 
-        <ItemsControl ItemsSource="{Binding FeatureGroups}">
+        <ItemsControl ItemsSource="{Binding FeatureGroups}"
+                      IsEnabled="{Binding CanEditSettings}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:FeatureGroupRowViewModel">
               <Border Margin="0,0,0,9"
@@ -197,34 +198,40 @@
                                             BorderBrush="#2D3A44"
                                             BorderThickness="1">
                                       <StackPanel Spacing="8">
-                                        <ToggleSwitch IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
-                                                      Content="Override game preset" />
+                                        <ToggleSwitch IsVisible="{Binding IsPresence}"
+                                                      IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
+                                                      Content="Skip startup videos" />
 
-                                        <Grid IsEnabled="{Binding UseCustomValue}">
-                                          <ToggleSwitch IsVisible="{Binding IsToggle}"
-                                                        IsChecked="{Binding ToggleValue, Mode=TwoWay}"
-                                                        HorizontalAlignment="Right"
-                                                        Content="Enabled" />
+                                        <StackPanel IsVisible="{Binding IsRegularEditor}" Spacing="8">
+                                          <ToggleSwitch IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
+                                                        Content="Override game preset" />
 
-                                          <NumericUpDown IsVisible="{Binding IsNumber}"
-                                                         Value="{Binding NumberValue, Mode=TwoWay}"
-                                                         Minimum="{Binding Minimum}"
-                                                         Maximum="{Binding Maximum}"
-                                                         Increment="{Binding Increment}"
-                                                         FormatString="0.####"
-                                                         HorizontalAlignment="Stretch" />
+                                          <Grid IsEnabled="{Binding UseCustomValue}">
+                                            <ToggleSwitch IsVisible="{Binding IsToggle}"
+                                                          IsChecked="{Binding ToggleValue, Mode=TwoWay}"
+                                                          HorizontalAlignment="Right"
+                                                          Content="Enabled" />
 
-                                          <ComboBox IsVisible="{Binding IsChoice}"
-                                                    ItemsSource="{Binding Choices}"
-                                                    SelectedItem="{Binding SelectedChoice, Mode=TwoWay}"
-                                                    HorizontalAlignment="Stretch">
-                                            <ComboBox.ItemTemplate>
-                                              <DataTemplate x:DataType="vm:SettingChoiceViewModel">
-                                                <TextBlock Text="{Binding Label}" />
-                                              </DataTemplate>
-                                            </ComboBox.ItemTemplate>
-                                          </ComboBox>
-                                        </Grid>
+                                            <NumericUpDown IsVisible="{Binding IsNumber}"
+                                                           Value="{Binding NumberValue, Mode=TwoWay}"
+                                                           Minimum="{Binding Minimum}"
+                                                           Maximum="{Binding Maximum}"
+                                                           Increment="{Binding Increment}"
+                                                           FormatString="0.####"
+                                                           HorizontalAlignment="Stretch" />
+
+                                            <ComboBox IsVisible="{Binding IsChoice}"
+                                                      ItemsSource="{Binding Choices}"
+                                                      SelectedItem="{Binding SelectedChoice, Mode=TwoWay}"
+                                                      HorizontalAlignment="Stretch">
+                                              <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:SettingChoiceViewModel">
+                                                  <TextBlock Text="{Binding Label}" />
+                                                </DataTemplate>
+                                              </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                          </Grid>
+                                        </StackPanel>
                                         <TextBlock Text="{Binding ModeLabel}"
                                                    FontSize="10"
                                                    HorizontalAlignment="Right"
@@ -332,6 +339,52 @@
       </StackPanel>
     </ScrollViewer>
 
+    <Border Grid.Row="1"
+            ZIndex="10"
+            IsVisible="{Binding IsReviewingChanges}"
+            Padding="26"
+            Background="#D90D1115">
+      <Border MaxWidth="980"
+              MaxHeight="620"
+              Padding="20"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              CornerRadius="9"
+              Background="#15232C"
+              BorderBrush="#3B7598"
+              BorderThickness="1">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
+          <TextBlock Text="{Binding ReviewSummary}"
+                     FontSize="20"
+                     FontWeight="SemiBold"
+                     Foreground="#DCEEFF" />
+          <TextBlock Grid.Row="1"
+                     Text="Nothing has been written yet. Check the old and new values below."
+                     TextWrapping="Wrap"
+                     Foreground="#92AFC1" />
+          <ScrollViewer Grid.Row="2" MaxHeight="470">
+            <ItemsControl ItemsSource="{Binding ReviewChanges}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ChangeReviewRowViewModel">
+                  <Border Margin="0,0,0,6" Padding="12" CornerRadius="5" Background="#111A20">
+                    <Grid ColumnDefinitions="1.2*,1.2*,Auto,1.2*" ColumnSpacing="12">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding TechnicalKey}" FontSize="10" Foreground="#71818C" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="1" Text="{Binding Before}" TextWrapping="Wrap" Foreground="#9EADB7" />
+                      <TextBlock Grid.Column="2" Text="→" Foreground="#71818C" />
+                      <TextBlock Grid.Column="3" Text="{Binding After}" TextWrapping="Wrap" Foreground="#78C7E8" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Border>
+
     <Border Grid.Row="2"
             Padding="18,12"
             Background="#171E25"
@@ -361,14 +414,23 @@
                   IsEnabled="{Binding CanUndo}"
                   Content="Undo last apply" />
           <Button Command="{Binding DiscardChangesCommand}"
-                  IsVisible="{Binding HasPendingChanges}"
+                  IsVisible="{Binding ShowPendingActions}"
                   Content="Discard" />
-          <Button Command="{Binding ApplyChangesCommand}"
-                  IsVisible="{Binding HasPendingChanges}"
+          <Button Command="{Binding OpenReviewCommand}"
+                  IsVisible="{Binding ShowPendingActions}"
                   Padding="18,8"
                   Background="#2D715C"
                   Foreground="#F4FFFB"
-                  Content="Apply changes" />
+                  Content="Review changes" />
+          <Button Command="{Binding CancelReviewCommand}"
+                  IsVisible="{Binding ShowReviewActions}"
+                  Content="Back" />
+          <Button Command="{Binding ConfirmApplyCommand}"
+                  IsVisible="{Binding ShowReviewActions}"
+                  Padding="18,8"
+                  Background="#2D715C"
+                  Foreground="#F4FFFB"
+                  Content="Confirm apply" />
         </StackPanel>
       </Grid>
     </Border>

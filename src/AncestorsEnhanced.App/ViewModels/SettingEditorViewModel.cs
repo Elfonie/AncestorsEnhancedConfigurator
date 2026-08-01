@@ -57,20 +57,28 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public bool IsChoice => _snapshot.Kind == SettingEditorKind.Choice;
 
+    public bool IsPresence => _snapshot.Kind == SettingEditorKind.Presence;
+
+    public bool IsRegularEditor => !IsPresence;
+
     public decimal Minimum => _snapshot.Minimum ?? 0;
 
     public decimal Maximum => _snapshot.Maximum ?? 100;
 
     public decimal Increment => _snapshot.Increment ?? 1;
 
-    public string ModeLabel => UseCustomValue ? "Custom value" : "Game controlled";
+    public string ModeLabel => IsPresence
+        ? UseCustomValue ? "Videos skipped" : "Game default"
+        : UseCustomValue ? "Custom value" : "Game controlled";
 
     public bool HasChanges => !string.Equals(
         UseCustomValue ? DesiredValue : null,
         _initialValue,
         StringComparison.Ordinal);
 
-    public string DesiredSummary => UseCustomValue
+    public string DesiredSummary => IsPresence
+        ? UseCustomValue ? "Skip videos" : "Use game default"
+        : UseCustomValue
         ? IsChoice
             ? SelectedChoice?.Label ?? "Choose a value"
             : IsToggle
@@ -119,6 +127,7 @@ public partial class SettingEditorViewModel : ViewModelBase
         SettingEditorKind.Toggle => ToggleValue ? "1" : "0",
         SettingEditorKind.Number => NumberValue.ToString(CultureInfo.InvariantCulture),
         SettingEditorKind.Choice => SelectedChoice?.Value,
+        SettingEditorKind.Presence => _snapshot.DefaultValue,
         _ => null,
     };
 
