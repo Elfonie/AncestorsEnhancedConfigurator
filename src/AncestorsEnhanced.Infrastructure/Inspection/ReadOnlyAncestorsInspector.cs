@@ -35,7 +35,7 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "host.unsupported",
-                "Version 0.2 detects native Windows Steam installations only."));
+                "This release detects native Windows Steam installations only."));
         }
         else
         {
@@ -383,7 +383,7 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
                 Exists: true,
                 metadata.SizeBytes,
                 metadata.LastWriteTimeUtc,
-                "Detected; current graphics-setting values are not readable yet in 0.2");
+                "Detected; current graphics-setting values are not readable yet");
         }
         catch (Exception exception) when (IsExpectedReadException(exception))
         {

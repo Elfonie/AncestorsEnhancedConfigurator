@@ -1,5 +1,6 @@
 using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.App.Views;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Inspection;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -20,7 +21,9 @@ public partial class App : Application
         {
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainViewModel(ReadOnlyAncestorsInspector.CreateDefault()),
+                DataContext = new MainViewModel(
+                    ReadOnlyAncestorsInspector.CreateDefault(),
+                    new SafeGameSettingsEditor()),
             };
         }
 

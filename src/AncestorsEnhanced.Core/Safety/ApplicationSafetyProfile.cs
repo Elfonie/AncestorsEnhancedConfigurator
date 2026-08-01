@@ -10,5 +10,10 @@ public sealed record ApplicationSafetyProfile(
         NetworkAccessEnabled: false,
         TelemetryEnabled: false);
 
+    public static ApplicationSafetyProfile Version03 { get; } = new(
+        GameFileWritesEnabled: true,
+        NetworkAccessEnabled: false,
+        TelemetryEnabled: false);
+
     public bool IsReadOnly => !GameFileWritesEnabled;
 }

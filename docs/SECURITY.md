@@ -13,9 +13,19 @@ The configurator will not require administrator privileges for normal use.
 - Never collect telemetry or contact a server without a separately reviewed opt-in feature.
 - Preserve evidence and stop when ownership or file state is ambiguous.
 
-## Foundation state
+## Version 0.3 write boundary
 
-Game-file writes, network access, and telemetry are disabled in the application safety profile.
+- Writes are limited to reviewed keys in `Engine.ini` for build 5495393.
+- The target must be a normal file in the detected `WindowsNoEditor` directory;
+  linked targets and linked configuration directories are rejected.
+- The game must not be running.
+- Values are validated against typed choices or bounded numeric ranges.
+- The current file hash must match the preview hash.
+- The existing file is backed up before replacement and the written hash is checked.
+- Rollback is offered only for the newest owned operation and only while its
+  resulting file hash is unchanged.
+- `System.sav` and PAK files are never write targets.
+- Network access and telemetry remain disabled.
 
 ## Version 0.2 read protections
 

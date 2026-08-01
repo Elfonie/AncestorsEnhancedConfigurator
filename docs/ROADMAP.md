@@ -25,19 +25,27 @@
 
 Epic, GOG, Proton, Wine, and manual-path discovery remain future compatibility work; their data model exists, but detection is not claimed yet.
 
-## 0.3 Change planning
+## 0.3 Safe INI editing
 
-- [x] Initial read-only settings catalog
-- Current, original, recommended, and desired values
-- Verified read-only decoding strategy for supported `System.sav` values, or an explicit decision to leave them game-managed
-- Human-readable preview
-- No writes yet
+- [x] Separate readable values from typed editing rules
+- [x] Essential and advanced editing interface
+- [x] Pending changes before apply
+- [x] 44 bounded `Engine.ini` controls for verified build 5495393
+- [x] Preserve unrelated INI content and text format
+- [x] Hash-based conflict detection
+- [x] Backup and operation manifest
+- [x] Post-write validation
+- [x] Conflict-aware rollback of the latest owned operation
+- [x] Refuse writes while Ancestors is running
+- [x] Keep `System.sav` and PAK modification disabled
 
-## 0.4 First reversible write
+## 0.4 Portability and profiles
 
-- One verified INI setting
-- Backup and operation manifest
-- Post-write validation
-- Conflict-aware rollback
+- User-facing presets without hiding their individual changes
+- Export and import a portable settings profile
+- Manual installation selection
+- Epic and GOG discovery
+- Proton and Wine path discovery
+- Signed portable release archives
 
 Public releases remain out of scope until the supported build matrix and rollback behavior have been tested.

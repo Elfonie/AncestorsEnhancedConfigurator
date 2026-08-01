@@ -1,6 +1,6 @@
 using System.Globalization;
+using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
-using AncestorsEnhanced.Core.Safety;
 using AncestorsEnhanced.Core.Settings;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,13 +10,17 @@ namespace AncestorsEnhanced.App.ViewModels;
 public partial class MainViewModel : ViewModelBase
 {
     private readonly IReadOnlyGameInspector _inspector;
+    private readonly IGameSettingsEditor _settingsEditor;
+    private readonly Dictionary<string, SettingEditorViewModel> _editors =
+        new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
+    private GameInspectionSnapshot? _snapshot;
 
     [ObservableProperty]
-    private string _detectionStatus = "Inspection has not run yet";
+    private string _detectionStatus = "Not checked yet";
 
     [ObservableProperty]
-    private string _inspectionTime = "Not inspected";
+    private string _inspectionTime = "";
 
     [ObservableProperty]
     private string _installationPath = "Not detected";
@@ -31,10 +35,7 @@ public partial class MainViewModel : ViewModelBase
     private string _binarySettingsPath = "Not detected";
 
     [ObservableProperty]
-    private string _binarySettingsStatus = "System.sav has not been inspected";
-
-    [ObservableProperty]
-    private string _gameMenuSettingsSummary = "Game menu settings have not been inspected";
+    private string _binarySettingsStatus = "Not inspected";
 
     [ObservableProperty]
     private IReadOnlyList<FeatureGroupRowViewModel> _featureGroups = [];
@@ -43,10 +44,22 @@ public partial class MainViewModel : ViewModelBase
     private bool _isAdvancedMode;
 
     [ObservableProperty]
-    private string _viewModeTitle = "Simple view";
+    private string _viewModeTitle = "Essential settings";
 
     [ObservableProperty]
-    private string _viewModeDescription = "Important settings and their effective state.";
+    private string _viewModeDescription = "The useful controls first. Changes stay pending until you apply them.";
+
+    [ObservableProperty]
+    private IReadOnlyList<PendingChangeRowViewModel> _pendingChanges = [];
+
+    [ObservableProperty]
+    private string _operationMessage = "Ready. Nothing is written until you choose Apply changes.";
+
+    [ObservableProperty]
+    private string _operationAccent = "#8FA1AD";
+
+    [ObservableProperty]
+    private bool _canRevertLast;
 
     [ObservableProperty]
     private IReadOnlyList<ConfigurationFileRowViewModel> _configurationFiles = [];
@@ -60,26 +73,39 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private IReadOnlyList<NoticeRowViewModel> _notices = [];
 
-    public MainViewModel(IReadOnlyGameInspector inspector)
+    public MainViewModel(
+        IReadOnlyGameInspector inspector,
+        IGameSettingsEditor settingsEditor)
     {
         ArgumentNullException.ThrowIfNull(inspector);
+        ArgumentNullException.ThrowIfNull(settingsEditor);
         _inspector = inspector;
+        _settingsEditor = settingsEditor;
 
-        ApplicationSafetyProfile safetyProfile = ApplicationSafetyProfile.Foundation;
         ProductName = "Ancestors Enhanced Configurator";
-        Phase = "Read-only inspection · 0.2 development";
-        SafetyStatus = safetyProfile.IsReadOnly
-            ? "Read-only: game-file writes are disabled"
-            : "Write operations enabled";
-
-        Refresh();
+        Phase = "0.3 · safe editing preview";
+        RefreshFromDisk();
     }
 
     public string ProductName { get; }
 
     public string Phase { get; }
 
-    public string SafetyStatus { get; }
+    public bool HasPendingChanges => PendingChanges.Count > 0;
+
+    public bool CanUndo => CanRevertLast && !HasPendingChanges;
+
+    public string PendingSummary => PendingChanges.Count switch
+    {
+        0 => "No pending changes",
+        1 => "1 pending change",
+        _ => $"{PendingChanges.Count} pending changes",
+    };
+
+    public string PendingDetails => string.Join(
+        " · ",
+        PendingChanges.Take(3).Select(change => $"{change.Name}: {change.DesiredValue}")) +
+        (PendingChanges.Count > 3 ? $" · +{PendingChanges.Count - 3} more" : string.Empty);
 
     public int ConfigurationFileCount => ConfigurationFiles.Count;
 
@@ -90,32 +116,172 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void Refresh()
     {
-        GameInspectionSnapshot snapshot = _inspector.Inspect();
+        if (HasPendingChanges)
+        {
+            ShowMessage("Apply or discard the pending changes before refreshing.", "#D6BC84");
+            return;
+        }
+
+        RefreshFromDisk();
+        ShowMessage("Configuration reloaded from disk.", "#62C9A7");
+    }
+
+    [RelayCommand]
+    private void DiscardChanges()
+    {
+        foreach (SettingEditorViewModel editor in _editors.Values)
+        {
+            editor.Reset();
+        }
+
+        UpdatePendingChanges();
+        ShowMessage("Pending changes discarded. No files were changed.", "#8FA1AD");
+    }
+
+    [RelayCommand]
+    private void ApplyChanges()
+    {
+        if (_snapshot is null || !HasPendingChanges)
+        {
+            return;
+        }
+
+        try
+        {
+            SettingChangeRequest[] requests = _editors
+                .Where(pair => pair.Value.HasChanges)
+                .Select(pair => pair.Value.CreateRequest(
+                    pair.Key,
+                    FindSettingName(pair.Key)))
+                .ToArray();
+            SettingsChangePlan plan = _settingsEditor.CreatePlan(_snapshot, requests);
+            SettingsOperationResult result = _settingsEditor.Apply(plan);
+            if (!result.Succeeded)
+            {
+                ShowMessage(result.Message, "#D6BC84");
+                return;
+            }
+
+            RefreshFromDisk();
+            ShowMessage(result.Message, "#62C9A7");
+        }
+        catch (InvalidOperationException exception)
+        {
+            ShowMessage(exception.Message, "#D6BC84");
+        }
+    }
+
+    [RelayCommand]
+    private void RevertLast()
+    {
+        if (_snapshot is null || HasPendingChanges)
+        {
+            return;
+        }
+
+        SettingsOperationResult result = _settingsEditor.RevertLast(_snapshot);
+        if (result.Succeeded)
+        {
+            RefreshFromDisk();
+        }
+
+        ShowMessage(result.Message, result.Succeeded ? "#62C9A7" : "#D6BC84");
+    }
+
+    partial void OnIsAdvancedModeChanged(bool value) => ApplyViewMode();
+
+    partial void OnCanRevertLastChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
+
+    private void RefreshFromDisk()
+    {
+        _snapshot = _inspector.Inspect();
+        GameInspectionSnapshot snapshot = _snapshot;
 
         DetectionStatus = snapshot.IsGameDetected
             ? snapshot.HasErrors
                 ? "Ancestors detected with problems"
-                : "Ancestors detected successfully"
+                : "Ancestors is ready"
             : "Ancestors installation not detected";
-        InspectionTime = $"Last checked: {snapshot.InspectedAtUtc.ToLocalTime():G}";
+        InspectionTime = $"Checked {snapshot.InspectedAtUtc.ToLocalTime():G}";
         InstallationPath = snapshot.Installation?.InstallDirectory ?? "Not detected";
         InstallationDetails = snapshot.Installation is null
             ? "Steam build unknown"
-            : $"Steam · Build {snapshot.Installation.BuildId ?? "unknown"} · " +
-              (snapshot.Installation.ExecutableExists ? "executable verified" : "executable missing");
+            : $"Steam · Build {snapshot.Installation.BuildId ?? "unknown"}";
         UserDataPath = snapshot.UserDataDirectory ?? "Not detected";
         BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
         BinarySettingsStatus = snapshot.BinarySettingsFile?.FormatStatus ?? "Not inspected";
-        GameMenuSettingsSummary = snapshot.BinarySettingsFile?.Exists == true
-            ? "Ancestors stores the currently selected resolution and quality levels in its own " +
-              "binary System.sav format. The configurator can locate these fields, but cannot yet " +
-              "read their current values reliably. Verified Low, Medium and High preset values " +
-              "from this game build are shown instead."
-            : "The game's own graphics-settings file has not been created yet.";
 
         _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
+        RebuildEditors();
         ApplyViewMode();
+        LoadTechnicalDetails(snapshot);
+        CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
+        UpdatePendingChanges();
+    }
 
+    private void RebuildEditors()
+    {
+        foreach (SettingEditorViewModel editor in _editors.Values)
+        {
+            editor.Changed -= OnEditorChanged;
+        }
+
+        _editors.Clear();
+        foreach (FeatureSettingSnapshot setting in _allFeatureGroups.SelectMany(group => group.Settings))
+        {
+            if (setting.Editor is null)
+            {
+                continue;
+            }
+
+            var editor = new SettingEditorViewModel(setting.Editor);
+            editor.Changed += OnEditorChanged;
+            _editors.Add(setting.Id, editor);
+        }
+    }
+
+    private void ApplyViewMode()
+    {
+        ViewModeTitle = IsAdvancedMode ? "All renderer settings" : "Essential settings";
+        ViewModeDescription = IsAdvancedMode
+            ? "Every detected renderer value, including technical controls and read-only fields."
+            : "The useful controls first. Changes stay pending until you apply them.";
+
+        FeatureGroups = _allFeatureGroups
+            .Where(group => IsAdvancedMode || group.IsEssential)
+            .Select(group => CreateGroupRow(group, IsAdvancedMode))
+            .ToArray();
+    }
+
+    private FeatureGroupRowViewModel CreateGroupRow(
+        FeatureGroupSnapshot group,
+        bool showAdvanced)
+    {
+        FeatureSettingRowViewModel[] settings = group.Settings
+            .Where(setting => showAdvanced || !setting.IsAdvanced)
+            .Select(setting => new FeatureSettingRowViewModel(
+                setting.Name,
+                setting.Value,
+                setting.Description,
+                setting.Source,
+                CreateTechnicalDetails(setting),
+                GetAccentColor(setting.State),
+                showAdvanced,
+                _editors.GetValueOrDefault(setting.Id)))
+            .ToArray();
+
+        return new FeatureGroupRowViewModel(
+            group.Category,
+            group.Name,
+            group.Summary,
+            group.Description,
+            GetAccentColor(group.State),
+            settings.Length == 1 ? "1 setting" : $"{settings.Length} settings",
+            settings);
+    }
+
+    private void LoadTechnicalDetails(GameInspectionSnapshot snapshot)
+    {
         ConfigurationFiles = snapshot.ConfigurationFiles
             .Select(file => new ConfigurationFileRowViewModel(
                 file.Name,
@@ -156,44 +322,39 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(PakFileCount));
     }
 
-    partial void OnIsAdvancedModeChanged(bool value) => ApplyViewMode();
-
-    private void ApplyViewMode()
+    private void OnEditorChanged(object? sender, EventArgs eventArgs)
     {
-        ViewModeTitle = IsAdvancedMode ? "Advanced view" : "Simple view";
-        ViewModeDescription = IsAdvancedMode
-            ? "All verified renderer settings, game-controlled values, and technical sources."
-            : "Important visual settings with only the controls that are useful to most players.";
+        UpdatePendingChanges();
+        if (HasPendingChanges)
+        {
+            ShowMessage("Review the pending values, then apply or discard them.", "#D6BC84");
+        }
+    }
 
-        FeatureGroups = _allFeatureGroups
-            .Where(group => IsAdvancedMode || group.IsEssential)
-            .Select(group =>
-            {
-                FeatureSettingSnapshot[] visibleSettings = group.Settings
-                    .Where(setting => IsAdvancedMode || !setting.IsAdvanced)
-                    .ToArray();
-
-                return new FeatureGroupRowViewModel(
-                    group.Category,
-                    group.Name,
-                    group.Summary,
-                    group.Description,
-                    GetAccentColor(group.State),
-                    visibleSettings.Length == 1
-                        ? "1 setting"
-                        : $"{visibleSettings.Length} settings",
-                    visibleSettings
-                        .Select(setting => new FeatureSettingRowViewModel(
-                            setting.Name,
-                            setting.Value,
-                            setting.Description,
-                            setting.Source,
-                            CreateTechnicalDetails(setting),
-                            GetAccentColor(setting.State),
-                            IsAdvancedMode))
-                        .ToArray());
-            })
+    private void UpdatePendingChanges()
+    {
+        PendingChanges = _editors
+            .Where(pair => pair.Value.HasChanges)
+            .Select(pair => new PendingChangeRowViewModel(
+                FindSettingName(pair.Key),
+                pair.Value.DesiredSummary))
             .ToArray();
+        OnPropertyChanged(nameof(HasPendingChanges));
+        OnPropertyChanged(nameof(PendingSummary));
+        OnPropertyChanged(nameof(PendingDetails));
+        OnPropertyChanged(nameof(CanUndo));
+    }
+
+    private string FindSettingName(string settingId) =>
+        _allFeatureGroups
+            .SelectMany(group => group.Settings)
+            .First(setting => string.Equals(setting.Id, settingId, StringComparison.Ordinal))
+            .Name;
+
+    private void ShowMessage(string message, string accent)
+    {
+        OperationMessage = message;
+        OperationAccent = accent;
     }
 
     private static string CreateTechnicalDetails(FeatureSettingSnapshot setting)
@@ -201,7 +362,6 @@ public partial class MainViewModel : ViewModelBase
         string source = setting.TechnicalKey is null
             ? setting.Source
             : $"{setting.TechnicalKey} · {setting.Source}";
-
         return setting.PresetDetails is null
             ? source
             : $"{source}{Environment.NewLine}{setting.PresetDetails}";
@@ -226,8 +386,6 @@ public partial class MainViewModel : ViewModelBase
             unit++;
         }
 
-        return string.Create(
-            CultureInfo.CurrentCulture,
-            $"{size:0.##} {units[unit]}");
+        return string.Create(CultureInfo.CurrentCulture, $"{size:0.##} {units[unit]}");
     }
 }

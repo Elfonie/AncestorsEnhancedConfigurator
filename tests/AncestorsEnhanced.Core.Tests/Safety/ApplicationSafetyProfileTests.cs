@@ -14,4 +14,15 @@ public sealed class ApplicationSafetyProfileTests
         Assert.False(profile.NetworkAccessEnabled);
         Assert.False(profile.TelemetryEnabled);
     }
+
+    [Fact]
+    public void Version03EnablesOnlyGuardedGameFileWrites()
+    {
+        ApplicationSafetyProfile profile = ApplicationSafetyProfile.Version03;
+
+        Assert.False(profile.IsReadOnly);
+        Assert.True(profile.GameFileWritesEnabled);
+        Assert.False(profile.NetworkAccessEnabled);
+        Assert.False(profile.TelemetryEnabled);
+    }
 }

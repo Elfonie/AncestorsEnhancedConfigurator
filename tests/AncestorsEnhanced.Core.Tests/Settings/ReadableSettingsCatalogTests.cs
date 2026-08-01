@@ -130,6 +130,9 @@ public sealed class ReadableSettingsCatalogTests
 
         Assert.Equal("Game preset · Off / Quality 3", motionBlur.Value);
         Assert.Equal("Low: Off · Medium: Quality 3 · High: Quality 3", motionBlur.PresetDetails);
+        Assert.NotNull(motionBlur.Editor);
+        Assert.Equal("0", motionBlur.Editor.DefaultValue);
+        Assert.Null(motionBlur.Editor.CurrentOverride);
         Assert.Equal("Game preset · Level 4 / Level 5", bloom.Value);
         Assert.Contains("active level not read", bloom.Source, StringComparison.Ordinal);
         Assert.Equal(ReadableSettingState.Unknown, bloom.State);

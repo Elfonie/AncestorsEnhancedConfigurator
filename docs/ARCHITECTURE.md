@@ -18,22 +18,27 @@ AncestorsEnhanced.App
 
 The readable settings catalog models a feature hierarchy rather than exposing one UI card per console variable. A feature group owns its summary and related settings; each setting records its source, technical key, confidence state, and whether it belongs in the advanced view. The application may filter this hierarchy, but it must not reinterpret unknown values as detected defaults.
 
-## Planned operation lifecycle
+## Configuration operation lifecycle
 
-Every future game modification must implement the same lifecycle:
+Every game modification implements the same lifecycle:
 
 1. Detect current state.
 2. Produce a change plan.
 3. Show the plan to the user.
 4. Apply transactionally.
 5. Validate the resulting state.
-6. Revert only owned changes.
+6. Revert only an unchanged, owned result.
 
-The foundation phase has all mutation capabilities disabled.
+Version 0.3 implements this lifecycle for a reviewed set of `Engine.ini` keys.
+The UI creates typed requests; Core validates their build, type, range, and
+target; Infrastructure preserves the source document and owns the file
+transaction. The application never writes from a button handler directly.
 
-## Read-only inspection boundary
+## Inspection boundary
 
-Version 0.2 exposes only an `IReadOnlyGameInspector` to the application. Its physical file-system dependency contains methods for existence checks, metadata, enumeration, and text reads; it deliberately contains no create, write, move, or delete operation.
+Inspection remains exposed through `IReadOnlyGameInspector`. Its physical
+file-system dependency still has no write methods. Mutation is isolated behind
+`IGameSettingsEditor`, so discovery cannot acquire write access accidentally.
 
 The Windows Steam inspector separates:
 

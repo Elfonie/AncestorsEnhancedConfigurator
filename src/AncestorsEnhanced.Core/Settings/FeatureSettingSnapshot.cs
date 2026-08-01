@@ -1,3 +1,5 @@
+using AncestorsEnhanced.Core.Editing;
+
 namespace AncestorsEnhanced.Core.Settings;
 
 public sealed record FeatureSettingSnapshot(
@@ -10,4 +12,5 @@ public sealed record FeatureSettingSnapshot(
     ReadableSettingState State,
     bool IsAdvanced,
     double? Percentage = null,
-    string? PresetDetails = null);
+    string? PresetDetails = null,
+    SettingEditSnapshot? Editor = null);

@@ -1,4 +1,5 @@
 using System.Globalization;
+using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 
 namespace AncestorsEnhanced.Core.Settings;
@@ -649,6 +650,7 @@ public static class ReadableSettingsCatalog
         int? maximum = null)
     {
         IniSettingSnapshot? entry = FindSetting(snapshot, SystemSettingsSection, key);
+        SettingEditSnapshot? editor = EditableSettingsCatalog.Create(snapshot, key, entry?.Value);
         if (entry is null)
         {
             FeatureSettingSnapshot? preset = CreatePresetSetting(
@@ -667,10 +669,12 @@ public static class ReadableSettingsCatalog
                     : null);
             if (preset is not null)
             {
-                return preset;
+                return preset with { Editor = editor };
             }
 
-            return Unknown(id, name, missingValue, description, missingSource, key, isAdvanced);
+            return Unknown(id, name, missingValue, description, missingSource, key, isAdvanced)
+                with
+            { Editor = editor };
         }
 
         if (!int.TryParse(entry.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
@@ -682,7 +686,8 @@ public static class ReadableSettingsCatalog
                 description,
                 "Engine.ini value is not a valid integer",
                 key,
-                isAdvanced);
+                isAdvanced) with
+            { Editor = editor };
         }
 
         return new FeatureSettingSnapshot(
@@ -694,7 +699,8 @@ public static class ReadableSettingsCatalog
             key,
             value == 0 ? ReadableSettingState.Disabled : ReadableSettingState.Modified,
             isAdvanced,
-            maximum is > 0 ? Math.Clamp(value / (double)maximum.Value, 0, 1) : null);
+            maximum is > 0 ? Math.Clamp(value / (double)maximum.Value, 0, 1) : null,
+            Editor: editor);
     }
 
     private static FeatureSettingSnapshot Decimal(
@@ -710,6 +716,7 @@ public static class ReadableSettingsCatalog
         double? maximum = null)
     {
         IniSettingSnapshot? entry = FindSetting(snapshot, SystemSettingsSection, key);
+        SettingEditSnapshot? editor = EditableSettingsCatalog.Create(snapshot, key, entry?.Value);
         if (entry is null)
         {
             FeatureSettingSnapshot? preset = CreatePresetSetting(
@@ -728,10 +735,12 @@ public static class ReadableSettingsCatalog
                     : null);
             if (preset is not null)
             {
-                return preset;
+                return preset with { Editor = editor };
             }
 
-            return Unknown(id, name, missingValue, description, missingSource, key, isAdvanced);
+            return Unknown(id, name, missingValue, description, missingSource, key, isAdvanced)
+                with
+            { Editor = editor };
         }
 
         if (!double.TryParse(entry.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
@@ -743,7 +752,8 @@ public static class ReadableSettingsCatalog
                 description,
                 "Engine.ini value is not a valid number",
                 key,
-                isAdvanced);
+                isAdvanced) with
+            { Editor = editor };
         }
 
         return new FeatureSettingSnapshot(
@@ -755,7 +765,8 @@ public static class ReadableSettingsCatalog
             key,
             value == 0 ? ReadableSettingState.Disabled : ReadableSettingState.Modified,
             isAdvanced,
-            maximum is > 0 ? Math.Clamp(value / maximum.Value, 0, 1) : null);
+            maximum is > 0 ? Math.Clamp(value / maximum.Value, 0, 1) : null,
+            Editor: editor);
     }
 
     private static FeatureSettingSnapshot? CreatePresetSetting(
