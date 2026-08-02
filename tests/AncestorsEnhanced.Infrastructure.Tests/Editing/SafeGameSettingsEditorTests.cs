@@ -25,7 +25,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
             "KeepThis=42\r\n";
         File.WriteAllText(engineIni, Original, new UTF8Encoding(false));
 
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         GameInspectionSnapshot snapshot = CreateSnapshot(userData);
         SettingsChangePlan plan = editor.CreatePlan(
             snapshot,
@@ -57,10 +57,10 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         string userData = CreateUserData();
         string saveDirectory = Directory.CreateDirectory(Path.Combine(userData, "SaveGames")).FullName;
         string systemSave = Path.Combine(saveDirectory, "System.sav");
-        byte[] original = SystemSaveTestData.Create();
+        byte[] original = VerifiedSystemSaveFixture.Read();
         File.WriteAllBytes(systemSave, original);
 
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         GameInspectionSnapshot snapshot = CreateSnapshot(userData) with
         {
             BinarySettingsFile = new BinarySettingsFileSnapshot(
@@ -112,7 +112,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         string engineIni = EngineIniPath(userData);
         File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
 
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         SettingsChangePlan plan = editor.CreatePlan(
             CreateSnapshot(userData),
             [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
@@ -131,7 +131,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         string userData = CreateUserData();
         string engineIni = EngineIniPath(userData);
         File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
-        var editor = CreateEditor(gameRunning: true);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: true);
         SettingsChangePlan plan = editor.CreatePlan(
             CreateSnapshot(userData),
             [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
@@ -148,7 +148,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         string userData = Path.Combine(_temporaryDirectory, "Saved");
         Directory.CreateDirectory(userData);
         string configDirectory = Path.Combine(userData, "Config", "WindowsNoEditor");
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
 
         SettingsChangePlan plan = editor.CreatePlan(
             CreateSnapshot(userData),
@@ -165,7 +165,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         string userData = CreateUserData();
         string engineIni = EngineIniPath(userData);
         File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         GameInspectionSnapshot snapshot = CreateSnapshot(userData);
         SettingsChangePlan plan = editor.CreatePlan(
             snapshot,
@@ -186,7 +186,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         string userData = CreateUserData();
         string engineIni = EngineIniPath(userData);
         File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         GameInspectionSnapshot snapshot = CreateSnapshot(userData);
         SettingsChangePlan plan = editor.CreatePlan(
             snapshot,
@@ -212,7 +212,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
             engineIni,
             "[SystemSettings]\r\nr.ViewDistanceScale=1.0\r\n",
             Encoding.Unicode);
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         SettingsChangePlan plan = editor.CreatePlan(
             CreateSnapshot(userData),
             [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
@@ -228,7 +228,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     public void CreatePlanRejectsOutOfRangeAndUnknownSettings()
     {
         string userData = CreateUserData();
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         GameInspectionSnapshot snapshot = CreateSnapshot(userData);
 
         InvalidOperationException outOfRange = Assert.Throws<InvalidOperationException>(() =>
@@ -249,7 +249,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     {
         string userData = CreateUserData();
         File.WriteAllText(EngineIniPath(userData), "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         SettingsChangePlan plan = editor.CreatePlan(
             CreateSnapshot(userData),
             [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
@@ -266,7 +266,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     {
         string userData = CreateUserData();
         File.WriteAllText(EngineIniPath(userData), "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         GameInspectionSnapshot snapshot = CreateSnapshot(userData);
         SettingsChangePlan oldPlan = editor.CreatePlan(
             snapshot,
@@ -287,7 +287,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         string engineIni = EngineIniPath(userData);
         const string Original = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
         File.WriteAllText(engineIni, Original);
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         SettingsChangePlan plan = editor.CreatePlan(
             CreateSnapshot(userData),
             [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
@@ -305,7 +305,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     {
         string userData = CreateUserData();
         File.WriteAllText(EngineIniPath(userData), "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         SettingsChangePlan plan = editor.CreatePlan(
             CreateSnapshot(userData),
             [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
@@ -325,14 +325,13 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         const string OriginalGame = "; game\r\n[/Script/MoviePlayer.MoviePlayerSettings]\r\nKeepThis=True\r\n";
         File.WriteAllText(engineIni, OriginalEngine, new UTF8Encoding(false));
         File.WriteAllText(gameIni, OriginalGame, new UTF8Encoding(false));
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         GameInspectionSnapshot snapshot = CreateSnapshot(userData);
         SettingsChangePlan plan = editor.CreatePlan(
             snapshot,
             [
                 Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2"),
                 new SettingChangeRequest(
-                    "startup-videos",
                     "Startup splash videos",
                     "Game.ini",
                     "/Script/MoviePlayer.MoviePlayerSettings",
@@ -358,12 +357,11 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         File.WriteAllText(
             gameIni,
             "; keep\n[/Script/MoviePlayer.MoviePlayerSettings]\n!StartupMovies=ClearArray\nKeepThis=True\n");
-        var editor = CreateEditor(gameRunning: false);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
         SettingsChangePlan plan = editor.CreatePlan(
             CreateSnapshot(userData),
             [
                 new SettingChangeRequest(
-                    "startup-videos",
                     "Startup splash videos",
                     "Game.ini",
                     "/Script/MoviePlayer.MoviePlayerSettings",
@@ -374,8 +372,64 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         Assert.True(editor.Apply(plan).Succeeded);
         string result = File.ReadAllText(gameIni);
         Assert.DoesNotContain("!StartupMovies", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("bWaitForMoviesToComplete", result, StringComparison.Ordinal);
         Assert.Contains("; keep", result, StringComparison.Ordinal);
         Assert.Contains("KeepThis=True", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NoIntroIsWrittenAndRemovedAsOneSetting()
+    {
+        string userData = CreateUserData();
+        string gameIni = GameIniPath(userData);
+        File.WriteAllText(gameIni, "; keep\n");
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        SettingsChangePlan enable = editor.CreatePlan(
+            snapshot,
+            [
+                new SettingChangeRequest(
+                    "Startup splash videos",
+                    "Game.ini",
+                    "/Script/MoviePlayer.MoviePlayerSettings",
+                    "!StartupMovies",
+                    "ClearArray"),
+            ]);
+        Assert.True(editor.Apply(enable).Succeeded);
+        string enabled = File.ReadAllText(gameIni);
+        Assert.Contains("!StartupMovies=ClearArray", enabled, StringComparison.Ordinal);
+        Assert.Contains("bWaitForMoviesToComplete=False", enabled, StringComparison.Ordinal);
+
+        snapshot = snapshot with
+        {
+            ConfigurationFiles =
+            [
+                new ConfigurationFileSnapshot(
+                    "Game.ini",
+                    gameIni,
+                    true,
+                    new FileInfo(gameIni).Length,
+                    DateTimeOffset.UnixEpoch,
+                    [],
+                    null),
+            ],
+        };
+        SettingsChangePlan disable = editor.CreatePlan(
+            snapshot,
+            [
+                new SettingChangeRequest(
+                    "Startup splash videos",
+                    "Game.ini",
+                    "/Script/MoviePlayer.MoviePlayerSettings",
+                    "!StartupMovies",
+                    null),
+            ]);
+        Assert.True(editor.Apply(disable).Succeeded);
+        string disabled = File.ReadAllText(gameIni);
+        Assert.DoesNotContain("!StartupMovies", disabled, StringComparison.Ordinal);
+        Assert.DoesNotContain("bWaitForMoviesToComplete", disabled, StringComparison.Ordinal);
+        Assert.Contains("; keep", disabled, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -512,18 +566,18 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
             () => gameRunning);
 
     private static SettingChangeRequest Change(
-        string id,
+        string _,
         string name,
         string key,
         string? value) =>
-        new(id, name, "Engine.ini", "SystemSettings", key, value);
+        new(name, "Engine.ini", "SystemSettings", key, value);
 
     private static SettingChangeRequest SystemChange(
-        string id,
+        string _,
         string name,
         string key,
         string value) =>
-        new(id, name, "System.sav", "GraphicsOptions", key, value);
+        new(name, "System.sav", "GraphicsOptions", key, value);
 
     private static GameInspectionSnapshot CreateSnapshot(string userData) =>
         new(
@@ -532,10 +586,8 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
                 StoreKind.Steam,
                 HostKind.Windows,
                 CompatibilityLayerKind.None,
-                "store",
                 "library",
                 "install",
-                "Ancestors-Win64-Shipping.exe",
                 "5495393",
                 ExecutableExists: true),
             userData,

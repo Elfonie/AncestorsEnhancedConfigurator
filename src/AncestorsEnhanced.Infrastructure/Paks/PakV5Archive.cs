@@ -19,6 +19,9 @@ internal static class PakV5Archive
     {
         using FileStream stream = File.OpenRead(path);
         PakFooter footer = ReadFooter(stream);
+        stream.Position = footer.IndexOffset;
+        byte[] index = ReadExact(stream, footer.IndexSize);
+        VerifyHash(index, footer.IndexHash, "PAK index");
         return $"PAK{Version}:{Convert.ToHexString(footer.IndexHash)}";
     }
 
@@ -37,13 +40,19 @@ internal static class PakV5Archive
     public static byte[] ReadFile(string path, string fileName)
     {
         using FileStream stream = File.OpenRead(path);
-        return ReadFile(stream, fileName);
+        return ReadFile(stream, fileName, int.MaxValue);
+    }
+
+    public static byte[] ReadFile(string path, string fileName, int maximumSize)
+    {
+        using FileStream stream = File.OpenRead(path);
+        return ReadFile(stream, fileName, maximumSize);
     }
 
     public static byte[] ReadFile(byte[] pak, string fileName)
     {
         using var stream = new MemoryStream(pak, writable: false);
-        return ReadFile(stream, fileName);
+        return ReadFile(stream, fileName, int.MaxValue);
     }
 
     public static byte[] BuildSingleFile(string fileName, byte[] content)
@@ -51,30 +60,53 @@ internal static class PakV5Archive
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentNullException.ThrowIfNull(content);
 
-        byte[] contentHash = SHA1.HashData(content);
-        PakEntry entry = new(
-            0,
-            content.Length,
-            content.Length,
-            0,
-            contentHash,
-            [],
-            false,
-            0);
+        return BuildFiles([(fileName, content)]);
+    }
+
+    internal static byte[] BuildFiles(IReadOnlyList<(string FileName, byte[] Content)> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        if (files.Count == 0 || files.Any(file => string.IsNullOrWhiteSpace(file.FileName)))
+        {
+            throw new ArgumentException("At least one named PAK entry is required.", nameof(files));
+        }
+        if (files.Select(file => file.FileName).Distinct(StringComparer.Ordinal).Count() != files.Count)
+        {
+            throw new ArgumentException("PAK entry names must be unique.", nameof(files));
+        }
 
         using var output = new MemoryStream();
         using var writer = new BinaryWriter(output, Encoding.UTF8, leaveOpen: true);
-        WriteEntry(writer, entry);
-        writer.Write(content);
+        List<(string Name, PakEntry Entry)> entries = [];
+        foreach ((string fileName, byte[] content) in files)
+        {
+            ArgumentNullException.ThrowIfNull(content);
+            PakEntry entry = new(
+                output.Position,
+                content.Length,
+                content.Length,
+                0,
+                SHA1.HashData(content),
+                [],
+                false,
+                0);
+            entries.Add((fileName, entry));
+            WriteEntry(writer, entry);
+            writer.Write(content);
+        }
+
         long indexOffset = output.Position;
 
         using var index = new MemoryStream();
         using (var indexWriter = new BinaryWriter(index, Encoding.UTF8, leaveOpen: true))
         {
             WriteString(indexWriter, "../../../");
-            indexWriter.Write(1);
-            WriteString(indexWriter, fileName);
-            WriteEntry(indexWriter, entry);
+            indexWriter.Write(entries.Count);
+            foreach ((string name, PakEntry entry) in entries)
+            {
+                WriteString(indexWriter, name);
+                WriteEntry(indexWriter, entry);
+            }
         }
 
         byte[] indexBytes = index.ToArray();
@@ -88,10 +120,16 @@ internal static class PakV5Archive
         return output.ToArray();
     }
 
-    private static byte[] ReadFile(Stream stream, string fileName)
+    private static byte[] ReadFile(Stream stream, string fileName, int maximumSize)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumSize);
         PakEntry entry = FindEntry(stream, fileName)
             ?? throw new InvalidDataException($"{fileName} was not found in the PAK.");
+        if (entry.Size > maximumSize || entry.UncompressedSize > maximumSize)
+        {
+            throw new InvalidDataException($"{fileName} is unexpectedly large.");
+        }
+
         stream.Position = entry.Offset;
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
         PakEntry storedEntry = ReadEntry(reader);
@@ -184,9 +222,19 @@ internal static class PakV5Archive
         long indexOffset = reader.ReadInt64();
         long indexSize = reader.ReadInt64();
         byte[] indexHash = reader.ReadBytes(20);
+        long expectedFooterOffset;
+        try
+        {
+            expectedFooterOffset = checked(indexOffset + indexSize);
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidDataException("The PAK footer contains an invalid index range.");
+        }
+
         if (encryptedIndex || magic != Magic || version != Version ||
             indexOffset < 0 || indexSize is < 0 or > MaximumIndexSize ||
-            indexOffset + indexSize != stream.Length - FooterSize ||
+            expectedFooterOffset != stream.Length - FooterSize ||
             indexHash.Length != 20)
         {
             throw new InvalidDataException("The PAK footer is invalid or unsupported.");

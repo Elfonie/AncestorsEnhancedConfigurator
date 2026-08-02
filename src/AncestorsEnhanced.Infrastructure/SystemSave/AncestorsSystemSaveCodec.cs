@@ -7,14 +7,6 @@ namespace AncestorsEnhanced.Infrastructure.SystemSave;
 
 internal static class AncestorsSystemSaveCodec
 {
-    private static readonly int[] FrameRateLimits = [0, 30, 60, 120, 144, 160, 165, 180, 200, 240];
-    private static readonly HashSet<string> SupportedResolutions =
-    [
-        "1024x576", "1152x648", "1280x720", "1280x800", "1366x768", "1440x900",
-        "1600x900", "1680x1050", "1920x1080", "1920x1200", "2560x1600", "2560x1440",
-        "3840x2160", "7680x4320",
-    ];
-
     public static SystemGraphicsSettingsSnapshot Read(byte[] file)
     {
         byte[] data = SnappyBlockCodec.Decode(file);
@@ -29,7 +21,7 @@ internal static class AncestorsSystemSaveCodec
             layout.GraphicsProperties, "QualityLevel", "IntProperty");
         TaggedProperty frameRate = UnrealTaggedProperties.Require(
             layout.GraphicsProperties, "FrameRateLimit", "IntProperty");
-        TaggedProperty custom = UnrealTaggedProperties.Require(
+        TaggedProperty? custom = UnrealTaggedProperties.FindOptional(
             layout.GraphicsProperties, "QualitySettingIsCustom", "BoolProperty");
         if (fullscreen.StructType != "IntPoint" || windowed.StructType != "IntPoint")
         {
@@ -41,7 +33,7 @@ internal static class AncestorsSystemSaveCodec
         GameGraphicsQuality overallQuality = ParseOverallQuality(
             UnrealTaggedProperties.ReadIntValue(data, overall));
         int frameRateIndex = UnrealTaggedProperties.ReadIntValue(data, frameRate);
-        if ((uint)frameRateIndex >= FrameRateLimits.Length)
+        if ((uint)frameRateIndex >= SystemGraphicsOptionCatalog.FrameRateLimits.Count)
         {
             throw new InvalidDataException("System.sav contains an unsupported frame-rate limit.");
         }
@@ -59,9 +51,8 @@ internal static class AncestorsSystemSaveCodec
             ReadQuality(data, layout.ScalabilityProperties, "Textures", overallQuality),
             ReadQuality(data, layout.ScalabilityProperties, "VisualEffects", overallQuality),
             ReadQuality(data, layout.ScalabilityProperties, "Foliage", overallQuality),
-            frameRateIndex,
-            FrameRateLimits[frameRateIndex],
-            UnrealTaggedProperties.ReadBoolValue(data, custom));
+            SystemGraphicsOptionCatalog.FrameRateLimits[frameRateIndex],
+            custom is not null && UnrealTaggedProperties.ReadBoolValue(data, custom));
     }
 
     public static byte[] Apply(byte[] file, IReadOnlyDictionary<string, string> changes)
@@ -290,7 +281,7 @@ internal static class AncestorsSystemSaveCodec
             throw new InvalidOperationException("The frame-rate limit is invalid.");
         }
 
-        int index = Array.IndexOf(FrameRateLimits, frameRate);
+        int index = SystemGraphicsOptionCatalog.GetFrameRateIndex(frameRate);
         return index >= 0
             ? index
             : throw new InvalidOperationException("The frame-rate limit is not supported by Ancestors.");
@@ -309,7 +300,7 @@ internal static class AncestorsSystemSaveCodec
 
     private static (int X, int Y) ParseResolution(string value)
     {
-        if (!SupportedResolutions.Contains(value))
+        if (!SystemGraphicsOptionCatalog.IsSupportedResolution(value))
         {
             throw new InvalidOperationException("The resolution is not supported by Ancestors.");
         }

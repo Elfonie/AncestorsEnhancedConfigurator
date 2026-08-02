@@ -13,11 +13,10 @@ internal static class IniDocumentEditor
 
         string newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         bool hasFinalNewline = content.EndsWith('\n') || content.EndsWith('\r');
-        List<string> lines = content
+        List<string> lines = [.. content
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n')
-            .Split('\n')
-            .ToList();
+            .Split('\n')];
 
         if (hasFinalNewline && lines.Count > 0 && lines[^1].Length == 0)
         {

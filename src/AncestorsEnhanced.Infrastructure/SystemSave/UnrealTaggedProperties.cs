@@ -115,11 +115,10 @@ internal static class UnrealTaggedProperties
         string name,
         string type)
     {
-        TaggedProperty[] matches = properties.Where(property =>
+        TaggedProperty[] matches = [.. properties.Where(property =>
                 string.Equals(property.Name, name, StringComparison.Ordinal) &&
                 string.Equals(property.Type, type, StringComparison.Ordinal))
-            .Take(2)
-            .ToArray();
+            .Take(2)];
         return matches.Length switch
         {
             0 => null,

@@ -18,14 +18,14 @@ public sealed class SettingEditorViewModelTests
 
         Assert.True(viewModel.IsPresence);
         Assert.False(viewModel.HasChanges);
-        Assert.Equal("Game default", viewModel.ModeLabel);
+        Assert.Equal("Use game default", viewModel.DesiredSummary);
 
         viewModel.UseCustomValue = true;
-        SettingChangeRequest add = viewModel.CreateRequest("startup", "Startup videos");
+        SettingChangeRequest add = viewModel.CreateRequest("Startup videos");
 
         Assert.True(viewModel.HasChanges);
         Assert.Equal("ClearArray", add.Value);
-        Assert.Equal("Videos skipped", viewModel.ModeLabel);
+        Assert.Equal("Skip videos", viewModel.DesiredSummary);
 
         viewModel.Reset();
         Assert.False(viewModel.HasChanges);
@@ -53,7 +53,7 @@ public sealed class SettingEditorViewModelTests
         Assert.True(viewModel.HasChanges);
         Assert.Equal(
             "1.5",
-            viewModel.CreateRequest("view-distance", "View distance").Value);
+            viewModel.CreateRequest("View distance").Value);
     }
 
     [Fact]
@@ -72,11 +72,79 @@ public sealed class SettingEditorViewModelTests
                 new SettingChoice("144", "144 FPS"),
             ],
             Target: SettingFileTarget.SystemSave,
-            IsDirect: true));
+            IsDirect: true))
+        {
+            UseCustomValue = false
+        };
+
+        Assert.False(viewModel.ShowOverrideToggle);
+        Assert.Equal("120", viewModel.CreateRequest("Frame-rate limit").Value);
+    }
+
+    [Fact]
+    public void UnsupportedOverrideRemainsAvailableForReset()
+    {
+        var viewModel = new SettingEditorViewModel(new SettingEditSnapshot(
+            "Engine.ini",
+            "SystemSettings",
+            "r.ViewDistanceScale",
+            SettingEditorKind.Number,
+            "1.2",
+            "invalid",
+            0.5m,
+            2m,
+            0.05m,
+            CanSetCustomValue: false));
+
+        Assert.True(viewModel.HasUnsupportedCurrentValue);
+        Assert.False(viewModel.IsCustomEditorEnabled);
+        Assert.False(viewModel.HasChanges);
 
         viewModel.UseCustomValue = false;
 
-        Assert.False(viewModel.ShowOverrideToggle);
-        Assert.Equal("120", viewModel.CreateRequest("frame-rate", "Frame-rate limit").Value);
+        Assert.True(viewModel.HasChanges);
+        Assert.Null(viewModel.CreateRequest("View distance").Value);
+    }
+
+    [Fact]
+    public void DisabledOverrideEditorShowsTheResolvedGamePresetValue()
+    {
+        var viewModel = new SettingEditorViewModel(new SettingEditSnapshot(
+            "Engine.ini",
+            "SystemSettings",
+            "r.DepthOfFieldQuality",
+            SettingEditorKind.Choice,
+            "0",
+            null,
+            Choices:
+            [
+                new SettingChoice("0", "Off"),
+                new SettingChoice("1", "Quality 1"),
+                new SettingChoice("2", "Quality 2"),
+            ],
+            GameControlledValue: "2"));
+
+        Assert.False(viewModel.UseCustomValue);
+        Assert.True(viewModel.HasKnownGameValue);
+        Assert.True(viewModel.ShowValueEditor);
+        Assert.False(viewModel.IsCustomEditorEnabled);
+        Assert.Equal("Quality 2", viewModel.SelectedChoice!.Label);
+        Assert.False(viewModel.HasChanges);
+    }
+
+    [Fact]
+    public void UnknownPresetValueDoesNotDisplayTheEditorDefault()
+    {
+        var viewModel = new SettingEditorViewModel(new SettingEditSnapshot(
+            "Engine.ini",
+            "SystemSettings",
+            "r.DepthOfFieldQuality",
+            SettingEditorKind.Choice,
+            "0",
+            null,
+            Choices: [new SettingChoice("0", "Off")]));
+
+        Assert.False(viewModel.ShowValueEditor);
+        Assert.True(viewModel.ShowUnknownGameValue);
     }
 }

@@ -95,6 +95,11 @@ public static class EditableSettingsCatalog
                 "ClearArray",
                 "Game.ini",
                 "/Script/MoviePlayer.MoviePlayerSettings"),
+            ["bWaitForMoviesToComplete"] = new(
+                SettingEditorKind.Presence,
+                "False",
+                "Game.ini",
+                "/Script/MoviePlayer.MoviePlayerSettings"),
             ["mod.VignettePercent"] = new(
                 SettingEditorKind.Number,
                 "100",
@@ -123,18 +128,11 @@ public static class EditableSettingsCatalog
                 IsDirect: true),
             [SystemSaveSettingKeys.FrameRateLimit] = SystemChoice(
                 "120",
-                [
-                    new SettingChoice("0", "Unlimited"),
-                    new SettingChoice("30", "30 FPS"),
-                    new SettingChoice("60", "60 FPS"),
-                    new SettingChoice("120", "120 FPS"),
-                    new SettingChoice("144", "144 FPS"),
-                    new SettingChoice("160", "160 FPS"),
-                    new SettingChoice("165", "165 FPS"),
-                    new SettingChoice("180", "180 FPS"),
-                    new SettingChoice("200", "200 FPS"),
-                    new SettingChoice("240", "240 FPS"),
-                ]),
+                SystemGraphicsOptionCatalog.FrameRateLimits
+                    .Select(value => new SettingChoice(
+                        value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        value == 0 ? "Unlimited" : $"{value} FPS"))
+                    .ToArray()),
             [SystemSaveSettingKeys.ViewDistanceQuality] = SystemQuality("High"),
             [SystemSaveSettingKeys.PostProcessingQuality] = SystemQuality("High"),
             [SystemSaveSettingKeys.ShadowQuality] = SystemQuality("High"),
@@ -142,6 +140,9 @@ public static class EditableSettingsCatalog
             [SystemSaveSettingKeys.VisualEffectsQuality] = SystemQuality("High"),
             [SystemSaveSettingKeys.FoliageQuality] = SystemQuality("High"),
         };
+
+    public static bool IsDefined(string? key) =>
+        key is not null && Settings.ContainsKey(key);
 
     public static SettingEditSnapshot? Create(
         GameInspectionSnapshot snapshot,
@@ -168,9 +169,11 @@ public static class EditableSettingsCatalog
             template.Target,
             template.Unit,
             template.IsDirect);
-        return currentOverride is null || IsValidValue(editor, currentOverride)
-            ? editor
-            : null;
+        editor = editor with
+        {
+            CanSetCustomValue = currentOverride is null || IsValidValue(editor, currentOverride),
+        };
+        return editor.IsDirect && !editor.CanSetCustomValue ? null : editor;
     }
 
     public static bool TryValidate(
@@ -194,6 +197,12 @@ public static class EditableSettingsCatalog
         {
             error = editor.IsDirect ? $"{request.Key} requires a value." : null;
             return !editor.IsDirect;
+        }
+
+        if (!editor.CanSetCustomValue)
+        {
+            error = $"{request.Key} contains an unsupported current value and can only be reset.";
+            return false;
         }
 
         bool valid = IsValidValue(editor, request.Value);
@@ -313,11 +322,10 @@ public static class EditableSettingsCatalog
     private static SettingEditorTemplate Quality(int defaultValue, int maximum) =>
         Choice(
             defaultValue.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            Enumerable.Range(0, maximum + 1)
+            [.. Enumerable.Range(0, maximum + 1)
                 .Select(value => (
                     value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    value == 0 ? "Off" : $"Quality {value}"))
-                .ToArray());
+                    value == 0 ? "Off" : $"Quality {value}"))]);
 
     private static SettingEditorTemplate Choice(
         string defaultValue,
@@ -349,22 +357,10 @@ public static class EditableSettingsCatalog
             ]);
 
     private static SettingChoice[] ResolutionChoices() =>
-    [
-        new("1024x576", "1024 × 576"),
-        new("1152x648", "1152 × 648"),
-        new("1280x720", "1280 × 720"),
-        new("1280x800", "1280 × 800"),
-        new("1366x768", "1366 × 768"),
-        new("1440x900", "1440 × 900"),
-        new("1600x900", "1600 × 900"),
-        new("1680x1050", "1680 × 1050"),
-        new("1920x1080", "1920 × 1080"),
-        new("1920x1200", "1920 × 1200"),
-        new("2560x1440", "2560 × 1440"),
-        new("2560x1600", "2560 × 1600"),
-        new("3840x2160", "3840 × 2160"),
-        new("7680x4320", "7680 × 4320"),
-    ];
+        [.. SystemGraphicsOptionCatalog.Resolutions
+            .Select(value => new SettingChoice(
+                value,
+                value.Replace("x", " × ", StringComparison.Ordinal)))];
 
     private static string Invariant(decimal value) =>
         value.ToString(System.Globalization.CultureInfo.InvariantCulture);

@@ -4,6 +4,7 @@ public sealed record FeatureSettingRowViewModel(
     string Name,
     string Value,
     string Description,
+    string Source,
     string TechnicalKey,
     string AccentColor,
     bool ShowDescription,
@@ -18,11 +19,17 @@ public sealed record FeatureSettingRowViewModel(
 
     public bool HasPresetValues => PresetValues.Count > 0;
 
-    public string ValueLabel => HasPresetValues && ActivePresetName is null ? "Controlled by" : "Current";
+    public string ValueLabel => ActivePresetName is not null
+        ? $"{ActivePresetName} game preset"
+        : HasPresetValues
+            ? "Game preset value unknown"
+            : Source.StartsWith("No custom", StringComparison.Ordinal)
+                ? "No override"
+                : "Current";
 
     public string PresetExplanation => ActivePresetName is null
-        ? "The game selects one of these values from its Low, Medium or High preset. The active preset is not currently readable."
-        : $"Current game preset: {ActivePresetName}. The list below shows what Low, Medium and High would use.";
+        ? "The game selects one of these values, but its active preset could not be read safely."
+        : $"Active preset: {ActivePresetName}. The list below compares all three game presets.";
 }
 
 public sealed record SettingPresetValueRowViewModel(string Name, string Value);

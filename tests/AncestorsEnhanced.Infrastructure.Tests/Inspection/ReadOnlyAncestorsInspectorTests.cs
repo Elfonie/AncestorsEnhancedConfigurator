@@ -39,10 +39,9 @@ public sealed class ReadOnlyAncestorsInspectorTests
         Assert.Null(snapshot.BinarySettingsFile?.GraphicsSettings);
         Assert.Equal(2, snapshot.PakFiles.Count);
         Assert.Contains(snapshot.PakFiles, pak => pak.Classification == PakClassification.BaseGame);
-        PakFileSnapshot patch = Assert.Single(
+        Assert.Single(
             snapshot.PakFiles,
             pak => pak.Classification == PakClassification.PatchStyle);
-        Assert.NotNull(patch.Sha256);
     }
 
     [Fact]

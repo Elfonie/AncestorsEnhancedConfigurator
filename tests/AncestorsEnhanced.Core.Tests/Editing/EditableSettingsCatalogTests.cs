@@ -20,7 +20,6 @@ public sealed class EditableSettingsCatalogTests
         Assert.True(EditableSettingsCatalog.TryValidate(
             snapshot,
             new SettingChangeRequest(
-                "startup",
                 "Startup videos",
                 editor.FileName,
                 editor.Section,
@@ -30,14 +29,33 @@ public sealed class EditableSettingsCatalogTests
     }
 
     [Fact]
-    public void ExistingUnexpectedValueIsReadableButNotEditable()
+    public void ExistingUnexpectedValueCanOnlyBeReset()
     {
-        SettingEditSnapshot? editor = EditableSettingsCatalog.Create(
-            CreateSnapshot(),
+        GameInspectionSnapshot snapshot = CreateSnapshot();
+        SettingEditSnapshot editor = Assert.IsType<SettingEditSnapshot>(EditableSettingsCatalog.Create(
+            snapshot,
             "!StartupMovies",
-            "UnexpectedCommand");
+            "UnexpectedCommand"));
 
-        Assert.Null(editor);
+        Assert.False(editor.CanSetCustomValue);
+        Assert.True(EditableSettingsCatalog.TryValidate(
+            snapshot,
+            new SettingChangeRequest(
+                "Startup videos",
+                editor.FileName,
+                editor.Section,
+                editor.Key,
+                null),
+            out _));
+        Assert.False(EditableSettingsCatalog.TryValidate(
+            snapshot,
+            new SettingChangeRequest(
+                "Startup videos",
+                editor.FileName,
+                editor.Section,
+                editor.Key,
+                "UnexpectedCommand"),
+            out _));
     }
 
     [Theory]
@@ -83,10 +101,8 @@ public sealed class EditableSettingsCatalogTests
                 StoreKind.Steam,
                 HostKind.Windows,
                 CompatibilityLayerKind.None,
-                "store",
                 "library",
                 "install",
-                "Ancestors-Win64-Shipping.exe",
                 "5495393",
                 ExecutableExists: true),
             "user-data",

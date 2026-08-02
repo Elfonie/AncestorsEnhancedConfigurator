@@ -26,8 +26,7 @@ public sealed class ReadableSettingsCatalogTests
                     "vignette.pak",
                     913,
                     DateTimeOffset.UnixEpoch,
-                    PakClassification.PatchStyle,
-                    "06F74C5E4BF70D2748614D8C74405B4C96FB4E50F103A66827C4E2041B2801A0"),
+                    PakClassification.PatchStyle),
             ],
             vignette: new VignetteModSnapshot(50, true, "Managed graphics patch"));
 
@@ -49,6 +48,23 @@ public sealed class ReadableSettingsCatalogTests
             "50% of original",
             FindSetting(FindGroup(groups, "vignette"), "environment-vignette").Value);
         Assert.Equal("Videos skipped", FindGroup(groups, "convenience").Summary);
+    }
+
+    [Fact]
+    public void VerifiedStockVignetteShowsItsOriginalStrength()
+    {
+        IReadOnlyList<FeatureGroupSnapshot> groups =
+            ReadableSettingsCatalog.CreateFeatureGroups(CreateSnapshot(
+                [],
+                [],
+                buildId: "5495393",
+                vignette: new VignetteModSnapshot(null, true, "Game asset verified")));
+
+        FeatureSettingSnapshot vignette = FindSetting(
+            FindGroup(groups, "vignette"),
+            "environment-vignette");
+        Assert.Equal("100% original", vignette.Value);
+        Assert.Equal("100", vignette.Editor!.GameControlledValue);
     }
 
     [Fact]
@@ -94,6 +110,41 @@ public sealed class ReadableSettingsCatalogTests
             "motion-blur-quality");
 
         Assert.Equal("Off", motionBlur.Value);
+    }
+
+    [Fact]
+    public void CreateFeatureGroupsOnlyReadsAnOverrideFromItsOwningIniFile()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot(
+            [new IniSettingSnapshot("SystemSettings", "r.MotionBlurQuality", "4", 1)],
+            []) with
+        {
+            ConfigurationFiles =
+            [
+                new ConfigurationFileSnapshot(
+                    "Engine.ini",
+                    "Engine.ini",
+                    true,
+                    0,
+                    DateTimeOffset.UnixEpoch,
+                    [new IniSettingSnapshot("SystemSettings", "r.MotionBlurQuality", "4", 1)],
+                    null),
+                new ConfigurationFileSnapshot(
+                    "Scalability.ini",
+                    "Scalability.ini",
+                    true,
+                    0,
+                    DateTimeOffset.UnixEpoch,
+                    [new IniSettingSnapshot("SystemSettings", "r.MotionBlurQuality", "0", 1)],
+                    null),
+            ],
+        };
+
+        FeatureSettingSnapshot motionBlur = FindSetting(
+            FindGroup(ReadableSettingsCatalog.CreateFeatureGroups(snapshot), "motion-blur"),
+            "motion-blur-quality");
+
+        Assert.Equal("Quality 4", motionBlur.Value);
     }
 
     [Fact]
@@ -144,6 +195,23 @@ public sealed class ReadableSettingsCatalogTests
     }
 
     [Fact]
+    public void NonPresetRendererValuesAreReportedAsGameControlled()
+    {
+        IReadOnlyList<FeatureGroupSnapshot> groups =
+            ReadableSettingsCatalog.CreateFeatureGroups(
+                CreateSnapshot([], [], buildId: "5495393"));
+
+        FeatureGroupSnapshot clarity = FindGroup(groups, "image-clarity");
+        FeatureSettingSnapshot sharpening = FindSetting(clarity, "image-sharpening");
+        FeatureSettingSnapshot frameWeight = FindSetting(clarity, "taa-frame-weight");
+
+        Assert.Equal("Game controlled", sharpening.Value);
+        Assert.Equal("Game controlled", frameWeight.Value);
+        Assert.Null(sharpening.Editor!.GameControlledValue);
+        Assert.Contains("not stored", sharpening.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CreateFeatureGroupsUsesDecodedActiveCategoryPresets()
     {
         var graphics = new SystemGraphicsSettingsSnapshot(
@@ -159,7 +227,6 @@ public sealed class ReadableSettingsCatalogTests
             GameGraphicsQuality.High,
             GameGraphicsQuality.High,
             GameGraphicsQuality.High,
-            3,
             120,
             true);
         IReadOnlyList<FeatureGroupSnapshot> groups =
@@ -175,6 +242,9 @@ public sealed class ReadableSettingsCatalogTests
         FeatureSettingSnapshot shadow = FindSetting(
             FindGroup(groups, "shadows-lighting"),
             "shadow-quality");
+        FeatureSettingSnapshot depthOfField = FindSetting(
+            FindGroup(groups, "depth-of-field"),
+            "dof-quality");
 
         Assert.Equal("150%", foliage.Value);
         Assert.Equal("High", foliage.ActivePresetName);
@@ -182,6 +252,9 @@ public sealed class ReadableSettingsCatalogTests
         Assert.Equal("Low", bloom.ActivePresetName);
         Assert.Equal("Quality 4", shadow.Value);
         Assert.Equal("Medium", shadow.ActivePresetName);
+        Assert.Equal("Off", depthOfField.Value);
+        Assert.Equal("Low", depthOfField.ActivePresetName);
+        Assert.Equal("0", depthOfField.Editor!.GameControlledValue);
         Assert.Equal("High base · Custom", FindGroup(groups, "game-menu-settings").Summary);
     }
 
@@ -208,10 +281,8 @@ public sealed class ReadableSettingsCatalogTests
                     StoreKind.Steam,
                     HostKind.Windows,
                     CompatibilityLayerKind.None,
-                    "store",
                     "library",
                     "install",
-                    "Ancestors-Win64-Shipping.exe",
                     buildId,
                     ExecutableExists: true),
             null,
@@ -222,7 +293,21 @@ public sealed class ReadableSettingsCatalogTests
                     Exists: true,
                     0,
                     DateTimeOffset.UnixEpoch,
-                    iniSettings,
+                    iniSettings.Where(setting => !string.Equals(
+                        setting.Section,
+                        "/Script/MoviePlayer.MoviePlayerSettings",
+                        StringComparison.OrdinalIgnoreCase)).ToArray(),
+                    null),
+                new ConfigurationFileSnapshot(
+                    "Game.ini",
+                    "Game.ini",
+                    Exists: true,
+                    0,
+                    DateTimeOffset.UnixEpoch,
+                    iniSettings.Where(setting => string.Equals(
+                        setting.Section,
+                        "/Script/MoviePlayer.MoviePlayerSettings",
+                        StringComparison.OrdinalIgnoreCase)).ToArray(),
                     null),
             ],
             graphics is null

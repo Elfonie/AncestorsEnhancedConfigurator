@@ -37,8 +37,7 @@ public static class ReadableSettingsCatalog
             "motion-blur-quality",
             "Quality and activation",
             "r.MotionBlurQuality",
-            "Quality 0 disables motion blur; levels 1 to 4 select its rendering quality.",
-            maximum: 4);
+            "Quality 0 disables motion blur; levels 1 to 4 select its rendering quality.");
         FeatureSettingSnapshot scale = Decimal(
             snapshot,
             "motion-blur-scale",
@@ -47,8 +46,7 @@ public static class ReadableSettingsCatalog
             value => Percent(value),
             "Multiplies the strength chosen by the game's cameras and post-process volumes.",
             missingValue: "100% (engine default)",
-            missingSource: "No custom multiplier",
-            maximum: 1);
+            missingSource: "No custom multiplier");
 
         return new FeatureGroupSnapshot(
             "motion-blur",
@@ -89,8 +87,7 @@ public static class ReadableSettingsCatalog
             "dof-quality",
             "Quality and activation",
             "r.DepthOfFieldQuality",
-            "Quality 0 disables depth of field; higher levels change rendering quality, not a simple intensity.",
-            maximum: 4);
+            "Quality 0 disables depth of field; higher levels change rendering quality, not a simple intensity.");
 
         return new FeatureGroupSnapshot(
             "depth-of-field",
@@ -176,8 +173,7 @@ public static class ReadableSettingsCatalog
                     "r.DOF.Scatter.MaxSpriteRatio",
                     Percent,
                     "Limits how much of the image may use scattered bokeh sprites.",
-                    isAdvanced: true,
-                    maximum: 1),
+                    isAdvanced: true),
                 Integer(
                     snapshot,
                     "dof-recombine-quality",
@@ -233,23 +229,32 @@ public static class ReadableSettingsCatalog
                 "mod.VignettePercent",
                 percent?.ToString(CultureInfo.InvariantCulture))
             : null;
+        if (editor is not null && percent is null)
+        {
+            editor = editor with { GameControlledValue = "100" };
+        }
+
+        string displayValue = percent is decimal value
+            ? $"{value:0}% of original"
+            : vignette.IsEditable
+                ? "100% original"
+                : "Not verified";
         FeatureSettingSnapshot environment = new(
             "environment-vignette",
             "Environmental vignette",
-            percent is decimal value ? $"{value:0}% of original" : "Game controlled",
+            displayValue,
             "Scales the full day and night vignette curve without changing gameplay status effects.",
             vignette.Status,
             "VL01E01_Vignette_Intensity",
             percent is null ? ReadableSettingState.Unknown : ReadableSettingState.Modified,
             IsAdvanced: false,
-            Percentage: percent is decimal percentage ? (double)(percentage / 100) : null,
             Editor: editor);
 
         return new FeatureGroupSnapshot(
             "vignette",
             "Camera effects",
             "Vignette",
-            environment.Value,
+            displayValue,
             "Environmental edge darkening, separate from temporary gameplay status effects.",
             IsEssential: true,
             environment.State,
@@ -273,8 +278,7 @@ public static class ReadableSettingsCatalog
             "aa-quality",
             "Anti-aliasing quality",
             "r.PostProcessAAQuality",
-            "Selects the anti-aliasing method and quality used by the active game preset.",
-            maximum: 6);
+            "Selects the anti-aliasing method and quality used by the active game preset.");
         FeatureSettingSnapshot taa = Decimal(
             snapshot,
             "taa-frame-weight",
@@ -282,24 +286,28 @@ public static class ReadableSettingsCatalog
             "r.TemporalAACurrentFrameWeight",
             InvariantTwoDecimals,
             "Higher values respond faster but can shimmer more; lower values are steadier but can ghost more.",
-            maximum: 1);
+            missingValue: "Game controlled",
+            missingSource: "No custom override; runtime value is not stored in the config");
         FeatureSettingSnapshot sharpen = Decimal(
             snapshot,
             "image-sharpening",
             "Image sharpening",
             "r.Tonemapper.Sharpen",
             value => value == 0 ? "Off" : InvariantTwoDecimals(value),
-            "Adds sharpening after temporal anti-aliasing.");
+            "Adds sharpening after temporal anti-aliasing.",
+            missingValue: "Game controlled",
+            missingSource: "No custom override; runtime value is not stored in the config");
 
         return new FeatureGroupSnapshot(
             "image-clarity",
             "Image quality",
             "Image clarity and anti-aliasing",
-            CreateCompactSummary(("Sharpen", sharpen), ("TAA", taa)),
+            CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen), ("TAA", taa)),
             "Controls edge smoothing, temporal response and final image sharpening.",
             IsEssential: true,
             CombineStates(antiAliasing, taa, sharpen),
-            [antiAliasing, taa, sharpen]);
+            [antiAliasing, taa, sharpen],
+            SimpleSummary: CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen)));
     }
 
     private static FeatureGroupSnapshot CreateViewDistanceGroup(GameInspectionSnapshot snapshot)
@@ -355,8 +363,7 @@ public static class ReadableSettingsCatalog
             "Texture filtering",
             "r.MaxAnisotropy",
             value => value <= 1 ? "Off" : $"{value}×",
-            "Keeps surfaces sharp when viewed at an angle.",
-            maximum: 16);
+            "Keeps surfaces sharp when viewed at an angle.");
         FeatureSettingSnapshot pool = Integer(
             snapshot,
             "texture-pool",
@@ -422,7 +429,8 @@ public static class ReadableSettingsCatalog
                     value => value == 0 ? "Unlimited by override" : $"{value} px",
                     "Caps the screen size used when calculating wanted texture resolution.",
                     isAdvanced: true),
-            ]);
+            ],
+            SimpleSummary: anisotropy.Value);
     }
 
     private static FeatureGroupSnapshot CreatePostProcessingGroup(GameInspectionSnapshot snapshot)
@@ -439,7 +447,7 @@ public static class ReadableSettingsCatalog
             Integer(snapshot, "tonemapper-quality", "Tonemapper quality", "r.Tonemapper.Quality", FormatQualityLevel, "Controls quality features in the final tone-mapping pass.", isAdvanced: true),
             Integer(snapshot, "render-target-pool", "Render-target pool minimum", "r.RenderTargetPoolMin", value => $"{value} MB", "Minimum pooled memory reserved for intermediate rendering targets.", isAdvanced: true),
             Decimal(snapshot, "ao-radius", "AO radius scale", "r.AmbientOcclusionRadiusScale", Percent, "Scales the radius used by screen-space ambient occlusion.", isAdvanced: true),
-            Integer(snapshot, "ao-max-quality", "AO maximum quality", "r.AmbientOcclusionMaxQuality", value => $"{value}%", "Caps the ambient-occlusion quality selected by the renderer.", isAdvanced: true, maximum: 100),
+            Integer(snapshot, "ao-max-quality", "AO maximum quality", "r.AmbientOcclusionMaxQuality", value => $"{value}%", "Caps the ambient-occlusion quality selected by the renderer.", isAdvanced: true),
             Decimal(snapshot, "ao-mip-factor", "AO mip-level factor", "r.AmbientOcclusionMipLevelFactor", Invariant, "Controls how ambient occlusion uses lower-resolution mip levels.", isAdvanced: true),
             Integer(snapshot, "fast-blur-threshold", "Fast-blur threshold", "r.FastBlurThreshold", value => value.ToString(CultureInfo.InvariantCulture), "Selects when a faster Gaussian-blur path is used.", isAdvanced: true),
             Integer(snapshot, "upscale-quality", "Upscale quality", "r.Upscale.Quality", FormatQualityLevel, "Controls the image upscaling filter used by the renderer.", isAdvanced: true),
@@ -451,11 +459,20 @@ public static class ReadableSettingsCatalog
             "post-processing",
             "Visual effects",
             "Post-processing",
-            overrides == 0 ? "Game preset" : $"{overrides} custom overrides",
+            overrides == 0
+                ? CreateCompactSummary(
+                    ("Bloom", settings.Single(setting => setting.Id == "bloom-quality")),
+                    ("Fringe", settings.Single(setting => setting.Id == "chromatic-aberration")),
+                    ("Shafts", settings.Single(setting => setting.Id == "light-shafts")))
+                : $"{overrides} custom overrides",
             "Lighting and lens-style effects applied after the scene is rendered.",
             IsEssential: true,
             CombineStates(settings),
-            settings);
+            settings,
+            SimpleSummary: CreateCompactSummary(
+                ("Bloom", settings.Single(setting => setting.Id == "bloom-quality")),
+                ("Fringe", settings.Single(setting => setting.Id == "chromatic-aberration")),
+                ("Shafts", settings.Single(setting => setting.Id == "light-shafts"))));
     }
 
     private static FeatureGroupSnapshot CreateShadowGroup(GameInspectionSnapshot snapshot)
@@ -487,11 +504,12 @@ public static class ReadableSettingsCatalog
             "shadows-lighting",
             "Lighting",
             "Shadows, fog and lighting",
-            overrides == 0 ? "Game preset" : $"{overrides} custom overrides",
+            overrides == 0 ? settings[0].Value : $"{overrides} custom overrides",
             "The expensive shadow and atmospheric settings are grouped here.",
             IsEssential: true,
             CombineStates(settings),
-            settings);
+            settings,
+            SimpleSummary: settings[0].Value);
     }
 
     private static FeatureGroupSnapshot CreateEffectsGroup(GameInspectionSnapshot snapshot)
@@ -518,7 +536,9 @@ public static class ReadableSettingsCatalog
             "effects-materials",
             "Renderer",
             "Effects and materials",
-            overrides == 0 ? "Game preset" : $"{overrides} custom overrides",
+            overrides == 0
+                ? CreateCompactSummary(("Refraction", settings[0]), ("SSR", settings[1]))
+                : $"{overrides} custom overrides",
             "Advanced material, reflection, translucency and particle controls.",
             IsEssential: false,
             CombineStates(settings),
@@ -599,7 +619,11 @@ public static class ReadableSettingsCatalog
 
     private static FeatureGroupSnapshot CreateConvenienceGroup(GameInspectionSnapshot snapshot)
     {
-        IniSettingSnapshot? clearMovies = FindSetting(snapshot, MoviePlayerSection, "!StartupMovies");
+        IniSettingSnapshot? clearMovies = FindSetting(
+            snapshot,
+            "Game.ini",
+            MoviePlayerSection,
+            "!StartupMovies");
         bool skipped = string.Equals(clearMovies?.Value, "ClearArray", StringComparison.OrdinalIgnoreCase);
         FeatureSettingSnapshot startup = new(
             "startup-videos",
@@ -629,7 +653,6 @@ public static class ReadableSettingsCatalog
         string name,
         string key,
         string description,
-        int maximum,
         bool isAdvanced = false) =>
         Integer(
             snapshot,
@@ -638,8 +661,7 @@ public static class ReadableSettingsCatalog
             key,
             FormatOffOrQuality,
             description,
-            isAdvanced: isAdvanced,
-            maximum: maximum);
+            isAdvanced: isAdvanced);
 
     private static FeatureSettingSnapshot Boolean(
         GameInspectionSnapshot snapshot,
@@ -656,8 +678,7 @@ public static class ReadableSettingsCatalog
             key,
             value => value > 0 ? "On" : "Off",
             description,
-            isAdvanced: isAdvanced,
-            maximum: 1);
+            isAdvanced: isAdvanced);
     }
 
     private static FeatureSettingSnapshot Integer(
@@ -669,10 +690,9 @@ public static class ReadableSettingsCatalog
         string description,
         string missingValue = "Game preset",
         string missingSource = "No custom override",
-        bool isAdvanced = false,
-        int? maximum = null)
+        bool isAdvanced = false)
     {
-        IniSettingSnapshot? entry = FindSetting(snapshot, SystemSettingsSection, key);
+        IniSettingSnapshot? entry = FindSetting(snapshot, "Engine.ini", SystemSettingsSection, key);
         SettingEditSnapshot? editor = EditableSettingsCatalog.Create(snapshot, key, entry?.Value);
         if (entry is null)
         {
@@ -689,10 +709,11 @@ public static class ReadableSettingsCatalog
                     CultureInfo.InvariantCulture,
                     out int presetValue)
                     ? format(presetValue)
-                    : null);
+                    : null,
+                editor);
             if (preset is not null)
             {
-                return preset with { Editor = editor };
+                return preset;
             }
 
             return Unknown(id, name, missingValue, description, missingSource, key, isAdvanced)
@@ -722,7 +743,6 @@ public static class ReadableSettingsCatalog
             key,
             value == 0 ? ReadableSettingState.Disabled : ReadableSettingState.Modified,
             isAdvanced,
-            maximum is > 0 ? Math.Clamp(value / (double)maximum.Value, 0, 1) : null,
             Editor: editor);
     }
 
@@ -735,10 +755,9 @@ public static class ReadableSettingsCatalog
         string description,
         string missingValue = "Game preset",
         string missingSource = "No custom override",
-        bool isAdvanced = false,
-        double? maximum = null)
+        bool isAdvanced = false)
     {
-        IniSettingSnapshot? entry = FindSetting(snapshot, SystemSettingsSection, key);
+        IniSettingSnapshot? entry = FindSetting(snapshot, "Engine.ini", SystemSettingsSection, key);
         SettingEditSnapshot? editor = EditableSettingsCatalog.Create(snapshot, key, entry?.Value);
         if (entry is null)
         {
@@ -755,10 +774,11 @@ public static class ReadableSettingsCatalog
                     CultureInfo.InvariantCulture,
                     out double presetValue)
                     ? format(presetValue)
-                    : null);
+                    : null,
+                editor);
             if (preset is not null)
             {
-                return preset with { Editor = editor };
+                return preset;
             }
 
             return Unknown(id, name, missingValue, description, missingSource, key, isAdvanced)
@@ -788,7 +808,6 @@ public static class ReadableSettingsCatalog
             key,
             value == 0 ? ReadableSettingState.Disabled : ReadableSettingState.Modified,
             isAdvanced,
-            maximum is > 0 ? Math.Clamp(value / maximum.Value, 0, 1) : null,
             Editor: editor);
     }
 
@@ -799,7 +818,8 @@ public static class ReadableSettingsCatalog
         string key,
         string description,
         bool isAdvanced,
-        Func<string, string?> format)
+        Func<string, string?> format,
+        SettingEditSnapshot? editor)
     {
         if (!AncestorsScalabilityPresetCatalog.TryGet(
                 snapshot.Installation?.BuildId,
@@ -809,14 +829,13 @@ public static class ReadableSettingsCatalog
             return null;
         }
 
-        SettingPresetValueSnapshot[] values = presetValues
+        SettingPresetValueSnapshot[] values = [.. presetValues
             .Enumerate()
             .Select(preset => new SettingPresetValueSnapshot(
                 preset.Name,
                 preset.RawValue is null
                     ? "Not set by this preset"
-                    : format(preset.RawValue) ?? $"Raw value {preset.RawValue}"))
-            .ToArray();
+                    : format(preset.RawValue) ?? $"Raw value {preset.RawValue}"))];
 
         GameGraphicsQuality? activeQuality = GetActivePresetQuality(snapshot, key);
         string? activeRawValue = activeQuality is null ? null : presetValues.Get(activeQuality.Value);
@@ -834,9 +853,11 @@ public static class ReadableSettingsCatalog
             key,
             ReadableSettingState.Unknown,
             isAdvanced,
-            Percentage: null,
             PresetValues: values,
-            ActivePresetName: activeValue is null ? null : activeName);
+            ActivePresetName: activeQuality is null ? null : activeName,
+            Editor: editor is null
+                ? null
+                : editor with { GameControlledValue = activeRawValue });
     }
 
     private static GameGraphicsQuality? GetActivePresetQuality(
@@ -943,9 +964,11 @@ public static class ReadableSettingsCatalog
 
     private static IniSettingSnapshot? FindSetting(
         GameInspectionSnapshot snapshot,
+        string fileName,
         string section,
         string key) =>
         snapshot.ConfigurationFiles
+            .Where(file => string.Equals(file.Name, fileName, StringComparison.OrdinalIgnoreCase))
             .SelectMany(file => file.Settings)
             .LastOrDefault(setting =>
                 string.Equals(setting.Section, section, StringComparison.OrdinalIgnoreCase) &&
@@ -955,12 +978,13 @@ public static class ReadableSettingsCatalog
         GameInspectionSnapshot snapshot,
         IEnumerable<FeatureSettingSnapshot> settings)
     {
-        HashSet<string> keys = settings
+        var keys = settings
             .Where(setting => setting.TechnicalKey is not null)
             .Select(setting => setting.TechnicalKey!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return snapshot.ConfigurationFiles
+            .Where(file => string.Equals(file.Name, "Engine.ini", StringComparison.OrdinalIgnoreCase))
             .SelectMany(file => file.Settings)
             .Where(setting => string.Equals(
                 setting.Section,
@@ -994,13 +1018,18 @@ public static class ReadableSettingsCatalog
     private static string CreateCompactSummary(
         params (string Label, FeatureSettingSnapshot Setting)[] values)
     {
-        (string Label, FeatureSettingSnapshot Setting)[] custom = values
-            .Where(value => value.Setting.State != ReadableSettingState.Unknown)
-            .ToArray();
+        (string Label, FeatureSettingSnapshot Setting)[] custom = [.. values.Where(value =>
+            value.Setting.State != ReadableSettingState.Unknown ||
+            value.Setting.ActivePresetName is not null)];
         return custom.Length == 0
             ? "Game preset"
-            : string.Join(" · ", custom.Select(value => $"{value.Label} {value.Setting.Value}"));
+            : string.Join(" · ", custom.Select(value =>
+                $"{value.Label} {CompactValue(value.Setting.Value)}"));
     }
+
+    private static string CompactValue(string value) => value
+        .Replace("Quality ", string.Empty, StringComparison.Ordinal)
+        .Replace("Level ", string.Empty, StringComparison.Ordinal);
 
     private static string FormatOffOrQuality(int value) =>
         value == 0 ? "Off" : $"Quality {value}";

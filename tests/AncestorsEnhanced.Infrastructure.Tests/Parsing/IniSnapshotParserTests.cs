@@ -1,3 +1,4 @@
+using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Parsing;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.Parsing;
@@ -17,7 +18,7 @@ public sealed class IniSnapshotParserTests
             !StartupMovies=ClearArray
             """;
 
-        var settings = IniSnapshotParser.Parse(Content);
+        IReadOnlyList<IniSettingSnapshot> settings = IniSnapshotParser.Parse(Content);
 
         Assert.Collection(
             settings,

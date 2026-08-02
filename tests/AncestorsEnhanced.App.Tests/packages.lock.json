@@ -255,8 +255,8 @@
       "ancestorsenhanced.app": {
         "type": "Project",
         "dependencies": {
-          "AncestorsEnhanced.Core": "[0.4.0, )",
-          "AncestorsEnhanced.Infrastructure": "[0.4.0, )",
+          "AncestorsEnhanced.Core": "[0.5.0, )",
+          "AncestorsEnhanced.Infrastructure": "[0.5.0, )",
           "Avalonia": "[12.1.1, )",
           "Avalonia.Desktop": "[12.1.1, )",
           "Avalonia.Fonts.Inter": "[12.1.1, )",
@@ -270,7 +270,7 @@
       "ancestorsenhanced.infrastructure": {
         "type": "Project",
         "dependencies": {
-          "AncestorsEnhanced.Core": "[0.4.0, )"
+          "AncestorsEnhanced.Core": "[0.5.0, )"
         }
       },
       "Avalonia": {

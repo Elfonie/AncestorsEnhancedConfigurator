@@ -8,4 +8,5 @@ public sealed record FeatureGroupSnapshot(
     string Description,
     bool IsEssential,
     ReadableSettingState State,
-    IReadOnlyList<FeatureSettingSnapshot> Settings);
+    IReadOnlyList<FeatureSettingSnapshot> Settings,
+    string? SimpleSummary = null);

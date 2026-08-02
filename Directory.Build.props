@@ -7,6 +7,9 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <Deterministic>true</Deterministic>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
+    <Authors>Elfonie</Authors>
+    <Product>Ancestors Enhanced Configurator</Product>
+    <Description>Portable graphics configurator for Ancestors The Humankind Odyssey</Description>
   </PropertyGroup>
 </Project>

@@ -20,6 +20,5 @@ public sealed record SystemGraphicsSettingsSnapshot(
     GameGraphicsQuality TextureQuality,
     GameGraphicsQuality VisualEffectsQuality,
     GameGraphicsQuality FoliageQuality,
-    int FrameRateLimitIndex,
     int FrameRateLimit,
     bool QualitySettingIsCustom);

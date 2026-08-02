@@ -14,5 +14,4 @@ internal interface IReadOnlyFileSystem
 
     IReadOnlyList<ReadOnlyFileMetadata> EnumerateFiles(string directoryPath, string searchPattern);
 
-    string ComputeSha256(string path);
 }

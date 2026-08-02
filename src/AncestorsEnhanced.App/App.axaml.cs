@@ -19,12 +19,15 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow
+            var viewModel = new MainViewModel(
+                ReadOnlyAncestorsInspector.CreateDefault(),
+                new SafeGameSettingsEditor());
+            var window = new MainWindow
             {
-                DataContext = new MainViewModel(
-                    ReadOnlyAncestorsInspector.CreateDefault(),
-                    new SafeGameSettingsEditor()),
+                DataContext = viewModel,
             };
+            window.Opened += async (_, _) => await viewModel.InitializeAsync();
+            desktop.MainWindow = window;
         }
 
         base.OnFrameworkInitializationCompleted();

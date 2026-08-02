@@ -14,6 +14,8 @@ internal static class VignettePakEditor
         "Ancestors/Content/Prod/Data/TimeOfDay/Curves/VL01E01/VL01E01_Vignette_Intensity.uasset";
 
     private const string SourcePakName = "VL01E01.pak";
+    private const int MaximumAssetSize = 1024 * 1024;
+    private const int MaximumManagedPatchSize = 2 * 1024 * 1024;
     private const string OriginalAssetSha256 =
         "7F7455754E37BED619F6A1C24D6F3849D999B71DCFA8FD56DAD52B3BCF307C73";
     private const string LegacyPatchSha256 =
@@ -37,18 +39,14 @@ internal static class VignettePakEditor
                         continue;
                     }
 
-                    byte[] candidate = PakV5Archive.ReadFile(path, AssetPath);
+                    byte[] candidate = PakV5Archive.ReadFile(path, AssetPath, MaximumAssetSize);
                     if (!TryReadPercent(original, candidate, out decimal percent))
                     {
                         return new VignetteModSnapshot(null, false, "Conflicting vignette patch");
                     }
 
                     string name = Path.GetFileName(path);
-                    bool managed = string.Equals(name, OwnPatchName, StringComparison.OrdinalIgnoreCase) ||
-                                   string.Equals(
-                                       Sha256(File.ReadAllBytes(path)),
-                                       LegacyPatchSha256,
-                                       StringComparison.Ordinal);
+                    bool managed = IsManagedPatch(path, name, candidate);
                     overrides.Add((path, percent, managed));
                 }
                 catch (Exception exception) when (IsExpectedPakException(exception))
@@ -85,8 +83,9 @@ internal static class VignettePakEditor
     {
         GameInstallationSnapshot installation = snapshot.Installation
             ?? throw new InvalidOperationException("The game installation was not detected.");
-        VignetteModSnapshot state = snapshot.Vignette
+        _ = snapshot.Vignette
             ?? throw new InvalidOperationException("The vignette asset was not inspected.");
+        VignetteModSnapshot state = Inspect(installation.InstallDirectory);
         if (!state.IsEditable)
         {
             throw new InvalidOperationException(state.Status);
@@ -141,7 +140,7 @@ internal static class VignettePakEditor
 
     private static byte[] ReadOriginalAsset(string sourcePath)
     {
-        byte[] original = PakV5Archive.ReadFile(sourcePath, AssetPath);
+        byte[] original = PakV5Archive.ReadFile(sourcePath, AssetPath, MaximumAssetSize);
         if (!string.Equals(Sha256(original), OriginalAssetSha256, StringComparison.Ordinal))
         {
             throw new InvalidDataException("The vignette source asset is not supported.");
@@ -150,9 +149,27 @@ internal static class VignettePakEditor
         return original;
     }
 
+    internal static bool IsManagedPatch(string path, string name, byte[] asset)
+    {
+        FileInfo file = new(path);
+        if (file.Length > MaximumManagedPatchSize)
+        {
+            return false;
+        }
+
+        byte[] package = File.ReadAllBytes(path);
+        if (string.Equals(name, OwnPatchName, StringComparison.OrdinalIgnoreCase))
+        {
+            return package.AsSpan().SequenceEqual(PakV5Archive.BuildSingleFile(AssetPath, asset));
+        }
+
+        return string.Equals(name, LegacyPatchName, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(Sha256(package), LegacyPatchSha256, StringComparison.Ordinal);
+    }
+
     internal static byte[] Scale(byte[] original, decimal percent)
     {
-        byte[] updated = original.ToArray();
+        byte[] updated = [.. original];
         float multiplier = (float)(percent / 100);
         foreach (int offset in ScaleOffsets)
         {

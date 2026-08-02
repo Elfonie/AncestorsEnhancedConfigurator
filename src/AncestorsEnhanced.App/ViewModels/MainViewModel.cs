@@ -9,29 +9,6 @@ namespace AncestorsEnhanced.App.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
-    private static readonly HashSet<string> SimpleSettingIds = new(StringComparer.Ordinal)
-    {
-        "motion-blur-quality",
-        "dof-quality",
-        "environment-vignette",
-        "aa-quality",
-        "image-sharpening",
-        "view-distance",
-        "foliage-density",
-        "grass-density",
-        "anisotropic-filtering",
-        "bloom-quality",
-        "chromatic-aberration",
-        "light-shafts",
-        "shadow-quality",
-        "startup-videos",
-        "game-fullscreen-resolution",
-        "game-frame-rate",
-        "game-shadow-preset",
-        "game-post-processing-preset",
-        "game-foliage-preset",
-    };
-
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
@@ -41,70 +18,70 @@ public partial class MainViewModel : ViewModelBase
     private SettingsChangePlan? _reviewPlan;
 
     [ObservableProperty]
-    private string _detectionStatus = "Not checked yet";
+    public partial string DetectionStatus { get; set; } = "Not checked yet";
 
     [ObservableProperty]
-    private string _inspectionTime = "";
+    public partial string InstallationPath { get; set; } = "Not detected";
 
     [ObservableProperty]
-    private string _installationPath = "Not detected";
+    public partial string InstallationDetails { get; set; } = "Store and build unknown";
 
     [ObservableProperty]
-    private string _installationDetails = "Store and build unknown";
+    public partial string UserDataPath { get; set; } = "Not detected";
 
     [ObservableProperty]
-    private string _userDataPath = "Not detected";
+    public partial string BinarySettingsPath { get; set; } = "Not detected";
 
     [ObservableProperty]
-    private string _binarySettingsPath = "Not detected";
+    public partial string BinarySettingsStatus { get; set; } = "Not inspected";
 
     [ObservableProperty]
-    private string _binarySettingsStatus = "Not inspected";
+    public partial IReadOnlyList<FeatureGroupRowViewModel> FeatureGroups { get; set; } = [];
 
     [ObservableProperty]
-    private IReadOnlyList<FeatureGroupRowViewModel> _featureGroups = [];
+    public partial bool IsAdvancedMode { get; set; }
 
     [ObservableProperty]
-    private bool _isAdvancedMode;
+    public partial string SearchText { get; set; } = "";
 
     [ObservableProperty]
-    private string _searchText = "";
+    public partial string ViewModeTitle { get; set; } = "Simple";
 
     [ObservableProperty]
-    private string _viewModeTitle = "Simple";
+    public partial string ViewModeDescription { get; set; } = "The settings that make the clearest visual difference";
 
     [ObservableProperty]
-    private string _viewModeDescription = "The settings that make the clearest visual difference";
+    public partial IReadOnlyList<PendingChangeRowViewModel> PendingChanges { get; set; } = [];
 
     [ObservableProperty]
-    private IReadOnlyList<PendingChangeRowViewModel> _pendingChanges = [];
+    public partial IReadOnlyList<ChangeReviewRowViewModel> ReviewChanges { get; set; } = [];
 
     [ObservableProperty]
-    private IReadOnlyList<ChangeReviewRowViewModel> _reviewChanges = [];
+    public partial bool IsReviewingChanges { get; set; }
 
     [ObservableProperty]
-    private bool _isReviewingChanges;
+    public partial string OperationMessage { get; set; } = "Ready. Nothing is written until you review and confirm.";
 
     [ObservableProperty]
-    private string _operationMessage = "Ready. Nothing is written until you review and confirm.";
+    public partial string OperationAccent { get; set; } = "#8FA1AD";
 
     [ObservableProperty]
-    private string _operationAccent = "#8FA1AD";
+    public partial bool CanRevertLast { get; set; }
 
     [ObservableProperty]
-    private bool _canRevertLast;
+    public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
-    private IReadOnlyList<ConfigurationFileRowViewModel> _configurationFiles = [];
+    public partial IReadOnlyList<ConfigurationFileRowViewModel> ConfigurationFiles { get; set; } = [];
 
     [ObservableProperty]
-    private IReadOnlyList<SettingRowViewModel> _settings = [];
+    public partial IReadOnlyList<SettingRowViewModel> Settings { get; set; } = [];
 
     [ObservableProperty]
-    private IReadOnlyList<PakFileRowViewModel> _pakFiles = [];
+    public partial IReadOnlyList<PakFileRowViewModel> PakFiles { get; set; } = [];
 
     [ObservableProperty]
-    private IReadOnlyList<NoticeRowViewModel> _notices = [];
+    public partial IReadOnlyList<NoticeRowViewModel> Notices { get; set; } = [];
 
     public MainViewModel(
         IReadOnlyGameInspector inspector,
@@ -116,8 +93,8 @@ public partial class MainViewModel : ViewModelBase
         _settingsEditor = settingsEditor;
 
         ProductName = "Ancestors Enhanced Configurator";
-        Phase = "0.4 · System.sav editing";
-        RefreshFromDisk();
+        string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.5.0";
+        Phase = $"{version} · safe editing";
     }
 
     public string ProductName { get; }
@@ -126,13 +103,19 @@ public partial class MainViewModel : ViewModelBase
 
     public bool HasPendingChanges => PendingChanges.Count > 0;
 
-    public bool CanUndo => CanRevertLast && !HasPendingChanges && !IsReviewingChanges;
+    public bool CanUndo => CanRevertLast && !HasPendingChanges && !IsReviewingChanges && !IsBusy;
 
     public bool ShowPendingActions => HasPendingChanges && !IsReviewingChanges;
 
     public bool ShowReviewActions => IsReviewingChanges;
 
-    public bool CanEditSettings => !IsReviewingChanges;
+    public bool CanEditSettings => !IsReviewingChanges && !IsBusy;
+
+    public bool CanRestoreGameDefaults =>
+        !IsBusy &&
+        !HasPendingChanges &&
+        !IsReviewingChanges &&
+        _editors.Values.Any(editor => editor.HasActiveOverride);
 
     public bool IsSimpleMode => !IsAdvancedMode;
 
@@ -157,23 +140,34 @@ public partial class MainViewModel : ViewModelBase
         PendingChanges.Take(3).Select(change => $"{change.Name}: {change.DesiredValue}")) +
         (PendingChanges.Count > 3 ? $" · +{PendingChanges.Count - 3} more" : string.Empty);
 
-    public int ConfigurationFileCount => ConfigurationFiles.Count;
-
     public int SettingCount => Settings.Count;
 
-    public int PakFileCount => PakFiles.Count;
+    public async Task InitializeAsync()
+    {
+        if (await RefreshFromDiskAsync())
+        {
+            ShowMessage("Configuration loaded. No files were changed.", "#8FA1AD");
+        }
+    }
 
     [RelayCommand]
-    private void Refresh()
+    private async Task RefreshAsync()
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
         if (HasPendingChanges)
         {
             ShowMessage("Apply or discard the pending changes before refreshing.", "#D6BC84");
             return;
         }
 
-        RefreshFromDisk();
-        ShowMessage("Configuration reloaded from disk.", "#62C9A7");
+        if (await RefreshFromDiskAsync())
+        {
+            ShowMessage("Configuration reloaded from disk.", "#62C9A7");
+        }
     }
 
     [RelayCommand]
@@ -196,6 +190,31 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void RestoreGameDefaults()
+    {
+        if (!CanRestoreGameDefaults)
+        {
+            ShowMessage(
+                _editors.Values.Any(editor => editor.HasActiveOverride)
+                    ? "Apply or discard the current work before restoring game defaults."
+                    : "No configurator overrides are active.",
+                "#8FA1AD");
+            return;
+        }
+
+        foreach (SettingEditorViewModel editor in _editors.Values.Where(editor => editor.HasActiveOverride))
+        {
+            editor.UseGameDefault();
+        }
+
+        UpdatePendingChanges();
+        OpenReview();
+        ShowMessage(
+            "Review the complete removal of configurator overrides, then confirm.",
+            "#78AEE8");
+    }
+
+    [RelayCommand]
     private void OpenReview()
     {
         if (_snapshot is null || !HasPendingChanges)
@@ -205,19 +224,16 @@ public partial class MainViewModel : ViewModelBase
 
         try
         {
-            SettingChangeRequest[] requests = _editors
+            SettingChangeRequest[] requests = [.. _editors
                 .Where(pair => pair.Value.HasChanges)
-                .Select(pair => pair.Value.CreateRequest(
-                    pair.Key,
-                    FindSettingName(pair.Key)))
-                .ToArray();
+                .Select(pair => pair.Value.CreateRequest(FindSettingName(pair.Key)))];
             _reviewPlan = _settingsEditor.CreatePlan(_snapshot, requests);
             ReviewChanges = _reviewPlan.Changes
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
                     $"{change.FileName} · {change.Key}",
-                    change.Before ?? "Game preset",
-                    change.After ?? "Game preset"))
+                    change.Before ?? "Game default",
+                    change.After ?? "Game default"))
                 .ToArray();
             IsReviewingChanges = true;
             ShowMessage("Check every value, then confirm the write.", "#78AEE8");
@@ -236,7 +252,7 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void ConfirmApply()
+    private async Task ConfirmApplyAsync()
     {
         SettingsChangePlan? plan = _reviewPlan;
         if (plan is null || !IsReviewingChanges)
@@ -247,36 +263,52 @@ public partial class MainViewModel : ViewModelBase
         _reviewPlan = null;
         IsReviewingChanges = false;
         ReviewChanges = [];
+        IsBusy = true;
+        ShowMessage("Applying the reviewed changes...", "#78AEE8");
         SettingsOperationResult result;
         try
         {
-            result = _settingsEditor.Apply(plan);
+            result = await Task.Run(() => _settingsEditor.Apply(plan));
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
             ShowMessage($"No changes were kept: {exception.Message}", "#D6BC84");
             return;
         }
+        finally
+        {
+            IsBusy = false;
+        }
         if (result.Succeeded)
         {
-            RefreshFromDisk();
+            await RefreshFromDiskAsync();
         }
 
         ShowMessage(result.Message, result.Succeeded ? "#62C9A7" : "#D6BC84");
     }
 
     [RelayCommand]
-    private void RevertLast()
+    private async Task RevertLastAsync()
     {
         if (_snapshot is null || HasPendingChanges || IsReviewingChanges)
         {
             return;
         }
 
-        SettingsOperationResult result = _settingsEditor.RevertLast(_snapshot);
+        IsBusy = true;
+        ShowMessage("Restoring the last configurator backup...", "#78AEE8");
+        SettingsOperationResult result;
+        try
+        {
+            result = await Task.Run(() => _settingsEditor.RevertLast(_snapshot));
+        }
+        finally
+        {
+            IsBusy = false;
+        }
         if (result.Succeeded)
         {
-            RefreshFromDisk();
+            await RefreshFromDiskAsync();
         }
 
         ShowMessage(result.Message, result.Succeeded ? "#62C9A7" : "#D6BC84");
@@ -292,43 +324,78 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnCanRevertLastChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
 
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanEditSettings));
+        OnPropertyChanged(nameof(CanRestoreGameDefaults));
+    }
+
     partial void OnIsReviewingChangesChanged(bool value)
     {
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(ShowPendingActions));
         OnPropertyChanged(nameof(ShowReviewActions));
         OnPropertyChanged(nameof(CanEditSettings));
+        OnPropertyChanged(nameof(CanRestoreGameDefaults));
     }
 
     partial void OnReviewChangesChanged(IReadOnlyList<ChangeReviewRowViewModel> value) =>
         OnPropertyChanged(nameof(ReviewSummary));
 
-    private void RefreshFromDisk()
+    private async Task<bool> RefreshFromDiskAsync()
     {
         CloseReview();
-        _snapshot = _inspector.Inspect();
-        GameInspectionSnapshot snapshot = _snapshot;
+        IsBusy = true;
+        DetectionStatus = "Scanning game files";
+        ShowMessage("Reading the installation and settings...", "#78AEE8");
+        try
+        {
+            GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
+            _snapshot = snapshot;
+            DetectionStatus = snapshot.IsGameDetected
+                ? snapshot.HasErrors
+                    ? "Ancestors detected with problems"
+                    : "Ancestors is ready"
+                : "Ancestors installation not detected";
+            InstallationPath = snapshot.Installation?.InstallDirectory ?? "Not detected";
+            InstallationDetails = snapshot.Installation is null
+                ? "Store and build unknown"
+                : FormatInstallation(snapshot.Installation);
+            UserDataPath = snapshot.UserDataDirectory ?? "Not detected";
+            BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
+            BinarySettingsStatus = snapshot.BinarySettingsFile?.FormatStatus ?? "Not inspected";
 
-        DetectionStatus = snapshot.IsGameDetected
-            ? snapshot.HasErrors
-                ? "Ancestors detected with problems"
-                : "Ancestors is ready"
-            : "Ancestors installation not detected";
-        InspectionTime = $"Checked {snapshot.InspectedAtUtc.ToLocalTime():G}";
-        InstallationPath = snapshot.Installation?.InstallDirectory ?? "Not detected";
-        InstallationDetails = snapshot.Installation is null
-            ? "Store and build unknown"
-            : FormatInstallation(snapshot.Installation);
-        UserDataPath = snapshot.UserDataDirectory ?? "Not detected";
-        BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
-        BinarySettingsStatus = snapshot.BinarySettingsFile?.FormatStatus ?? "Not inspected";
-
-        _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
-        RebuildEditors();
-        ApplyViewMode();
-        LoadTechnicalDetails(snapshot);
-        CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
-        UpdatePendingChanges();
+            _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
+            RebuildEditors();
+            ApplyViewMode();
+            LoadTechnicalDetails(snapshot);
+            CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
+            UpdatePendingChanges();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _snapshot = null;
+            DetectionStatus = "Scan failed";
+            InstallationPath = "Not available";
+            InstallationDetails = "The previous result was cleared";
+            UserDataPath = "Not available";
+            BinarySettingsPath = "Not available";
+            BinarySettingsStatus = "Not inspected";
+            FeatureGroups = [];
+            ConfigurationFiles = [];
+            Settings = [];
+            PakFiles = [];
+            Notices = [new NoticeRowViewModel("Error", exception.Message)];
+            CanRevertLast = false;
+            ShowMessage($"Scan failed: {exception.Message}", "#D6BC84");
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private void RebuildEditors()
@@ -356,7 +423,7 @@ public partial class MainViewModel : ViewModelBase
     {
         ViewModeTitle = IsAdvancedMode ? "Advanced" : "Simple";
         ViewModeDescription = IsAdvancedMode
-            ? "Every known renderer value with search and technical details"
+            ? "Editable controls and useful technical values"
             : "The settings that make the clearest visual difference";
 
         string query = IsAdvancedMode ? SearchText.Trim() : "";
@@ -372,13 +439,16 @@ public partial class MainViewModel : ViewModelBase
         FeatureGroupSnapshot group,
         string query)
     {
-        FeatureSettingRowViewModel[] settings = group.Settings
-            .Where(setting => IsAdvancedMode || SimpleSettingIds.Contains(setting.Id))
+        FeatureSettingRowViewModel[] settings = [.. group.Settings
+            .Where(setting => IsAdvancedMode
+                ? SettingDefinitionCatalog.IsShownInAdvancedMode(setting)
+                : SettingDefinitionCatalog.IsShownInSimpleMode(setting.Id))
             .Where(setting => MatchesSearch(group, setting, query))
             .Select(setting => new FeatureSettingRowViewModel(
                 setting.Name,
                 setting.Value,
                 setting.Description,
+                setting.Source,
                 setting.TechnicalKey ?? setting.Source,
                 GetAccentColor(setting.State),
                 IsAdvancedMode,
@@ -387,14 +457,13 @@ public partial class MainViewModel : ViewModelBase
                     .Select(value => new SettingPresetValueRowViewModel(value.Name, value.Value))
                     .ToArray() ?? [],
                 setting.ActivePresetName,
-                _editors.GetValueOrDefault(setting.Id)))
-            .ToArray();
+                _editors.GetValueOrDefault(setting.Id)))];
 
         return new FeatureGroupRowViewModel(
             group.Id,
             group.Category,
             group.Name,
-            group.Summary,
+            IsAdvancedMode ? group.Summary : group.SimpleSummary ?? group.Summary,
             group.Description,
             GetAccentColor(group.State),
             settings.Length == 1 ? "1 option" : $"{settings.Length} options",
@@ -451,9 +520,7 @@ public partial class MainViewModel : ViewModelBase
                 notice.Message))
             .ToArray();
 
-        OnPropertyChanged(nameof(ConfigurationFileCount));
         OnPropertyChanged(nameof(SettingCount));
-        OnPropertyChanged(nameof(PakFileCount));
     }
 
     private void OnEditorChanged(object? sender, EventArgs eventArgs)
@@ -479,6 +546,7 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(PendingDetails));
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(ShowPendingActions));
+        OnPropertyChanged(nameof(CanRestoreGameDefaults));
     }
 
     private void CloseReview()

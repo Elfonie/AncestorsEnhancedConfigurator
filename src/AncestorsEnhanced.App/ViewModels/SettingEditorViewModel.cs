@@ -10,10 +10,10 @@ public partial class SettingEditorViewModel : ViewModelBase
     private readonly string? _initialValue;
 
     [ObservableProperty]
-    private bool _useCustomValue;
+    public partial bool UseCustomValue { get; set; }
 
     [ObservableProperty]
-    private bool _toggleValue;
+    public partial bool ToggleValue { get; set; }
 
     [ObservableProperty]
     private decimal _numberValue;
@@ -28,7 +28,7 @@ public partial class SettingEditorViewModel : ViewModelBase
         _initialValue = Normalize(snapshot.CurrentOverride);
         UseCustomValue = snapshot.CurrentOverride is not null;
 
-        string startingValue = snapshot.CurrentOverride ?? snapshot.DefaultValue;
+        string startingValue = StartingValue();
         ToggleValue = startingValue == "1";
         NumberValue = decimal.TryParse(
             startingValue,
@@ -73,18 +73,35 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public bool ShowOverrideToggle => !_snapshot.IsDirect;
 
-    public string ToggleLabel => ToggleValue ? "On" : "Off";
+    public bool CanSetCustomValue => _snapshot.CanSetCustomValue;
 
-    public string ModeLabel => IsPresence
-        ? UseCustomValue ? "Videos skipped" : "Game default"
-        : UseCustomValue ? "Custom value" : "Game controlled";
+    public bool IsCustomEditorEnabled => UseCustomValue && CanSetCustomValue;
 
-    public bool HasChanges => !string.Equals(
+    public bool HasUnsupportedCurrentValue => UseCustomValue && !CanSetCustomValue;
+
+    public bool HasActiveOverride => ShowOverrideToggle && _initialValue is not null;
+
+    public bool HasKnownGameValue => _snapshot.GameControlledValue is not null;
+
+    public bool ShowValueEditor =>
+        CanSetCustomValue &&
+        (_snapshot.IsDirect || UseCustomValue || HasKnownGameValue);
+
+    public bool ShowUnknownGameValue =>
+        IsRegularEditor &&
+        ShowOverrideToggle &&
+        !UseCustomValue &&
+        !HasKnownGameValue &&
+        CanSetCustomValue;
+
+    public bool HasChanges => !HasUnsupportedCurrentValue && !string.Equals(
             _snapshot.IsDirect || UseCustomValue ? DesiredValue : null,
         _initialValue,
         StringComparison.Ordinal);
 
-    public string DesiredSummary => IsPresence
+    public string DesiredSummary => HasUnsupportedCurrentValue
+        ? "Unsupported override; reset available"
+        : IsPresence
         ? UseCustomValue ? "Skip videos" : "Use game default"
         : UseCustomValue
         ? IsChoice
@@ -92,11 +109,10 @@ public partial class SettingEditorViewModel : ViewModelBase
             : IsToggle
                 ? ToggleValue ? "On" : "Off"
                 : $"{DesiredValue ?? "Invalid value"}{Unit}"
-        : "Use game preset";
+        : "Use game default";
 
-    public SettingChangeRequest CreateRequest(string settingId, string displayName) =>
+    public SettingChangeRequest CreateRequest(string displayName) =>
         new(
-            settingId,
             displayName,
             _snapshot.FileName,
             _snapshot.Section,
@@ -105,7 +121,7 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public void Reset()
     {
-        string startingValue = _snapshot.CurrentOverride ?? _snapshot.DefaultValue;
+        string startingValue = StartingValue();
         UseCustomValue = _snapshot.CurrentOverride is not null;
         ToggleValue = startingValue == "1";
         if (decimal.TryParse(
@@ -122,11 +138,25 @@ public partial class SettingEditorViewModel : ViewModelBase
         NotifyStateChanged();
     }
 
-    partial void OnUseCustomValueChanged(bool value) => NotifyStateChanged();
+    public void UseGameDefault()
+    {
+        if (ShowOverrideToggle)
+        {
+            UseCustomValue = false;
+        }
+    }
+
+    partial void OnUseCustomValueChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsCustomEditorEnabled));
+        OnPropertyChanged(nameof(HasUnsupportedCurrentValue));
+        OnPropertyChanged(nameof(ShowValueEditor));
+        OnPropertyChanged(nameof(ShowUnknownGameValue));
+        NotifyStateChanged();
+    }
 
     partial void OnToggleValueChanged(bool value)
     {
-        OnPropertyChanged(nameof(ToggleLabel));
         NotifyStateChanged();
     }
 
@@ -162,9 +192,13 @@ public partial class SettingEditorViewModel : ViewModelBase
         return value;
     }
 
+    private string StartingValue() =>
+        _snapshot.CurrentOverride ??
+        _snapshot.GameControlledValue ??
+        _snapshot.DefaultValue;
+
     private void NotifyStateChanged()
     {
-        OnPropertyChanged(nameof(ModeLabel));
         OnPropertyChanged(nameof(HasChanges));
         OnPropertyChanged(nameof(DesiredSummary));
         Changed?.Invoke(this, EventArgs.Empty);

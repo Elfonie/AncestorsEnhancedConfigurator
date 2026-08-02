@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 namespace AncestorsEnhanced.Infrastructure.FileSystem;
 
 internal sealed class PhysicalReadOnlyFileSystem : IReadOnlyFileSystem
@@ -33,9 +31,4 @@ internal sealed class PhysicalReadOnlyFileSystem : IReadOnlyFileSystem
             .ToArray();
     }
 
-    public string ComputeSha256(string path)
-    {
-        using FileStream stream = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream));
-    }
 }

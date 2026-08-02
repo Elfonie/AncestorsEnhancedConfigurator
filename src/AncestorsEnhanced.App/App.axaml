@@ -2,7 +2,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="AncestorsEnhanced.App.App"
              RequestedThemeVariant="Default">
+    <Application.Resources>
+        <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0C1115" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#151C22" />
+        <SolidColorBrush x:Key="RaisedSurfaceBrush" Color="#161D23" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#273139" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F2F5F7" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#71828D" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#62C9A7" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#D6BC84" />
+        <SolidColorBrush x:Key="InfoBrush" Color="#78C7E8" />
+    </Application.Resources>
     <Application.Styles>
         <FluentTheme />
+        <Style Selector="ToggleButton.mode">
+            <Setter Property="Padding" Value="18,8" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="ToggleButton.mode:checked">
+            <Setter Property="Background" Value="#315E78" />
+            <Setter Property="Foreground" Value="#F4FAFD" />
+        </Style>
     </Application.Styles>
 </Application>

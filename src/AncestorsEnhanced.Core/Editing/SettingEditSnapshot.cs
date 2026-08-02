@@ -13,4 +13,6 @@ public sealed record SettingEditSnapshot(
     IReadOnlyList<SettingChoice>? Choices = null,
     SettingFileTarget Target = SettingFileTarget.Ini,
     string? Unit = null,
-    bool IsDirect = false);
+    bool IsDirect = false,
+    bool CanSetCustomValue = true,
+    string? GameControlledValue = null);

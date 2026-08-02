@@ -28,6 +28,31 @@ public sealed class VignettePakEditorTests
         Assert.False(VignettePakEditor.TryReadPercent(original, changed, out _));
     }
 
+    [Fact]
+    public void OwnFileNameDoesNotClaimAPackageWithAdditionalAssets()
+    {
+        byte[] asset = CreateAsset();
+        byte[] pak = PakV5Archive.BuildFiles(
+        [
+            (VignettePakEditor.AssetPath, asset),
+            ("Ancestors/Content/Other.uasset", new byte[] { 1, 2, 3 }),
+        ]);
+        string path = Path.Combine(Path.GetTempPath(), $"aec-vignette-{Guid.NewGuid():N}.pak");
+        try
+        {
+            File.WriteAllBytes(path, pak);
+
+            Assert.False(VignettePakEditor.IsManagedPatch(
+                path,
+                VignettePakEditor.OwnPatchName,
+                asset));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static byte[] CreateAsset()
     {
         byte[] asset = new byte[0x500];

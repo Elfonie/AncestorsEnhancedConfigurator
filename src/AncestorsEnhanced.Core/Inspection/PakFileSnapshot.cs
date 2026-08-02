@@ -5,5 +5,4 @@ public sealed record PakFileSnapshot(
     string FullPath,
     long SizeBytes,
     DateTimeOffset LastWriteTimeUtc,
-    PakClassification Classification,
-    string? Sha256);
+    PakClassification Classification);

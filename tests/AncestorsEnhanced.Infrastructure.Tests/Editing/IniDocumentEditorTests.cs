@@ -54,5 +54,5 @@ public sealed class IniDocumentEditorTests
     }
 
     private static SettingChangeRequest Change(string key, string? value) =>
-        new(key, key, "Engine.ini", "SystemSettings", key, value);
+        new(key, "Engine.ini", "SystemSettings", key, value);
 }

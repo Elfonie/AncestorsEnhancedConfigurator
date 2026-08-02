@@ -16,7 +16,7 @@ public sealed class SnappyBlockCodecTests
     [Fact]
     public void LiteralEncodingRoundTripsLargePayload()
     {
-        byte[] payload = Enumerable.Range(0, 12104).Select(index => (byte)(index % 251)).ToArray();
+        byte[] payload = [.. Enumerable.Range(0, 12104).Select(index => (byte)(index % 251))];
 
         byte[] encoded = SnappyBlockCodec.EncodeLiteral(payload);
 

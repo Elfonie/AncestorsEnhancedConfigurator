@@ -7,7 +7,7 @@ public partial class FeatureGroupRowViewModel : ViewModelBase
 {
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Chevron))]
-    private bool _isExpanded;
+    public partial bool IsExpanded { get; set; }
 
     public FeatureGroupRowViewModel(
         string id,
