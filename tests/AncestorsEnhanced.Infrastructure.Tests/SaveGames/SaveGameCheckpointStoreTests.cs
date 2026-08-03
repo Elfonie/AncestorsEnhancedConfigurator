@@ -1,0 +1,82 @@
+﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.SaveGames;
+
+namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
+
+public sealed class SaveGameCheckpointStoreTests : IDisposable
+{
+    private readonly string _temporaryDirectory = Path.Combine(
+        Path.GetTempPath(),
+        $"ancestors-enhanced-save-tests-{Guid.NewGuid():N}");
+
+    [Fact]
+    public void CreateStoresContentAndManifestValidatesSha256()
+    {
+        string userData = CreateUserData();
+        var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
+        Directory.CreateDirectory(Path.Combine(userData, "SaveGames", "Savegame0.sav.mod"));
+        byte[] content = [1, 2, 3, 4, 5];
+        File.WriteAllBytes(Path.Combine(userData, "SaveGames", "Savegame0.sav"), content);
+
+        string checkpointId = store.Create(userData, 0, content);
+
+        Assert.NotEmpty(checkpointId);
+        byte[] stored = SaveGameCheckpointStore.Read(userData, 0, checkpointId);
+        Assert.Equal(content, stored);
+    }
+
+    [Fact]
+    public void CreateEnforcesTheCheckpointCapByDeletingTheOldest()
+    {
+        string userData = CreateUserData();
+        byte[] content = [1, 2, 3];
+        File.WriteAllBytes(Path.Combine(userData, "SaveGames", "Savegame0.sav"), content);
+        DateTimeOffset first = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset second = new(2026, 8, 1, 12, 0, 1, TimeSpan.Zero);
+        DateTimeOffset third = new(2026, 8, 1, 12, 0, 2, TimeSpan.Zero);
+        var store = new SaveGameCheckpointStore(() => first, maxCheckpointsPerSlot: 2);
+
+        string firstId = store.Create(userData, 0, content);
+        var secondStore = new SaveGameCheckpointStore(() => second, maxCheckpointsPerSlot: 2);
+        string secondId = secondStore.Create(userData, 0, content);
+        var thirdStore = new SaveGameCheckpointStore(() => third, maxCheckpointsPerSlot: 2);
+        string thirdId = thirdStore.Create(userData, 0, content);
+
+        IReadOnlyList<SaveGameCheckpoint> remaining = SaveGameCheckpointStore.ListCheckpoints(userData, 0);
+        Assert.Equal(2, remaining.Count);
+        Assert.DoesNotContain(remaining, checkpoint => checkpoint.Id == firstId);
+        Assert.Contains(remaining, checkpoint => checkpoint.Id == secondId);
+        Assert.Contains(remaining, checkpoint => checkpoint.Id == thirdId);
+    }
+
+    [Fact]
+    public void ReadRefusesACorruptedStoredFile()
+    {
+        string userData = CreateUserData();
+        byte[] content = [9, 9, 9];
+        var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
+
+        string checkpointId = store.Create(userData, 0, content);
+        string checkpointPath = SaveGamePaths.GetCheckpointPath(userData, 0, checkpointId);
+        File.WriteAllBytes(checkpointPath, [1, 1, 1]);
+
+        Assert.Throws<InvalidDataException>(() => SaveGameCheckpointStore.Read(userData, 0, checkpointId));
+    }
+
+    private static readonly DateTimeOffset FixedTime = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+
+    private string CreateUserData()
+    {
+        string userData = Path.Combine(_temporaryDirectory, "Saved");
+        Directory.CreateDirectory(Path.Combine(userData, "SaveGames"));
+        return userData;
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_temporaryDirectory))
+        {
+            Directory.Delete(_temporaryDirectory, recursive: true);
+        }
+    }
+}

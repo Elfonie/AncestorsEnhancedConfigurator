@@ -1,7 +1,9 @@
-using System.Globalization;
+﻿using System.Globalization;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Core.Settings;
+using AncestorsEnhanced.Infrastructure.SaveGames;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -11,6 +13,7 @@ public partial class MainViewModel : ViewModelBase
 {
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
+    private readonly Func<string?, ISaveGameManager> _saveManagerFactory;
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
         new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
@@ -83,23 +86,35 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     public partial IReadOnlyList<NoticeRowViewModel> Notices { get; set; } = [];
 
+    [ObservableProperty]
+    public partial bool IsSaveGamesView { get; set; }
+
+    [ObservableProperty]
+    public partial SaveManagerViewModel? SaveManager { get; set; }
+
     public MainViewModel(
         IReadOnlyGameInspector inspector,
-        IGameSettingsEditor settingsEditor)
+        IGameSettingsEditor settingsEditor,
+        Func<string?, ISaveGameManager>? saveManagerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(settingsEditor);
         _inspector = inspector;
         _settingsEditor = settingsEditor;
+        _saveManagerFactory = saveManagerFactory ?? (d => string.IsNullOrWhiteSpace(d) ? throw new InvalidOperationException("The user-data directory is required.") : new SafeSaveGameManager(d));
 
         ProductName = "Ancestors Enhanced Configurator";
         string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.5.0";
-        Phase = $"{version} · safe editing";
+        Phase = $"{version} Â· safe editing";
     }
 
     public string ProductName { get; }
 
     public string Phase { get; }
+
+    public bool ShowGraphicsView => !IsSaveGamesView;
+
+    public bool ShowSaveGamesView => IsSaveGamesView;
 
     public bool HasPendingChanges => PendingChanges.Count > 0;
 
@@ -136,9 +151,9 @@ public partial class MainViewModel : ViewModelBase
     };
 
     public string PendingDetails => string.Join(
-        " · ",
+        " Â· ",
         PendingChanges.Take(3).Select(change => $"{change.Name}: {change.DesiredValue}")) +
-        (PendingChanges.Count > 3 ? $" · +{PendingChanges.Count - 3} more" : string.Empty);
+        (PendingChanges.Count > 3 ? $" Â· +{PendingChanges.Count - 3} more" : string.Empty);
 
     public int SettingCount => Settings.Count;
 
@@ -175,6 +190,12 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void ShowAdvanced() => IsAdvancedMode = true;
+
+    [RelayCommand]
+    private void ShowGraphics() => IsSaveGamesView = false;
+
+    [RelayCommand]
+    private void ShowSaveGames() => IsSaveGamesView = true;
 
     [RelayCommand]
     private void DiscardChanges()
@@ -231,7 +252,7 @@ public partial class MainViewModel : ViewModelBase
             ReviewChanges = _reviewPlan.Changes
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
-                    $"{change.FileName} · {change.Key}",
+                    $"{change.FileName} Â· {change.Key}",
                     change.Before ?? "Game default",
                     change.After ?? "Game default"))
                 .ToArray();
@@ -320,6 +341,12 @@ public partial class MainViewModel : ViewModelBase
         ApplyViewMode();
     }
 
+    partial void OnIsSaveGamesViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowSaveGamesView));
+    }
+
     partial void OnSearchTextChanged(string value) => ApplyViewMode();
 
     partial void OnCanRevertLastChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
@@ -371,6 +398,7 @@ public partial class MainViewModel : ViewModelBase
             ApplyViewMode();
             LoadTechnicalDetails(snapshot);
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
+            SaveManager = await CreateSaveManagerAsync(snapshot.UserDataDirectory);
             UpdatePendingChanges();
             return true;
         }
@@ -397,6 +425,28 @@ public partial class MainViewModel : ViewModelBase
             IsBusy = false;
         }
     }
+
+    private async Task<SaveManagerViewModel?> CreateSaveManagerAsync(string? userDataDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(userDataDirectory))
+        {
+            return null;
+        }
+
+        ISaveGameManager manager = _saveManagerFactory(userDataDirectory);
+        var viewModel = new SaveManagerViewModel(manager);
+        try
+        {
+            SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
+            viewModel.Refresh(snapshot);
+            return viewModel;
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            return new SaveManagerViewModel(manager);
+        }
+    }
+
 
     private void RebuildEditors()
     {
@@ -488,7 +538,7 @@ public partial class MainViewModel : ViewModelBase
         ConfigurationFiles = snapshot.ConfigurationFiles
             .Select(file => new ConfigurationFileRowViewModel(
                 file.Name,
-                $"{FormatBytes(file.SizeBytes ?? 0)} · {file.Settings.Count} readable settings",
+                $"{FormatBytes(file.SizeBytes ?? 0)} Â· {file.Settings.Count} readable settings",
                 file.ReadError ?? "Read successfully"))
             .ToArray();
 
@@ -505,7 +555,7 @@ public partial class MainViewModel : ViewModelBase
         PakFiles = snapshot.PakFiles
             .Select(file => new PakFileRowViewModel(
                 file.Name,
-                $"{FormatBytes(file.SizeBytes)} · {file.LastWriteTimeUtc.ToLocalTime():g}",
+                $"{FormatBytes(file.SizeBytes)} Â· {file.LastWriteTimeUtc.ToLocalTime():g}",
                 file.Classification switch
                 {
                     PakClassification.BaseGame => "Known base-game package",
