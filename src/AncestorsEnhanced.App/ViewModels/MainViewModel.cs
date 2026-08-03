@@ -105,7 +105,7 @@ public partial class MainViewModel : ViewModelBase
 
         ProductName = "Ancestors Enhanced Configurator";
         string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.5.0";
-        Phase = $"{version} Â· safe editing";
+        Phase = $"{version} · safe editing";
     }
 
     public string ProductName { get; }
@@ -155,9 +155,9 @@ public partial class MainViewModel : ViewModelBase
     };
 
     public string PendingDetails => string.Join(
-        " Â· ",
+        " · ",
         PendingChanges.Take(3).Select(change => $"{change.Name}: {change.DesiredValue}")) +
-        (PendingChanges.Count > 3 ? $" Â· +{PendingChanges.Count - 3} more" : string.Empty);
+        (PendingChanges.Count > 3 ? $" · +{PendingChanges.Count - 3} more" : string.Empty);
 
     public int SettingCount => Settings.Count;
 
@@ -256,7 +256,7 @@ public partial class MainViewModel : ViewModelBase
             ReviewChanges = _reviewPlan.Changes
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
-                    $"{change.FileName} Â· {change.Key}",
+                    $"{change.FileName} · {change.Key}",
                     change.Before ?? "Game default",
                     change.After ?? "Game default"))
                 .ToArray();
@@ -444,7 +444,8 @@ public partial class MainViewModel : ViewModelBase
         }
 
         ISaveGameManager manager = _saveManagerFactory(userDataDirectory);
-        var viewModel = new SaveManagerViewModel(manager);
+        var watchdog = new SaveGameWatchdog(userDataDirectory);
+        var viewModel = new SaveManagerViewModel(manager, watchdog);
         try
         {
             SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
@@ -453,7 +454,7 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
-            return new SaveManagerViewModel(manager);
+            return new SaveManagerViewModel(manager, watchdog);
         }
     }
 
@@ -548,7 +549,7 @@ public partial class MainViewModel : ViewModelBase
         ConfigurationFiles = snapshot.ConfigurationFiles
             .Select(file => new ConfigurationFileRowViewModel(
                 file.Name,
-                $"{FormatBytes(file.SizeBytes ?? 0)} Â· {file.Settings.Count} readable settings",
+                $"{FormatBytes(file.SizeBytes ?? 0)} · {file.Settings.Count} readable settings",
                 file.ReadError ?? "Read successfully"))
             .ToArray();
 
@@ -565,7 +566,7 @@ public partial class MainViewModel : ViewModelBase
         PakFiles = snapshot.PakFiles
             .Select(file => new PakFileRowViewModel(
                 file.Name,
-                $"{FormatBytes(file.SizeBytes)} Â· {file.LastWriteTimeUtc.ToLocalTime():g}",
+                $"{FormatBytes(file.SizeBytes)} · {file.LastWriteTimeUtc.ToLocalTime():g}",
                 file.Classification switch
                 {
                     PakClassification.BaseGame => "Known base-game package",

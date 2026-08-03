@@ -15,6 +15,7 @@ Portable graphics configurator for Ancestors The Humankind Odyssey
 * Startup video control
 * Vignette strength from 0 to 100 percent
 * Save Manager: keep and load old save states per slot
+* Auto-Backup Watchdog: checks into the background whenever the game saves
 
 The Vignette control reads the verified original asset from the installed game and creates a separate PAK patch. Original game PAK files are never changed. Unknown and conflicting vignette patches disable this control.
 

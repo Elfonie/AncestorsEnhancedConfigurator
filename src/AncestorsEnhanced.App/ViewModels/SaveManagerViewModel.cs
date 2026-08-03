@@ -4,9 +4,10 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace AncestorsEnhanced.App.ViewModels;
 
-public partial class SaveManagerViewModel : ViewModelBase
+public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 {
     private readonly ISaveGameManager _manager;
+    private readonly ISaveGameWatchdog? _watchdog;
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = "No save games loaded yet.";
@@ -20,16 +21,43 @@ public partial class SaveManagerViewModel : ViewModelBase
     [ObservableProperty]
     public partial bool IsBusy { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsWatchdogEnabled { get; set; }
+
+    private int _cooldownMinutes = 5;
+
+    public int CooldownMinutes
+    {
+        get => _cooldownMinutes;
+        set
+        {
+            if (SetProperty(ref _cooldownMinutes, value))
+            {
+                if (_watchdog is not null)
+                {
+                    _watchdog.Cooldown = TimeSpan.FromMinutes(value);
+                }
+            }
+        }
+    }
+
     public string SteamCloudWarning { get; } =
         "This game uses Steam Cloud. A loaded checkpoint can be overwritten by the cloud on the next start. Pause Steam Cloud or go offline before restoring a save.";
 
-    public SaveManagerViewModel(ISaveGameManager manager)
+    public SaveManagerViewModel(ISaveGameManager manager, ISaveGameWatchdog? watchdog = null)
     {
         ArgumentNullException.ThrowIfNull(manager);
         _manager = manager;
+        _watchdog = watchdog;
+        if (_watchdog is not null)
+        {
+            _watchdog.CheckpointCreated += OnWatchdogCheckpointCreated;
+        }
     }
 
     public bool HasSlots => Slots.Count > 0;
+
+    public int[] CooldownChoices { get; } = [5, 10, 20];
 
     public bool HasNoSlots => !HasSlots;
 
@@ -137,9 +165,41 @@ public partial class SaveManagerViewModel : ViewModelBase
         await RunOperation(() => _manager.LoadCheckpoint(slotNumber, checkpointId));
     }
 
+    public void Dispose()
+    {
+        GC.SuppressFinalize(this);
+        if (_watchdog is not null)
+        {
+            _watchdog.CheckpointCreated -= OnWatchdogCheckpointCreated;
+            _watchdog.StopWatch();
+        }
+    }
+
+    partial void OnIsWatchdogEnabledChanged(bool value)
+    {
+        if (_watchdog is null)
+        {
+            return;
+        }
+
+        if (value)
+        {
+            _watchdog.Start();
+        }
+        else
+        {
+            _watchdog.StopWatch();
+        }
+    }
+
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(CanCreate));
+    }
+
+    private async void OnWatchdogCheckpointCreated(object? sender, string slotNumber)
+    {
+        await RefreshAsync();
     }
 
     private void NotifyState()

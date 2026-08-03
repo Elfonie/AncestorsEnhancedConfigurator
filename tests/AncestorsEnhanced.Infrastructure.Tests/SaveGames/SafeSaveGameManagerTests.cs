@@ -61,12 +61,23 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     }
 
     [Fact]
-    public void CreateAndLoadRefuseWhileTheGameIsRunning()
+    public void CreateCheckpointWorksWhileTheGameIsRunning()
     {
         string userData = CreateUserDataWithSave(0, [1, 2, 3]);
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: true);
 
-        Assert.False(manager.CreateCheckpoint("0").Succeeded);
+        SaveGameOperationResult result = manager.CreateCheckpoint("0");
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
+    }
+
+    [Fact]
+    public void LoadRefusesWhileTheGameIsRunning()
+    {
+        string userData = CreateUserDataWithSave(0, [1, 2, 3]);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: true);
+
         Assert.False(manager.LoadCheckpoint("0", "anything").Succeeded);
     }
 

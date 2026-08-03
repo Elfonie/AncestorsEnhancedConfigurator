@@ -483,6 +483,27 @@
             </Grid>
           </Border>
 
+          <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding SaveManager.IsWatchdogEnabled, Mode=TwoWay}"
+                             OffContent="Off" OnContent="On"
+                             VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="Enable Auto-Backup (Watchdog)" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                <TextBlock Text="Automatically saves a checkpoint in the background whenever the game saves."
+                           FontSize="11" Foreground="#82939D" TextWrapping="Wrap" />
+                <TextBlock Text="Close the game to load a save file."
+                           FontSize="11" Foreground="#82939D" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" VerticalAlignment="Center">
+                  <TextBlock Text="Auto-Backup interval:" FontSize="11" Foreground="#82939D" VerticalAlignment="Center" />
+                  <ComboBox ItemsSource="{Binding SaveManager.CooldownChoices}"
+                            SelectedItem="{Binding SaveManager.CooldownMinutes, Mode=TwoWay}"
+                            Width="76" MinWidth="76" HorizontalAlignment="Left" />
+                </StackPanel>
+              </StackPanel>
+            </Grid>
+          </Border>
+
           <StackPanel IsVisible="{Binding IsSaveManagerAvailable}" Spacing="12">
           <Border Padding="14,10" CornerRadius="7" Background="#122A23" BorderBrush="#275442" BorderThickness="1"
                   IsVisible="{Binding SaveManager.HasSlots}">
@@ -573,7 +594,7 @@
                         <TextBlock Text="{Binding TechnicalKey}" FontSize="9" Foreground="#687984" />
                       </StackPanel>
                       <TextBlock Grid.Column="1" Text="{Binding Before}" TextWrapping="Wrap" Foreground="#8E9DA6" />
-                      <TextBlock Grid.Column="2" Text="â†’" Foreground="#71818C" />
+                      <TextBlock Grid.Column="2" Text="→" Foreground="#71818C" />
                       <TextBlock Grid.Column="3" Text="{Binding After}" TextWrapping="Wrap" Foreground="#78C7E8" />
                     </Grid>
                   </Border>

@@ -158,4 +158,73 @@ public sealed class SaveManagerViewModelTests
         public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
             new(true, "Loaded.");
     }
+
+    [Fact]
+    public void TogglingWatchdogStartsAndStopsIt()
+    {
+        var watchdog = new FakeWatchdog();
+        var viewModel = new SaveManagerViewModel(new FakeSaveGameManager(
+            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())), watchdog);
+
+        Assert.False(watchdog.StartCount > 0);
+        viewModel.IsWatchdogEnabled = true;
+        Assert.Equal(1, watchdog.StartCount);
+        Assert.Equal(0, watchdog.StopCount);
+
+        viewModel.IsWatchdogEnabled = false;
+        Assert.Equal(1, watchdog.StartCount);
+        Assert.Equal(1, watchdog.StopCount);
+    }
+
+    [Fact]
+    public async Task WatchdogCheckpointRefreshReloadsTheList()
+    {
+        var watchdog = new FakeWatchdog();
+        var inspectCount = new CountInspectManager(
+            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots()));
+        var viewModel = new SaveManagerViewModel(inspectCount, watchdog);
+        viewModel.Refresh(inspectCount.Snapshot);
+        int before = inspectCount.InspectCount;
+
+        watchdog.RaiseCheckpoint("0");
+        await Task.Delay(50);
+
+        Assert.True(inspectCount.InspectCount > before);
+    }
+
+    private sealed class FakeWatchdog : ISaveGameWatchdog
+    {
+        public int StartCount { get; set; }
+        public int StopCount { get; set; }
+        public bool IsRunning => StartCount > StopCount;
+
+        public TimeSpan Cooldown { get; set; } = TimeSpan.FromMinutes(5);
+
+        public event EventHandler<string>? CheckpointCreated;
+
+        public void Start() => StartCount++;
+
+        public void StopWatch() => StopCount++;
+
+        public void RaiseCheckpoint(string slotNumber) =>
+            CheckpointCreated?.Invoke(this, slotNumber);
+    }
+
+    private sealed class CountInspectManager(SaveGamesSnapshot snapshot) : ISaveGameManager
+    {
+        public int InspectCount { get; private set; }
+        public SaveGamesSnapshot Snapshot => snapshot;
+
+        public SaveGamesSnapshot Inspect()
+        {
+            InspectCount++;
+            return snapshot;
+        }
+
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber) =>
+            new(true, "Checkpoint saved.");
+
+        public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
+            new(true, "Loaded.");
+    }
 }

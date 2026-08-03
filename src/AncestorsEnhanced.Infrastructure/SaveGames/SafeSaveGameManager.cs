@@ -54,10 +54,6 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     {
         int slot = ParseSlot(slotNumber);
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
-        if (_isGameRunning())
-        {
-            return Failure("Close Ancestors before creating a save checkpoint.");
-        }
 
         try
         {
@@ -67,7 +63,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 return Failure($"There is no save in slot {slot} to back up.");
             }
 
-            byte[] content = File.ReadAllBytes(slotPath);
+            byte[] content = ReadSaveWithRetries(slotPath);
             string checkpointId = _store.Create(_userDataDirectory, slot, content);
             return new SaveGameOperationResult(
                 true,
@@ -102,6 +98,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
 
             byte[] checkpoint = SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpointId);
             WriteBytesAtomically(slotPath, checkpoint);
+            File.SetLastWriteTimeUtc(slotPath, _utcNow().UtcDateTime);
             return new SaveGameOperationResult(
                 true,
                 $"Loaded checkpoint for slot {slot}. Start Ancestors to continue.");
@@ -162,6 +159,31 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         {
             return true;
         }
+    }
+
+    private static byte[] ReadSaveWithRetries(string slotPath)
+    {
+        const int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(
+                    slotPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite);
+                using var memory = new MemoryStream();
+                stream.CopyTo(memory);
+                return memory.ToArray();
+            }
+            catch (IOException) when (attempt < maxAttempts)
+            {
+                Thread.Sleep(150);
+            }
+        }
+
+        throw new IOException("The save file is locked by the game and could not be read.");
     }
 
     private static bool IsExpectedException(Exception exception) =>
