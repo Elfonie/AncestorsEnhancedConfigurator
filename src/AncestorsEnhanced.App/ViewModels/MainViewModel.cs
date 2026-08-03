@@ -116,6 +116,10 @@ public partial class MainViewModel : ViewModelBase
 
     public bool ShowSaveGamesView => IsSaveGamesView;
 
+    public bool IsSaveManagerAvailable => SaveManager is not null;
+
+    public bool IsSaveManagerUnavailable => SaveManager is null;
+
     public bool HasPendingChanges => PendingChanges.Count > 0;
 
     public bool CanUndo => CanRevertLast && !HasPendingChanges && !IsReviewingChanges && !IsBusy;
@@ -345,6 +349,12 @@ public partial class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(ShowGraphicsView));
         OnPropertyChanged(nameof(ShowSaveGamesView));
+    }
+
+    partial void OnSaveManagerChanged(SaveManagerViewModel? value)
+    {
+        OnPropertyChanged(nameof(IsSaveManagerAvailable));
+        OnPropertyChanged(nameof(IsSaveManagerUnavailable));
     }
 
     partial void OnSearchTextChanged(string value) => ApplyViewMode();

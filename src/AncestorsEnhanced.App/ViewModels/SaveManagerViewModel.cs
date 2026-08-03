@@ -77,12 +77,22 @@ public partial class SaveManagerViewModel : ViewModelBase
         }
     }
 
-    private async Task RunOperation(SaveGameOperationResult result)
+    private async Task RunOperation(Func<SaveGameOperationResult> operation)
     {
         IsBusy = true;
-        StatusMessage = result.Succeeded ? result.Message : "No changes were made.";
-        StatusAccent = result.Succeeded ? "#62C9A7" : "#D6BC84";
+        StatusMessage = "Working...";
+        StatusAccent = "#78AEE8";
         NotifyState();
+        SaveGameOperationResult result;
+        try
+        {
+            result = await Task.Run(operation);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
         if (result.Succeeded)
         {
             try
@@ -104,7 +114,6 @@ public partial class SaveManagerViewModel : ViewModelBase
             StatusAccent = "#D6BC84";
         }
 
-        IsBusy = false;
         NotifyState();
     }
 
@@ -115,7 +124,7 @@ public partial class SaveManagerViewModel : ViewModelBase
             return;
         }
 
-        await RunOperation(_manager.CreateCheckpoint(slotNumber));
+        await RunOperation(() => _manager.CreateCheckpoint(slotNumber));
     }
 
     public async Task RunLoad(string slotNumber, string checkpointId)
@@ -125,8 +134,7 @@ public partial class SaveManagerViewModel : ViewModelBase
             return;
         }
 
-        SaveGameOperationResult result = _manager.LoadCheckpoint(slotNumber, checkpointId);
-        await RunOperation(result);
+        await RunOperation(() => _manager.LoadCheckpoint(slotNumber, checkpointId));
     }
 
     partial void OnIsBusyChanged(bool value)

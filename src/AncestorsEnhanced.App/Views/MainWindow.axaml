@@ -49,6 +49,20 @@
                   Spacing="12"
                   MaxWidth="1380"
                   HorizontalAlignment="Center">
+
+        <Border Padding="4" CornerRadius="7" Background="#171F25" BorderBrush="#2B363F" BorderThickness="1">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <ToggleButton Classes="mode"
+                          Command="{Binding ShowGraphicsCommand}"
+                          IsChecked="{Binding ShowGraphicsView, Mode=OneWay}"
+                          Content="Graphics" />
+            <ToggleButton Classes="mode"
+                          Command="{Binding ShowSaveGamesCommand}"
+                          IsChecked="{Binding ShowSaveGamesView, Mode=OneWay}"
+                          Content="Save Games" />
+          </StackPanel>
+        </Border>
+
         <StackPanel IsVisible="{Binding ShowGraphicsView}" Spacing="12">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
           <Border Padding="14,10"
@@ -84,15 +98,6 @@
                             Command="{Binding ShowAdvancedCommand}"
                             IsChecked="{Binding IsAdvancedMode, Mode=OneWay}"
                             Content="Advanced" />
-              <Rectangle Width="1" Height="20" Fill="#2B363F" Margin="6,0" VerticalAlignment="Center" />
-              <ToggleButton Classes="mode"
-                            Command="{Binding ShowGraphicsCommand}"
-                            IsChecked="{Binding ShowGraphicsView, Mode=OneWay}"
-                            Content="Graphics" />
-              <ToggleButton Classes="mode"
-                            Command="{Binding ShowSaveGamesCommand}"
-                            IsChecked="{Binding ShowSaveGamesView, Mode=OneWay}"
-                            Content="Save Games" />
             </StackPanel>
           </Border>
         </Grid>
@@ -478,6 +483,7 @@
             </Grid>
           </Border>
 
+          <StackPanel IsVisible="{Binding IsSaveManagerAvailable}" Spacing="12">
           <Border Padding="14,10" CornerRadius="7" Background="#122A23" BorderBrush="#275442" BorderThickness="1"
                   IsVisible="{Binding SaveManager.HasSlots}">
             <TextBlock Text="{Binding SaveManager.StatusMessage}" TextWrapping="Wrap" Foreground="#DDF4EC" />
@@ -523,6 +529,13 @@
           <TextBlock Text="No save games found yet. Launch Ancestors once and return here."
                      IsVisible="{Binding SaveManager.HasNoSlots}"
                      Foreground="#82939D" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <Border Padding="14,11" CornerRadius="7" Background="#1B2329" BorderBrush="#2B363F" BorderThickness="1"
+                  IsVisible="{Binding IsSaveManagerUnavailable}">
+            <TextBlock Text="Save Games are only available when an Ancestors user-data folder was found. Install or start Ancestors once, then reload."
+                       TextWrapping="Wrap" Foreground="#82939D" />
+          </Border>
         </StackPanel>
       </StackPanel>
     </ScrollViewer>
