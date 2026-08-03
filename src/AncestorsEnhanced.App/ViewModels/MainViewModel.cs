@@ -445,7 +445,7 @@ public partial class MainViewModel : ViewModelBase
 
         ISaveGameManager manager = _saveManagerFactory(userDataDirectory);
         var watchdog = new SaveGameWatchdog(userDataDirectory);
-        var viewModel = new SaveManagerViewModel(manager, watchdog);
+        var viewModel = new SaveManagerViewModel(manager, userDataDirectory, watchdog);
         try
         {
             SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
@@ -454,7 +454,7 @@ public partial class MainViewModel : ViewModelBase
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
-            return new SaveManagerViewModel(manager, watchdog);
+            return new SaveManagerViewModel(manager, userDataDirectory, watchdog);
         }
     }
 

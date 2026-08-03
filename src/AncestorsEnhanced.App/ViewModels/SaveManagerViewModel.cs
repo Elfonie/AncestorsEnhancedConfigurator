@@ -8,6 +8,12 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 {
     private readonly ISaveGameManager _manager;
     private readonly ISaveGameWatchdog? _watchdog;
+    private readonly string _userDataDirectory;
+    private bool _loadingSettings;
+
+    private const string ToolSettingsFileName = "AncestorsEnhanced_ToolSettings.json";
+    private static readonly System.Text.Json.JsonSerializerOptions JsonSettings =
+        new() { WriteIndented = true };
 
     [ObservableProperty]
     public partial string StatusMessage { get; set; } = "No save games loaded yet.";
@@ -37,22 +43,30 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 {
                     _watchdog.Cooldown = TimeSpan.FromMinutes(value);
                 }
+
+                if (!_loadingSettings)
+                {
+                    SaveSettings();
+                }
             }
         }
     }
 
     public string SteamCloudWarning { get; } =
-        "This game uses Steam Cloud. A loaded checkpoint can be overwritten by the cloud on the next start. Pause Steam Cloud or go offline before restoring a save.";
+    "Steam Cloud Tip: If Steam shows a 'Cloud Conflict' on launch, simply select 'Upload to Steam Cloud (Local files)' to keep your restored save!";
 
-    public SaveManagerViewModel(ISaveGameManager manager, ISaveGameWatchdog? watchdog = null)
+    public SaveManagerViewModel(ISaveGameManager manager, string userDataDirectory, ISaveGameWatchdog? watchdog = null)
     {
         ArgumentNullException.ThrowIfNull(manager);
         _manager = manager;
+        _userDataDirectory = userDataDirectory;
         _watchdog = watchdog;
         if (_watchdog is not null)
         {
             _watchdog.CheckpointCreated += OnWatchdogCheckpointCreated;
         }
+
+        LoadSettings();
     }
 
     public bool HasSlots => Slots.Count > 0;
@@ -177,18 +191,85 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     partial void OnIsWatchdogEnabledChanged(bool value)
     {
-        if (_watchdog is null)
+        if (_watchdog is not null)
+        {
+            if (value)
+            {
+                _watchdog.Start();
+            }
+            else
+            {
+                _watchdog.StopWatch();
+            }
+        }
+
+        if (!_loadingSettings)
+        {
+            SaveSettings();
+        }
+    }
+
+    private string ToolSettingsPath() =>
+        Path.Combine(_userDataDirectory, ToolSettingsFileName);
+
+    private void LoadSettings()
+    {
+        string path = ToolSettingsPath();
+        if (!File.Exists(path))
         {
             return;
         }
 
-        if (value)
+        try
         {
-            _watchdog.Start();
+            ToolSettings? settings = System.Text.Json.JsonSerializer.Deserialize<ToolSettings>(
+                File.ReadAllText(path),
+                JsonSettings);
+            if (settings is null)
+            {
+                return;
+            }
+
+            _loadingSettings = true;
+            try
+            {
+                CooldownMinutes = settings.WatchdogIntervalMinutes;
+                IsWatchdogEnabled = settings.IsWatchdogEnabled;
+            }
+            finally
+            {
+                _loadingSettings = false;
+            }
         }
-        else
+        catch (Exception exception) when (
+            exception is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
         {
-            _watchdog.StopWatch();
+        }
+    }
+
+    private void SaveSettings()
+    {
+        try
+        {
+            var settings = new ToolSettings
+            {
+                IsWatchdogEnabled = IsWatchdogEnabled,
+                WatchdogIntervalMinutes = _cooldownMinutes,
+            };
+
+            string? directory = Path.GetDirectoryName(ToolSettingsPath());
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(
+                ToolSettingsPath(),
+                System.Text.Json.JsonSerializer.Serialize(settings, JsonSettings));
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

@@ -164,7 +164,7 @@ public sealed class SaveManagerViewModelTests
     {
         var watchdog = new FakeWatchdog();
         var viewModel = new SaveManagerViewModel(new FakeSaveGameManager(
-            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())), watchdog);
+            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())), "user-data", watchdog);
 
         Assert.False(watchdog.StartCount > 0);
         viewModel.IsWatchdogEnabled = true;
@@ -182,7 +182,7 @@ public sealed class SaveManagerViewModelTests
         var watchdog = new FakeWatchdog();
         var inspectCount = new CountInspectManager(
             new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots()));
-        var viewModel = new SaveManagerViewModel(inspectCount, watchdog);
+        var viewModel = new SaveManagerViewModel(inspectCount, "user-data", watchdog);
         viewModel.Refresh(inspectCount.Snapshot);
         int before = inspectCount.InspectCount;
 

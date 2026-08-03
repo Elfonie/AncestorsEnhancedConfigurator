@@ -607,6 +607,7 @@
     </Border>
 
     <Border Grid.Row="2"
+              IsVisible="{Binding ShowGraphicsView}"
             Padding="16,10"
             Background="#161D23"
             BorderBrush="#273139"
