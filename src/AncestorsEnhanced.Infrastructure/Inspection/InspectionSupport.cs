@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Paks;
@@ -50,6 +50,30 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
         "Binaries",
         "Win64",
         "Ancestors-Win64-Shipping.exe");
+
+    public GameInstallationSnapshot? CreateLinux(
+        StoreKind store,
+        string installDirectory,
+        string? buildId,
+        CompatibilityLayerKind compatibilityLayer)
+    {
+        string fullInstall = Path.GetFullPath(installDirectory);
+        string executable = GetExecutablePath(fullInstall);
+        if (!fileSystem.FileExists(executable))
+        {
+            return null;
+        }
+
+        return new GameInstallationSnapshot(
+            store,
+            HostKind.Linux,
+            compatibilityLayer,
+            fullInstall,
+            fullInstall,
+            buildId,
+            true,
+            ReadContentSignature(fullInstall));
+    }
 
     public static string? ReadContentSignature(string installDirectory)
     {

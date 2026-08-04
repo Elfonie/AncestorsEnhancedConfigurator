@@ -1,4 +1,4 @@
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 using System.Security;
 using AncestorsEnhanced.Core.Inspection;
 using Microsoft.Win32;
@@ -74,6 +74,25 @@ internal sealed class WindowsHostEnvironment : IHostEnvironment
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    public IReadOnlyList<string> GetHeroicConfigDirectories()
+    {
+        List<string> candidates = [];
+        foreach (System.Environment.SpecialFolder folder in new[]
+                 {
+                     System.Environment.SpecialFolder.ApplicationData,
+                     System.Environment.SpecialFolder.LocalApplicationData,
+                 })
+        {
+            string? basePath = System.Environment.GetFolderPath(folder);
+            if (!string.IsNullOrWhiteSpace(basePath))
+            {
+                candidates.Add(Path.Combine(basePath, "heroic"));
+            }
+        }
+
+        return candidates.Select(NormalizePathOrNull).OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
     [SupportedOSPlatform("windows")]
     private static void AddGogGames(
         List<string> candidates,

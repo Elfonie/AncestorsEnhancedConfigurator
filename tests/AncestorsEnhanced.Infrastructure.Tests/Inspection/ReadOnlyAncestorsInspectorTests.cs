@@ -1,4 +1,4 @@
-using AncestorsEnhanced.Core.Inspection;
+﻿using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Inspection;
@@ -232,7 +232,8 @@ public sealed class ReadOnlyAncestorsInspectorTests
         string? LocalData,
         HostKind CurrentHost = HostKind.Windows,
         IReadOnlyList<string>? EpicManifests = null,
-        IReadOnlyList<string>? GogCandidates = null) : IHostEnvironment
+        IReadOnlyList<string>? GogCandidates = null,
+        IReadOnlyList<string>? HeroicConfigs = null) : IHostEnvironment
     {
         public TestHostEnvironment(string steamRoot, string localData)
             : this([steamRoot], localData)
@@ -250,9 +251,70 @@ public sealed class ReadOnlyAncestorsInspectorTests
         public IReadOnlyList<string> GetEpicManifestDirectories() => EpicManifests ?? [];
 
         public IReadOnlyList<string> GetGogInstallCandidates() => GogCandidates ?? [];
+
+        public IReadOnlyList<string> GetHeroicConfigDirectories() => HeroicConfigs ?? [];
     }
 
-    private sealed class TemporaryDirectory : IDisposable
+
+
+
+    [Fact]
+    public void InspectFindsHeroicGameConfigOnLinux()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string install = CreateStoreInstallation(temporaryDirectory.CreateDirectory("HeroicGog"));
+        string heroic = temporaryDirectory.CreateDirectory("Heroic");
+        string configs = Directory.CreateDirectory(Path.Combine(heroic, "games_config")).FullName;
+        string escaped = install.Replace("\\", "\\\\", StringComparison.Ordinal);
+        File.WriteAllText(
+            Path.Combine(configs, "ancestors.json"),
+            $$"""
+            {
+              "title": "Ancestors The Humankind Odyssey",
+              "install_path": "{{escaped}}"
+            }
+            """);
+
+        ReadOnlyAncestorsInspector inspector = new(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment([], null, HostKind.Linux, HeroicConfigs: [heroic]));
+
+        GameInstallationSnapshot installation = Assert.IsType<GameInstallationSnapshot>(
+            inspector.Inspect().Installation);
+        Assert.Equal(HostKind.Linux, installation.Host);
+        Assert.Equal(CompatibilityLayerKind.Proton, installation.CompatibilityLayer);
+        Assert.Equal(install, installation.InstallDirectory);
+    }
+
+    [Fact]
+    public void InspectFindsHeroicLegendaryEpicInstallOnLinux()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string install = CreateStoreInstallation(temporaryDirectory.CreateDirectory("HeroicEpic"));
+        string heroic = temporaryDirectory.CreateDirectory("Heroic");
+        string legendary = Directory.CreateDirectory(Path.Combine(heroic, "legendary")).FullName;
+        string escaped = install.Replace("\\", "\\\\", StringComparison.Ordinal);
+        File.WriteAllText(
+            Path.Combine(legendary, "installed.json"),
+            $$"""
+            [
+              {
+                "title": "Ancestors The Humankind Odyssey",
+                "install_path": "{{escaped}}",
+                "version": "heroic epic build"
+              }
+            ]
+            """);
+
+        ReadOnlyAncestorsInspector inspector = new(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment([], null, HostKind.Linux, HeroicConfigs: [heroic]));
+
+        GameInstallationSnapshot installation = Assert.IsType<GameInstallationSnapshot>(
+            inspector.Inspect().Installation);
+        Assert.Equal(install, installation.InstallDirectory);
+        Assert.Equal(CompatibilityLayerKind.Proton, installation.CompatibilityLayer);
+    }    private sealed class TemporaryDirectory : IDisposable
     {
         public TemporaryDirectory()
         {

@@ -601,10 +601,7 @@
                       IsEnabled="{Binding Cheat.CanApply}"
                       Content="Heal Clan"
                       Padding="14,8" />
-              <Button Command="{Binding Cheat.ForceMutationsCommand}"
-                      IsEnabled="{Binding Cheat.CanApply}"
-                      Content="Force Mutations"
-                      Padding="14,8" />
+
             </StackPanel>
           </Border>
 

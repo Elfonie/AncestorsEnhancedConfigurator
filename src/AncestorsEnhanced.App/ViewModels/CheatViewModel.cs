@@ -43,10 +43,6 @@ public partial class CheatViewModel : ViewModelBase
     private async Task HealClanAsync() =>
         await RunCheatAsync(CheatKind.HealClan);
 
-    [RelayCommand]
-    private async Task ForceMutationsAsync() =>
-        await RunCheatAsync(CheatKind.ForceMutations);
-
     private async Task RunCheatAsync(CheatKind kind)
     {
         if (IsBusy)

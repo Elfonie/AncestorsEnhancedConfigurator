@@ -1,4 +1,4 @@
-using AncestorsEnhanced.Core.Inspection;
+﻿using AncestorsEnhanced.Core.Inspection;
 
 namespace AncestorsEnhanced.Infrastructure.Environment;
 
@@ -28,6 +28,16 @@ internal sealed class LinuxHostEnvironment : IHostEnvironment
     public IReadOnlyList<string> GetEpicManifestDirectories() => [];
 
     public IReadOnlyList<string> GetGogInstallCandidates() => [];
+    public IReadOnlyList<string> GetHeroicConfigDirectories() =>
+        new[]
+        {
+            Path.Combine(_home, ".config", "heroic"),
+            Path.Combine(_home, ".var", "app", "com.heroicgameslauncher.hgl", "config", "heroic"),
+        }
+        .Select(Normalize)
+        .OfType<string>()
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
 
     private static string? Normalize(string path)
     {

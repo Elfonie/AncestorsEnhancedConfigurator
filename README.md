@@ -4,10 +4,10 @@ Portable graphics configurator for Ancestors The Humankind Odyssey
 
 ## Features
 
-* Steam detection on Windows
-* Steam and Proton detection on Linux
+* Steam detection on Windows and Linux (Proton)
 * Epic Games detection on Windows
 * GOG detection on Windows
+* Heroic Games Launcher detection (Epic + GOG) on Windows and Linux
 * Simple and advanced graphics controls
 * Review before every write
 * Exact backups and undo
@@ -16,6 +16,7 @@ Portable graphics configurator for Ancestors The Humankind Odyssey
 * Vignette strength from 0 to 100 percent
 * Save Manager: keep and load old save states per slot
 * Auto-Backup Watchdog: checks into the background whenever the game saves
+* Cheats tab: Max Neuronal Energy, Max Needs, Heal Clan (saved as new checkpoints)
 
 The Vignette control reads the verified original asset from the installed game and creates a separate PAK patch. Original game PAK files are never changed. Unknown and conflicting vignette patches disable this control.
 

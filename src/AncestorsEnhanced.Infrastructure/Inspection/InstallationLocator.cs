@@ -1,4 +1,4 @@
-using AncestorsEnhanced.Core.Inspection;
+﻿using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 
@@ -9,6 +9,7 @@ internal sealed class InstallationLocator
     private readonly SteamInstallationLocator _steam;
     private readonly EpicInstallationLocator _epic;
     private readonly GogInstallationLocator _gog;
+    private readonly HeroicInstallationLocator _heroic;
 
     public InstallationLocator(IReadOnlyFileSystem fileSystem, IHostEnvironment environment)
     {
@@ -16,6 +17,7 @@ internal sealed class InstallationLocator
         _steam = new SteamInstallationLocator(fileSystem, environment);
         _epic = new EpicInstallationLocator(fileSystem, environment, factory);
         _gog = new GogInstallationLocator(environment, factory);
+        _heroic = new HeroicInstallationLocator(fileSystem, environment, factory);
     }
 
     public GameInstallationSnapshot? Find(List<InspectionNotice> notices)
@@ -24,13 +26,14 @@ internal sealed class InstallationLocator
         installations.AddRange(_steam.Find(notices));
         installations.AddRange(_epic.Find(notices));
         installations.AddRange(_gog.Find());
+        installations.AddRange(_heroic.Find(notices));
 
         if (installations.Count == 0)
         {
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "game.not-found",
-                "Ancestors was not found. Steam Epic and GOG were checked."));
+                "Ancestors was not found. Steam, Epic, GOG and Heroic were checked."));
             return null;
         }
 

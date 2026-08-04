@@ -1,4 +1,4 @@
-namespace AncestorsEnhanced.Infrastructure.Environment;
+﻿namespace AncestorsEnhanced.Infrastructure.Environment;
 
 using AncestorsEnhanced.Core.Inspection;
 
@@ -15,4 +15,6 @@ internal interface IHostEnvironment
     IReadOnlyList<string> GetEpicManifestDirectories();
 
     IReadOnlyList<string> GetGogInstallCandidates();
+
+    IReadOnlyList<string> GetHeroicConfigDirectories();
 }

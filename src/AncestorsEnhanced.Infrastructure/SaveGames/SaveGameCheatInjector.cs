@@ -119,6 +119,8 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
             "Energy",
             "Stamina",
         },
+        // ForceMutations needs rework: PendingNodes is an array of names and NodeSaveData is a
+        // complex struct; safe float injection does not apply. Revisit with element-aware parsing.
         CheatKind.ForceMutations => [],
         _ => [],
     };
@@ -131,6 +133,8 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
         },
         CheatKind.MaxNeeds => [],
         CheatKind.HealClan => [],
+        // ForceMutations needs rework: PendingNodes is an array of names and NodeSaveData is a
+        // complex struct; safe float injection does not apply. Revisit with element-aware parsing.
         CheatKind.ForceMutations => [],
         _ => [],
     };
