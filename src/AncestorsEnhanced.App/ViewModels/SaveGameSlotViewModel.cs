@@ -11,7 +11,8 @@ public partial class SaveGameSlotViewModel : ViewModelBase
     public SaveGameSlotViewModel(
         SaveGameSlotSnapshot slot,
         Func<Task> create,
-        Func<SaveGameCheckpoint, Func<Task>> loadCheckpoint)
+        Func<SaveGameCheckpoint, Func<Task>> loadCheckpoint,
+        Func<SaveGameCheckpoint, Func<Task>> deleteCheckpoint)
     {
         SlotNumber = slot.SlotNumber;
         FileName = slot.FileName;
@@ -26,7 +27,8 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         Checkpoints = slot.Checkpoints
             .Select(checkpoint => new SaveGameCheckpointViewModel(
                 checkpoint,
-                loadCheckpoint(checkpoint)))
+                loadCheckpoint(checkpoint),
+                deleteCheckpoint(checkpoint)))
             .ToArray();
     }
 

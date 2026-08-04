@@ -53,9 +53,12 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     }
 
     public string SteamCloudWarning { get; } =
-    "Steam Cloud Tip: If Steam shows a 'Cloud Conflict' on launch, simply select 'Upload to Steam Cloud (Local files)' to keep your restored save!";
+        "Steam Cloud Tip: If Steam shows a 'Cloud Conflict' on launch, simply select 'Upload to Steam Cloud (Local files)' to keep your restored save!";
 
-    public SaveManagerViewModel(ISaveGameManager manager, string userDataDirectory, ISaveGameWatchdog? watchdog = null)
+    public SaveManagerViewModel(
+        ISaveGameManager manager,
+        string userDataDirectory,
+        ISaveGameWatchdog? watchdog = null)
     {
         ArgumentNullException.ThrowIfNull(manager);
         _manager = manager;
@@ -83,7 +86,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             .Select(slot => new SaveGameSlotViewModel(
                 slot,
                 () => RunCreate(slot.SlotNumber),
-                checkpoint => () => RunLoad(slot.SlotNumber, checkpoint.Id)))
+                checkpoint => () => RunLoad(slot.SlotNumber, checkpoint.Id),
+                checkpoint => () => RunDelete(slot.SlotNumber, checkpoint.Id)))
             .ToArray();
         NotifyState();
     }
@@ -176,7 +180,22 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (_watchdog is not null && int.TryParse(slotNumber, out int slot))
+        {
+            _watchdog.SuppressSlot(slot, TimeSpan.FromSeconds(5));
+        }
+
         await RunOperation(() => _manager.LoadCheckpoint(slotNumber, checkpointId));
+    }
+
+    public async Task RunDelete(string slotNumber, string checkpointId)
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        await RunOperation(() => _manager.DeleteCheckpoint(slotNumber, checkpointId));
     }
 
     public void Dispose()

@@ -60,6 +60,10 @@
                           Command="{Binding ShowSaveGamesCommand}"
                           IsChecked="{Binding ShowSaveGamesView, Mode=OneWay}"
                           Content="Save Games" />
+            <ToggleButton Classes="mode"
+                          Command="{Binding ShowCheatCommand}"
+                          IsChecked="{Binding ShowCheatView, Mode=OneWay}"
+                          Content="Cheats" />
           </StackPanel>
         </Border>
 
@@ -531,11 +535,13 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
                           <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="#10171C" BorderBrush="#222C33" BorderThickness="1">
-                            <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="10">
+                              <Grid ColumnDefinitions="*,*,Auto,Auto" ColumnSpacing="10">
                               <StackPanel Spacing="1">
                                 <TextBlock Text="{Binding CreatedLabel}" FontWeight="SemiBold" Foreground="#E1E7EA" />
                                 <TextBlock Text="{Binding SizeLabel}" FontSize="10" Foreground="#71828D" />
                               </StackPanel>
+                                <Button Grid.Column="3" Command="{Binding DeleteCommand}" Content="Delete" Padding="12,6" />
+
                               <Button Grid.Column="2" Command="{Binding LoadCommand}" Content="Load" Padding="12,6" />
                             </Grid>
                           </Border>
@@ -556,6 +562,62 @@
                   IsVisible="{Binding IsSaveManagerUnavailable}">
             <TextBlock Text="Save Games are only available when an Ancestors user-data folder was found. Install or start Ancestors once, then reload."
                        TextWrapping="Wrap" Foreground="#82939D" />
+          </Border>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding ShowCheatView}" Spacing="12">
+          <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
+            <StackPanel Spacing="2">
+              <TextBlock Text="God Mode / Cheats" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
+              <TextBlock Text="Apply cheats to a save slot. Each cheat is stored as a new checkpoint; your original save is never overwritten." FontSize="11" Foreground="#81929D" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <Border Padding="14,11" CornerRadius="7" Background="#2A1F16" BorderBrush="#6B4A26" BorderThickness="1">
+            <TextBlock Text="Game must be closed before injecting!" FontWeight="SemiBold" Foreground="#E8C08A" TextWrapping="Wrap" />
+          </Border>
+
+          <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Save slot" FontWeight="SemiBold" Foreground="#DDE4E8" />
+              <ComboBox ItemsSource="{Binding Cheat.Slots}"
+                        SelectedItem="{Binding Cheat.SelectedSlot}"
+                        HorizontalAlignment="Left"
+                        MinWidth="160" />
+            </StackPanel>
+          </Border>
+
+          <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Cheats" FontWeight="SemiBold" Foreground="#DDE4E8" />
+              <Button Command="{Binding Cheat.MaxNeuronalEnergyCommand}"
+                      IsEnabled="{Binding Cheat.CanApply}"
+                      Content="Max Neuronal Energy"
+                      Padding="14,8" />
+              <Button Command="{Binding Cheat.MaxNeedsCommand}"
+                      IsEnabled="{Binding Cheat.CanApply}"
+                      Content="Max Needs"
+                      Padding="14,8" />
+              <Button Command="{Binding Cheat.HealClanCommand}"
+                      IsEnabled="{Binding Cheat.CanApply}"
+                      Content="Heal Clan"
+                      Padding="14,8" />
+              <Button Command="{Binding Cheat.ForceMutationsCommand}"
+                      IsEnabled="{Binding Cheat.CanApply}"
+                      Content="Force Mutations"
+                      Padding="14,8" />
+            </StackPanel>
+          </Border>
+
+          <Border Padding="14,11" CornerRadius="7" Background="#1B2329" BorderBrush="#2B363F" BorderThickness="1"
+                  IsVisible="{Binding IsCheatUnavailable}">
+            <TextBlock Text="Cheats are only available when an Ancestors user-data folder was found. Install or start Ancestors once, then reload."
+                       TextWrapping="Wrap" Foreground="#82939D" />
+          </Border>
+
+          <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
+            <TextBlock Text="{Binding Cheat.StatusMessage}"
+                       TextWrapping="Wrap"
+                       Foreground="{Binding Cheat.StatusAccent}" />
           </Border>
         </StackPanel>
       </StackPanel>

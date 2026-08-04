@@ -94,6 +94,59 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.Contains("no save", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+
+    [Fact]
+    public void IdenticalCheckpointIsSkippedButChangedContentIsBackedUp()
+    {
+        string userData = CreateUserDataWithSave(0, [1, 2, 3, 4]);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+
+        SaveGameOperationResult first = manager.CreateCheckpoint("0");
+        Assert.True(first.Succeeded);
+        Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
+
+        SaveGameOperationResult duplicate = manager.CreateCheckpoint("0");
+        Assert.True(duplicate.Succeeded);
+        Assert.Contains("unchanged", duplicate.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
+
+        File.WriteAllBytes(SaveGamePaths.GetSlotPath(userData, 0), [5, 5, 5, 5, 5]);
+        SaveGameOperationResult changed = manager.CreateCheckpoint("0");
+        Assert.True(changed.Succeeded);
+        Assert.Equal(2, manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints.Count);
+    }
+
+
+    [Fact]
+    public void LoadDoesNotAddASafetyBackupWhenCurrentStateMatchesTheCheckpoint()
+    {
+        string userData = CreateUserDataWithSave(0, [7, 7, 7]);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        manager.CreateCheckpoint("0");
+        string checkpointId = manager.Inspect()
+            .Slots.Single(slot => slot.SlotNumber == "0").Checkpoints[0].Id;
+
+        SaveGameOperationResult loaded = manager.LoadCheckpoint("0", checkpointId);
+
+        Assert.True(loaded.Succeeded, loaded.Message);
+        Assert.Equal([7, 7, 7], File.ReadAllBytes(SaveGamePaths.GetSlotPath(userData, 0)));
+        Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
+    }
+
+
+    [Fact]
+    public void DeleteCheckpointRemovesTheStoredCheckpoint()
+    {
+        string userData = CreateUserDataWithSave(0, [1, 2, 3]);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string checkpointId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+
+        SaveGameOperationResult result = manager.DeleteCheckpoint("0", checkpointId);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Empty(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
+    }
+
     private string CreateUserDataWithSave(int slotNumber, byte[] content)
     {
         string userData = Path.Combine(_temporaryDirectory, "Saved");

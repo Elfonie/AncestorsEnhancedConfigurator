@@ -64,6 +64,13 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             }
 
             byte[] content = ReadSaveWithRetries(slotPath);
+            IReadOnlyList<SaveGameCheckpoint> latest = SaveGameCheckpointStore.ListCheckpoints(_userDataDirectory, slot);
+            if (latest.Count > 0 &&
+                IsIdentical(content, SaveGameCheckpointStore.Read(_userDataDirectory, slot, latest[0].Id)))
+            {
+                return new SaveGameOperationResult(true, $"Slot {slot} is unchanged; no checkpoint was created.");
+            }
+
             string checkpointId = _store.Create(_userDataDirectory, slot, content);
             return new SaveGameOperationResult(
                 true,
@@ -90,13 +97,17 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         try
         {
             string slotPath = SaveGamePaths.GetSlotPath(_userDataDirectory, slot);
+            byte[] checkpoint = SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpointId);
+
             if (File.Exists(slotPath))
             {
                 byte[] current = File.ReadAllBytes(slotPath);
-                _store.Create(_userDataDirectory, slot, current);
+                if (!IsIdentical(current, checkpoint))
+                {
+                    _store.Create(_userDataDirectory, slot, current);
+                }
             }
 
-            byte[] checkpoint = SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpointId);
             WriteBytesAtomically(slotPath, checkpoint);
             File.SetLastWriteTimeUtc(slotPath, _utcNow().UtcDateTime);
             return new SaveGameOperationResult(
@@ -106,6 +117,32 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         catch (Exception exception) when (IsExpectedException(exception))
         {
             return Failure($"Nothing was loaded: {exception.Message}");
+        }
+    }
+
+    public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId)
+    {
+        int slot = ParseSlot(slotNumber);
+        ArgumentNullException.ThrowIfNull(checkpointId);
+        SaveGamePaths.ValidateCheckpointId(checkpointId);
+        SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
+
+        try
+        {
+            string checkpointDirectory = Path.Combine(
+                SaveGamePaths.GetSlotRoot(_userDataDirectory, slot),
+                checkpointId);
+            if (!Directory.Exists(checkpointDirectory))
+            {
+                return Failure("The checkpoint could not be found.");
+            }
+
+            Directory.Delete(checkpointDirectory, recursive: true);
+            return new SaveGameOperationResult(true, $"Checkpoint deleted from slot {slot}.");
+        }
+        catch (Exception exception) when (IsExpectedException(exception))
+        {
+            return Failure($"Nothing was deleted: {exception.Message}");
         }
     }
 
@@ -159,6 +196,16 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         {
             return true;
         }
+    }
+
+    private static bool IsIdentical(byte[] first, byte[] second)
+    {
+        if (first.Length != second.Length)
+        {
+            return false;
+        }
+
+        return first.AsSpan().SequenceEqual(second);
     }
 
     private static byte[] ReadSaveWithRetries(string slotPath)

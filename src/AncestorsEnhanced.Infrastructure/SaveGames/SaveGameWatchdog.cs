@@ -10,6 +10,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
     private readonly Lock _gate = new();
     private readonly Dictionary<int, CancellationTokenSource> _debounces = new();
     private readonly Dictionary<int, DateTimeOffset> _lastBackupTimes = new();
+    private readonly Dictionary<int, DateTimeOffset> _suppressedUntil = new();
     private TimeSpan _cooldown = TimeSpan.FromMinutes(5);
     private FileSystemWatcher? _watcher;
 
@@ -81,6 +82,14 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         CancelAllDebounces();
     }
 
+    public void SuppressSlot(int slotNumber, TimeSpan duration)
+    {
+        lock (_gate)
+        {
+            _suppressedUntil[slotNumber] = DateTimeOffset.UtcNow + duration;
+        }
+    }
+
     private void OnChanged(object sender, FileSystemEventArgs args)
     {
         if (!TryGetSlotNumber(args.Name, out int slot))
@@ -107,6 +116,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         try
         {
             await Task.Delay(500, token);
+            if (IsSuppressed(slot))
+            {
+                return;
+            }
+
             if (!CanBackup(slot))
             {
                 return;
@@ -135,6 +149,25 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
                     _debounces.Remove(slot);
                 }
             }
+        }
+    }
+
+    private bool IsSuppressed(int slot)
+    {
+        lock (_gate)
+        {
+            if (!_suppressedUntil.TryGetValue(slot, out DateTimeOffset until))
+            {
+                return false;
+            }
+
+            if (DateTimeOffset.UtcNow < until)
+            {
+                return true;
+            }
+
+            _suppressedUntil.Remove(slot);
+            return false;
         }
     }
 
@@ -167,6 +200,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             current = new Dictionary<int, CancellationTokenSource>(_debounces);
             _debounces.Clear();
             _lastBackupTimes.Clear();
+            _suppressedUntil.Clear();
         }
 
         foreach (CancellationTokenSource source in current.Values)

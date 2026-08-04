@@ -10,5 +10,7 @@ public interface ISaveGameWatchdog
 
     void StopWatch();
 
+    void SuppressSlot(int slotNumber, TimeSpan duration);
+
     event EventHandler<string>? CheckpointCreated;
 }

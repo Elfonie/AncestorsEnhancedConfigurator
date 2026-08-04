@@ -79,6 +79,21 @@ public sealed class SaveManagerViewModelTests
         Assert.Null(viewModel.SaveManager);
     }
 
+
+    [Fact]
+    public async Task LoadSuppressesTheWatchdogForThatSlot()
+    {
+        var watchdog = new FakeWatchdog();
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())),
+            "user-data",
+            watchdog);
+
+        await viewModel.RunLoad("3", "cp-1");
+
+        Assert.Equal(3, watchdog.SuppressedSlot);
+    }
+
     private static SaveGameSlotSnapshot[] Slots() =>
         Enumerable.Range(0, 5)
             .Select(slot => new SaveGameSlotSnapshot(
@@ -155,6 +170,9 @@ public sealed class SaveManagerViewModelTests
             return new SaveGameOperationResult(true, "Checkpoint saved.", "cp-1");
         }
 
+          public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+              new(true, "Deleted.");
+
         public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
             new(true, "Loaded.");
     }
@@ -200,6 +218,10 @@ public sealed class SaveManagerViewModelTests
 
         public TimeSpan Cooldown { get; set; } = TimeSpan.FromMinutes(5);
 
+        public int SuppressedSlot { get; private set; } = -1;
+
+        public void SuppressSlot(int slotNumber, TimeSpan duration) => SuppressedSlot = slotNumber;
+
         public event EventHandler<string>? CheckpointCreated;
 
         public void Start() => StartCount++;
@@ -223,6 +245,9 @@ public sealed class SaveManagerViewModelTests
 
         public SaveGameOperationResult CreateCheckpoint(string slotNumber) =>
             new(true, "Checkpoint saved.");
+
+          public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+              new(true, "Deleted.");
 
         public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
             new(true, "Loaded.");

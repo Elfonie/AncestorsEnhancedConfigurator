@@ -92,6 +92,12 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     public partial SaveManagerViewModel? SaveManager { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsCheatView { get; set; }
+
+    [ObservableProperty]
+    public partial CheatViewModel? Cheat { get; set; }
+
     public MainViewModel(
         IReadOnlyGameInspector inspector,
         IGameSettingsEditor settingsEditor,
@@ -105,16 +111,22 @@ public partial class MainViewModel : ViewModelBase
 
         ProductName = "Ancestors Enhanced Configurator";
         string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.5.0";
-        Phase = $"{version} · safe editing";
+        Phase = $"{version} · save editing & cheats";
     }
 
     public string ProductName { get; }
 
     public string Phase { get; }
 
-    public bool ShowGraphicsView => !IsSaveGamesView;
+    public bool ShowGraphicsView => !IsSaveGamesView && !IsCheatView;
 
     public bool ShowSaveGamesView => IsSaveGamesView;
+
+    public bool ShowCheatView => IsCheatView;
+
+    public bool IsCheatAvailable => Cheat is not null;
+
+    public bool IsCheatUnavailable => Cheat is null;
 
     public bool IsSaveManagerAvailable => SaveManager is not null;
 
@@ -194,12 +206,36 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void ShowAdvanced() => IsAdvancedMode = true;
+    [RelayCommand]
+    private void ShowSaveGames()
+    {
+        IsCheatView = false;
+        IsSaveGamesView = true;
+        UpdateViewVisibility();
+    }
 
     [RelayCommand]
-    private void ShowGraphics() => IsSaveGamesView = false;
+    private void ShowCheat()
+    {
+        IsSaveGamesView = false;
+        IsCheatView = true;
+        UpdateViewVisibility();
+    }
+
+    private void UpdateViewVisibility()
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowSaveGamesView));
+        OnPropertyChanged(nameof(ShowCheatView));
+    }
 
     [RelayCommand]
-    private void ShowSaveGames() => IsSaveGamesView = true;
+    private void ShowGraphics()
+    {
+        IsCheatView = false;
+        IsSaveGamesView = false;
+        UpdateViewVisibility();
+    }
 
     [RelayCommand]
     private void DiscardChanges()
@@ -351,6 +387,13 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowSaveGamesView));
     }
 
+    partial void OnIsCheatViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowCheatView));
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowSaveGamesView));
+    }
+
     partial void OnSaveManagerChanged(SaveManagerViewModel? value)
     {
         OnPropertyChanged(nameof(IsSaveManagerAvailable));
@@ -409,6 +452,7 @@ public partial class MainViewModel : ViewModelBase
             LoadTechnicalDetails(snapshot);
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
             SaveManager = await CreateSaveManagerAsync(snapshot.UserDataDirectory);
+            Cheat = CreateCheat(snapshot.UserDataDirectory);
             UpdatePendingChanges();
             return true;
         }
@@ -458,6 +502,18 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+
+    private static CheatViewModel? CreateCheat(string? userDataDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(userDataDirectory))
+        {
+            return null;
+        }
+
+        var injector = new SaveGameCheatInjector();
+        var service = new SaveGameCheatService(injector, userDataDirectory);
+        return new CheatViewModel(service);
+    }
 
     private void RebuildEditors()
     {

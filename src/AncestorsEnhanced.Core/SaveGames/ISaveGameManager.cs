@@ -7,4 +7,6 @@ public interface ISaveGameManager
     SaveGameOperationResult CreateCheckpoint(string slotNumber);
 
     SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId);
+
+    SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId);
 }
