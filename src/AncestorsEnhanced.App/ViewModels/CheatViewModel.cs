@@ -31,6 +31,9 @@ public partial class CheatViewModel : ViewModelBase
 
     public bool CanApply => !IsBusy;
 
+    public string SteamCloudWarning { get; } =
+        "Steam Cloud Tip: If Steam shows a Cloud Conflict on launch, select Upload to Steam Cloud (Local files) to keep the applied save or cheat checkpoint.";
+
     [RelayCommand]
     private async Task MaxNeuronalEnergyAsync() =>
         await RunCheatAsync(CheatKind.MaxNeuronalEnergy);

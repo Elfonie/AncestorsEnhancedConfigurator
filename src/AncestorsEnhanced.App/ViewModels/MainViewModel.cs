@@ -445,6 +445,7 @@ public partial class MainViewModel : ViewModelBase
             UserDataPath = snapshot.UserDataDirectory ?? "Not detected";
             BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
             BinarySettingsStatus = snapshot.BinarySettingsFile?.FormatStatus ?? "Not inspected";
+            LogDetection("detected");
 
             _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
             RebuildEditors();
@@ -472,6 +473,7 @@ public partial class MainViewModel : ViewModelBase
             Notices = [new NoticeRowViewModel("Error", exception.Message)];
             CanRevertLast = false;
             ShowMessage($"Scan failed: {exception.Message}", "#D6BC84");
+            LogDetection("failed: "+exception.Message);
             return false;
         }
         finally
@@ -683,6 +685,15 @@ public partial class MainViewModel : ViewModelBase
             .SelectMany(group => group.Settings)
             .First(setting => string.Equals(setting.Id, settingId, StringComparison.Ordinal))
             .Name;
+
+    private void LogDetection(string result)
+    {
+        string store = _snapshot?.Installation?.Store.ToString() ?? "unknown";
+        string data = string.IsNullOrWhiteSpace(_snapshot?.UserDataDirectory)
+            ? "missing user-data"
+            : "user-data found";
+        AppDiagnostics.Logger?.Write("Self-test: store=" + store + " " + data + " => " + result);
+    }
 
     private void ShowMessage(string message, string accent)
     {
