@@ -1,4 +1,5 @@
-using AncestorsEnhanced.App.ViewModels;
+﻿using AncestorsEnhanced.App.ViewModels;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Core.SaveGames;
 using Xunit;
 
@@ -9,7 +10,7 @@ public sealed class CheatViewModelTests
     [Fact]
     public void ExposesAllSlotsAndDefaultsToSlotZero()
     {
-        var viewModel = new CheatViewModel(new FakeCheatService());
+        var viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
 
         Assert.Equal([0, 1, 2, 3, 4], viewModel.Slots);
         Assert.Equal(0, viewModel.SelectedSlot);
@@ -20,7 +21,7 @@ public sealed class CheatViewModelTests
     public async Task MaxNeuronalEnergyDelegatesToService()
     {
         var service = new FakeCheatService();
-        var viewModel = new CheatViewModel(service);
+        var viewModel = new CheatViewModel(service, new IniCheatService(tmp));
 
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
@@ -32,7 +33,7 @@ public sealed class CheatViewModelTests
     public async Task HealClanDelegatesToService()
     {
         var service = new FakeCheatService();
-        var viewModel = new CheatViewModel(service);
+        var viewModel = new CheatViewModel(service, new IniCheatService(tmp));
 
         await viewModel.HealClanCommand.ExecuteAsync(null);
 
@@ -43,12 +44,36 @@ public sealed class CheatViewModelTests
     public async Task FailedCheatReportsFailureAccent()
     {
         var service = new FakeCheatService { Fail = true };
-        var viewModel = new CheatViewModel(service);
+        var viewModel = new CheatViewModel(service, new IniCheatService(tmp));
 
         await viewModel.MaxNeedsCommand.ExecuteAsync(null);
 
         Assert.False(service.LastResult.Succeeded);
         Assert.Equal("#D6BC84", viewModel.StatusAccent);
+    }
+
+    private static readonly string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aec-cheatvm-"+System.Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void FreeCameraToggleWritesInputIni()
+    {
+        System.IO.Directory.CreateDirectory(tmp);
+        CheatViewModel viewModel = null!;
+        try
+        {
+            viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
+            viewModel.IsFreeCamEnabled = true;
+
+            string inputPath = System.IO.Path.Combine(tmp, "Config", "WindowsNoEditor", "Input.ini");
+            Assert.True(System.IO.File.Exists(inputPath));
+            Assert.Contains("ConsoleKeys=F10", System.IO.File.ReadAllText(inputPath), StringComparison.Ordinal);
+            Assert.Contains("enabled", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            viewModel?.Dispose();
+            if (System.IO.Directory.Exists(tmp)) { System.IO.Directory.Delete(tmp, true); }
+        }
     }
 
     private sealed class FakeCheatService : ISaveGameCheatService

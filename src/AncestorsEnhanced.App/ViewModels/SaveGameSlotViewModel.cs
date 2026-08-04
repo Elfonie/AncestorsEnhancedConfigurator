@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
 using CommunityToolkit.Mvvm.Input;
 
@@ -6,7 +6,11 @@ namespace AncestorsEnhanced.App.ViewModels;
 
 public partial class SaveGameSlotViewModel : ViewModelBase
 {
+    private const int DefaultVisibleCheckpoints = 2;
+
     private readonly Func<Task> _create;
+    private readonly bool _exists;
+    private bool _showAllCheckpoints;
 
     public SaveGameSlotViewModel(
         SaveGameSlotSnapshot slot,
@@ -14,6 +18,7 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         Func<SaveGameCheckpoint, Func<Task>> loadCheckpoint,
         Func<SaveGameCheckpoint, Func<Task>> deleteCheckpoint)
     {
+        _exists = slot.Exists;
         SlotNumber = slot.SlotNumber;
         FileName = slot.FileName;
         Status = slot.Exists
@@ -30,6 +35,7 @@ public partial class SaveGameSlotViewModel : ViewModelBase
                 loadCheckpoint(checkpoint),
                 deleteCheckpoint(checkpoint)))
             .ToArray();
+        UpdateVisibleCheckpoints();
     }
 
     public string SlotNumber { get; }
@@ -42,8 +48,39 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     public IReadOnlyList<SaveGameCheckpointViewModel> Checkpoints { get; }
 
+    public IReadOnlyList<SaveGameCheckpointViewModel> VisibleCheckpoints { get; private set; } = [];
+
     public bool HasCheckpoints => Checkpoints.Count > 0;
+
+    public bool CanSaveCheckpoint => _exists;
+
+    public bool HasHiddenCheckpoints => Checkpoints.Count > DefaultVisibleCheckpoints && !_showAllCheckpoints;
+
+    public int HiddenCheckpointCount =>
+        Math.Max(0, Checkpoints.Count - DefaultVisibleCheckpoints);
+
+    public string ShowAllLabel => HiddenCheckpointCount == 1
+        ? "Show 1 older checkpoint..."
+        : $"Show {HiddenCheckpointCount} older checkpoints...";
+
+    [RelayCommand]
+    private void ShowOlder() => UpdateVisibleCheckpoints(showAll: true);
+
+    [RelayCommand]
+    private void ShowRecent() => UpdateVisibleCheckpoints(showAll: false);
 
     [RelayCommand]
     private async Task CreateCheckpointAsync() => await _create();
+
+    private void UpdateVisibleCheckpoints(bool? showAll = null)
+    {
+        _showAllCheckpoints = showAll ?? _showAllCheckpoints;
+        VisibleCheckpoints = _showAllCheckpoints || Checkpoints.Count <= DefaultVisibleCheckpoints
+            ? Checkpoints
+            : Checkpoints.Take(DefaultVisibleCheckpoints).ToArray();
+        OnPropertyChanged(nameof(VisibleCheckpoints));
+        OnPropertyChanged(nameof(HasHiddenCheckpoints));
+        OnPropertyChanged(nameof(HiddenCheckpointCount));
+        OnPropertyChanged(nameof(ShowAllLabel));
+    }
 }

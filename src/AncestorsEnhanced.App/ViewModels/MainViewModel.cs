@@ -3,6 +3,7 @@ using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Core.Settings;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.SaveGames;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -515,7 +516,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         var injector = new SaveGameCheatInjector();
         var service = new SaveGameCheatService(injector, userDataDirectory);
-        return new CheatViewModel(service);
+        var iniCheat = new IniCheatService(userDataDirectory);
+        return new CheatViewModel(service, iniCheat);
     }
 
     private void RebuildEditors()

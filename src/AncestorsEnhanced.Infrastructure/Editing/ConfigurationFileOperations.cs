@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using AncestorsEnhanced.Core.Editing;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
@@ -7,7 +7,7 @@ internal static class ConfigurationFileOperations
 {
     private const string BackupFolderName = "AncestorsEnhanced";
     private static readonly HashSet<string> AllowedFiles =
-        new(StringComparer.OrdinalIgnoreCase) { "Engine.ini", "Game.ini" };
+        new(StringComparer.OrdinalIgnoreCase) { "Engine.ini", "Game.ini", "Input.ini" };
     private static readonly HashSet<string> AllowedPakFiles =
         new(StringComparer.OrdinalIgnoreCase)
         {

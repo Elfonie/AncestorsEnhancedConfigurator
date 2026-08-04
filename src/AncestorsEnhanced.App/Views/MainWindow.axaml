@@ -1,4 +1,4 @@
-﻿<Window xmlns="https://github.com/avaloniaui"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:AncestorsEnhanced.App.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -484,7 +484,7 @@
                 <TextBlock Text="Save Games" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
                 <TextBlock Text="Old saves are kept here. Choose one and load it into the game." FontSize="11" Foreground="#81929D" TextWrapping="Wrap" />
               </StackPanel>
-              <Button Grid.Column="1" Command="{Binding SaveManager.RefreshCommand}" Content="Reload" VerticalAlignment="Center" />
+              
             </Grid>
           </Border>
 
@@ -504,6 +504,7 @@
                   <ComboBox ItemsSource="{Binding SaveManager.CooldownChoices}"
                             SelectedItem="{Binding SaveManager.CooldownMinutes, Mode=TwoWay}"
                             Width="76" MinWidth="76" HorizontalAlignment="Left" />
+                  <TextBlock Text="min" FontSize="11" Foreground="#82939D" VerticalAlignment="Center" />
                 </StackPanel>
               </StackPanel>
             </Grid>
@@ -530,18 +531,18 @@
                         <TextBlock Text="{Binding Status}" FontSize="11" Foreground="#82939E" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding CheckpointCount}" FontSize="11" Foreground="#78AEE8" />
                       </StackPanel>
-                      <Button Grid.Column="1" Command="{Binding CreateCheckpointCommand}" Content="Save checkpoint" VerticalAlignment="Center" />
+                      <Button Grid.Column="1" Command="{Binding CreateCheckpointCommand}" IsEnabled="{Binding CanSaveCheckpoint}" Content="Save checkpoint" VerticalAlignment="Center" />
                     </Grid>
-                    <ItemsControl ItemsSource="{Binding Checkpoints}">
+                    <ItemsControl ItemsSource="{Binding VisibleCheckpoints}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
                           <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="#10171C" BorderBrush="#222C33" BorderThickness="1">
-                              <Grid ColumnDefinitions="*,*,Auto,Auto" ColumnSpacing="10">
+                              <Grid ColumnDefinitions="*,*,Auto,Auto" ColumnSpacing="14">
                               <StackPanel Spacing="1">
                                 <TextBlock Text="{Binding CreatedLabel}" FontWeight="SemiBold" Foreground="#E1E7EA" />
                                 <TextBlock Text="{Binding SizeLabel}" FontSize="10" Foreground="#71828D" />
                               </StackPanel>
-                                <Button Grid.Column="3" Command="{Binding DeleteCommand}" Content="Delete" Padding="12,6" />
+                                <Button Grid.Column="3" Command="{Binding DeleteCommand}" Content="Delete" Padding="12,6" Foreground="#E08A8A" />
 
                               <Button Grid.Column="2" Command="{Binding LoadCommand}" Content="Load" Padding="12,6" />
                             </Grid>
@@ -549,6 +550,10 @@
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <Button Content="{Binding ShowAllLabel}"
+                            Command="{Binding ShowOlderCommand}"
+                            IsVisible="{Binding HasHiddenCheckpoints}"
+                            HorizontalAlignment="Left" Padding="0" Background="Transparent" BorderThickness="0" Foreground="#78AEE8" FontSize="11" />
                   </StackPanel>
                 </Border>
               </DataTemplate>
@@ -569,45 +574,83 @@
           <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
             <StackPanel Spacing="2">
               <TextBlock Text="God Mode / Cheats" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
-              <TextBlock Text="Apply cheats to a save slot. Each cheat is stored as a new checkpoint; your original save is never overwritten." FontSize="11" Foreground="#81929D" TextWrapping="Wrap" />
+              <TextBlock Text="Apply cheats to a save slot. Each cheat is stored as a new checkpoint; your original save is never overwritten." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
 
-          <Border Padding="14,11" CornerRadius="7" Background="#2A1F16" BorderBrush="#6B4A26" BorderThickness="1">
-            <TextBlock Text="Game must be closed before injecting!" FontWeight="SemiBold" Foreground="#E8C08A" TextWrapping="Wrap" />
-          </Border>
-          <Border Padding="12,10" CornerRadius="7" Background="#211D19" BorderBrush="#3B3120" BorderThickness="1">
-            <TextBlock Text="{Binding Cheat.SteamCloudWarning}" TextWrapping="Wrap" Foreground="#D6BC84" FontSize="11" />
+          <Border Padding="14,11" CornerRadius="7" Background="#2A1F16" BorderBrush="#6B4A26" BorderThickness="1"
+                  IsVisible="{Binding Cheat.IsGameRunning}">
+            <TextBlock Text="Game is running - close Ancestors before injecting. The cheat buttons are disabled while the game is open." FontWeight="SemiBold" Foreground="#E8C08A" TextWrapping="Wrap" />
           </Border>
 
           <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
-            <StackPanel Spacing="10">
-              <TextBlock Text="Save slot" FontWeight="SemiBold" Foreground="#DDE4E8" />
-              <ComboBox ItemsSource="{Binding Cheat.Slots}"
+            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="16">
+              <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="Save slot" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                <TextBlock Text="The cheat is saved as a new checkpoint for this slot." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              </StackPanel>
+              <ComboBox Grid.Column="1" ItemsSource="{Binding Cheat.Slots}"
                         SelectedItem="{Binding Cheat.SelectedSlot}"
-                        HorizontalAlignment="Left"
-                        MinWidth="160" />
-            </StackPanel>
+                        VerticalAlignment="Center"
+                        MinWidth="140" />
+              <Border Grid.Column="2" Padding="9,6" CornerRadius="5"
+                      Background="#10171C" BorderBrush="#23313A" BorderThickness="1"
+                      IsVisible="{Binding Cheat.HasStatus}">
+                <TextBlock Text="{Binding Cheat.StatusMessage}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" Foreground="{Binding Cheat.StatusAccent}" FontSize="12" />
+              </Border>
+            </Grid>
           </Border>
 
           <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Cheats" FontWeight="SemiBold" Foreground="#DDE4E8" />
-              <Button Command="{Binding Cheat.MaxNeuronalEnergyCommand}"
-                      IsEnabled="{Binding Cheat.CanApply}"
-                      Content="Max Neuronal Energy"
-                      Padding="14,8" />
-              <Button Command="{Binding Cheat.MaxNeedsCommand}"
-                      IsEnabled="{Binding Cheat.CanApply}"
-                      Content="Max Needs"
-                      Padding="14,8" />
-              <Button Command="{Binding Cheat.HealClanCommand}"
-                      IsEnabled="{Binding Cheat.CanApply}"
-                      Content="Heal Clan"
-                      Padding="14,8" />
-
-            </StackPanel>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="UE4 Free Camera (F10)" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                <TextBlock Text="Flying camera for exploring the map. Press F10 in-game to toggle." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1"
+                            IsChecked="{Binding Cheat.IsFreeCamEnabled, Mode=TwoWay}"
+                            VerticalAlignment="Center" />
+            </Grid>
           </Border>
+
+          <StackPanel Spacing="8">
+            <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#2E5A7D" BorderThickness="1">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <StackPanel Spacing="2" VerticalAlignment="Center">
+                  <TextBlock Text="Max Neuronal Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                  <TextBlock Text="Sets all neural energy sources and the avatar energy to maximum." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1" Command="{Binding Cheat.MaxNeuronalEnergyCommand}"
+                        IsEnabled="{Binding Cheat.CanApply}"
+                        Content="Apply" Padding="16,8" VerticalAlignment="Center" />
+              </Grid>
+            </Border>
+
+            <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#2E5A7D" BorderThickness="1">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <StackPanel Spacing="2" VerticalAlignment="Center">
+                  <TextBlock Text="Max Needs" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                  <TextBlock Text="Fills the avatar needs (stamina, energy and regimen) to their maximum values." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1" Command="{Binding Cheat.MaxNeedsCommand}"
+                        IsEnabled="{Binding Cheat.CanApply}"
+                        Content="Apply" Padding="16,8" VerticalAlignment="Center" />
+              </Grid>
+            </Border>
+
+            <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#2E5A7D" BorderThickness="1">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <StackPanel Spacing="2" VerticalAlignment="Center">
+                  <TextBlock Text="Heal Clan" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                  <TextBlock Text="Restores health, stamina and energy for the avatar and clan members." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1" Command="{Binding Cheat.HealClanCommand}"
+                        IsEnabled="{Binding Cheat.CanApply}"
+                        Content="Apply" Padding="16,8" VerticalAlignment="Center" />
+              </Grid>
+            </Border>
+          </StackPanel>
 
           <Border Padding="14,11" CornerRadius="7" Background="#1B2329" BorderBrush="#2B363F" BorderThickness="1"
                   IsVisible="{Binding IsCheatUnavailable}">
@@ -615,10 +658,13 @@
                        TextWrapping="Wrap" Foreground="#82939D" />
           </Border>
 
-          <Border Padding="14,11" CornerRadius="7" Background="#151C22" BorderBrush="#273139" BorderThickness="1">
-            <TextBlock Text="{Binding Cheat.StatusMessage}"
-                       TextWrapping="Wrap"
-                       Foreground="{Binding Cheat.StatusAccent}" />
+          <Border Padding="14,11" CornerRadius="7" Background="#122A23" BorderBrush="#275442" BorderThickness="1"
+                  IsVisible="{Binding IsCheatAvailable}">
+            <TextBlock Text="User-data folder linked - cheats are ready. Your original saves are never overwritten." TextWrapping="Wrap" Foreground="#DDF4EC" />
+          </Border>
+
+          <Border Padding="12,10" CornerRadius="7" Background="#211D19" BorderBrush="#3B3120" BorderThickness="1">
+            <TextBlock Text="{Binding Cheat.SteamCloudWarning}" TextWrapping="Wrap" Foreground="#D6BC84" FontSize="11" />
           </Border>
         </StackPanel>
       </StackPanel>
