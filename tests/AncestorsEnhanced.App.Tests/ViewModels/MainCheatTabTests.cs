@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.App.ViewModels;
+using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.SaveGames;

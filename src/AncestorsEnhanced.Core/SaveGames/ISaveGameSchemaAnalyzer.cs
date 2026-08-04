@@ -1,4 +1,4 @@
-﻿namespace AncestorsEnhanced.Core.SaveGames;
+namespace AncestorsEnhanced.Core.SaveGames;
 
 /// <summary>Result of a read-only analysis of a UE4 save's tagged-property schema.</summary>
 public sealed class SaveGameSchemaAnalysis

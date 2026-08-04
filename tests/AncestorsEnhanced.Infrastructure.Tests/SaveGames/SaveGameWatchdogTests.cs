@@ -1,4 +1,5 @@
 ﻿using AncestorsEnhanced.Infrastructure.SaveGames;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
 
@@ -26,13 +27,13 @@ public sealed class SaveGameWatchdogTests : IDisposable
     {
         string userData = CreateUserData();
         string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
-        File.WriteAllBytes(slotPath, [1, 2, 3]);
+        File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
         var watchdog = new SaveGameWatchdog(userData);
 
         watchdog.Start();
         try
         {
-            File.WriteAllBytes(slotPath, [4, 5, 6, 7]);
+            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([4, 5, 6, 7]));
             WaitFor(() => SaveGameCheckpointStore.ListCheckpoints(userData, 0).Count == 1);
             Assert.Single(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
         }

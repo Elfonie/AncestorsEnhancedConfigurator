@@ -1,5 +1,6 @@
 ﻿using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.SaveGames;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
 
@@ -12,7 +13,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void InspectListsEverySlotAndExistingCheckpoints()
     {
-        string userData = CreateUserDataWithSave(0, [1, 2, 3]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
 
         SaveGamesSnapshot snapshot = manager.Inspect();
@@ -20,7 +21,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.Equal(5, snapshot.Slots.Count);
         SaveGameSlotSnapshot slot0 = snapshot.Slots.Single(slot => slot.SlotNumber == "0");
         Assert.True(slot0.Exists);
-        Assert.Equal(3, slot0.SizeBytes);
+        Assert.Equal(SnappyBlockCodec.EncodeLiteral([1, 2, 3]).Length, slot0.SizeBytes);
         SaveGameSlotSnapshot slot1 = snapshot.Slots.Single(slot => slot.SlotNumber == "1");
         Assert.False(slot1.Exists);
     }
@@ -28,7 +29,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void CreateCheckpointBacksUpTheCurrentSave()
     {
-        string userData = CreateUserDataWithSave(0, [1, 2, 3, 4]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3, 4]));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
 
         SaveGameOperationResult result = manager.CreateCheckpoint("0");
@@ -43,17 +44,17 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void LoadCheckpointRestoresASavedStateAndMakesASafetyBackup()
     {
-        string userData = CreateUserDataWithSave(0, [7, 7, 7]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([7, 7, 7]));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
         manager.CreateCheckpoint("0");
 
-        File.WriteAllBytes(SaveGamePaths.GetSlotPath(userData, 0), [9, 9, 9, 9]);
+        File.WriteAllBytes(SaveGamePaths.GetSlotPath(userData, 0), SnappyBlockCodec.EncodeLiteral([9, 9, 9, 9]));
 
         SaveGameOperationResult loaded = manager.LoadCheckpoint("0", manager.Inspect()
             .Slots.Single(slot => slot.SlotNumber == "0").Checkpoints[0].Id);
 
         Assert.True(loaded.Succeeded, loaded.Message);
-        Assert.Equal([7, 7, 7], File.ReadAllBytes(SaveGamePaths.GetSlotPath(userData, 0)));
+        Assert.Equal(SnappyBlockCodec.EncodeLiteral([7, 7, 7]), File.ReadAllBytes(SaveGamePaths.GetSlotPath(userData, 0)));
 
         SaveGamesSnapshot after = manager.Inspect();
         SaveGameSlotSnapshot slot0 = after.Slots.Single(slot => slot.SlotNumber == "0");
@@ -63,7 +64,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void CreateCheckpointWorksWhileTheGameIsRunning()
     {
-        string userData = CreateUserDataWithSave(0, [1, 2, 3]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: true);
 
         SaveGameOperationResult result = manager.CreateCheckpoint("0");
@@ -75,7 +76,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void LoadRefusesWhileTheGameIsRunning()
     {
-        string userData = CreateUserDataWithSave(0, [1, 2, 3]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: true);
 
         Assert.False(manager.LoadCheckpoint("0", "anything").Succeeded);
@@ -84,7 +85,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void CreateCheckpointRefusesWhenThereIsNoSaveFile()
     {
-        string userData = CreateUserDataWithSave(0, [1, 2, 3]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
         File.Delete(SaveGamePaths.GetSlotPath(userData, 0));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
 
@@ -98,7 +99,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void IdenticalCheckpointIsSkippedButChangedContentIsBackedUp()
     {
-        string userData = CreateUserDataWithSave(0, [1, 2, 3, 4]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3, 4]));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
 
         SaveGameOperationResult first = manager.CreateCheckpoint("0");
@@ -110,7 +111,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.Contains("unchanged", duplicate.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
 
-        File.WriteAllBytes(SaveGamePaths.GetSlotPath(userData, 0), [5, 5, 5, 5, 5]);
+        File.WriteAllBytes(SaveGamePaths.GetSlotPath(userData, 0), SnappyBlockCodec.EncodeLiteral([5, 5, 5, 5, 5]));
         SaveGameOperationResult changed = manager.CreateCheckpoint("0");
         Assert.True(changed.Succeeded);
         Assert.Equal(2, manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints.Count);
@@ -120,7 +121,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void LoadDoesNotAddASafetyBackupWhenCurrentStateMatchesTheCheckpoint()
     {
-        string userData = CreateUserDataWithSave(0, [7, 7, 7]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([7, 7, 7]));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
         manager.CreateCheckpoint("0");
         string checkpointId = manager.Inspect()
@@ -129,7 +130,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         SaveGameOperationResult loaded = manager.LoadCheckpoint("0", checkpointId);
 
         Assert.True(loaded.Succeeded, loaded.Message);
-        Assert.Equal([7, 7, 7], File.ReadAllBytes(SaveGamePaths.GetSlotPath(userData, 0)));
+        Assert.Equal(SnappyBlockCodec.EncodeLiteral([7, 7, 7]), File.ReadAllBytes(SaveGamePaths.GetSlotPath(userData, 0)));
         Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
     }
 
@@ -137,7 +138,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     [Fact]
     public void DeleteCheckpointRemovesTheStoredCheckpoint()
     {
-        string userData = CreateUserDataWithSave(0, [1, 2, 3]);
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
         SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
         string checkpointId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
 

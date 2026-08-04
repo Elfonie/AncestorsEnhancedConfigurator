@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Inspection;

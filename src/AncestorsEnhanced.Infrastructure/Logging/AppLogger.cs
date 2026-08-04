@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
 
 namespace AncestorsEnhanced.Infrastructure.Logging;
@@ -6,11 +6,14 @@ namespace AncestorsEnhanced.Infrastructure.Logging;
 /// <summary>
 /// Minimal append-only file logger used for crash diagnostics and support tickets.
 /// Writes to the tool's log directory without throwing when the filesystem is unwritable.
+/// The stream is kept open for the lifetime of the logger to avoid reopening the file
+/// on every message.
 /// </summary>
 public sealed class AppLogger : IDisposable
 {
     private readonly object _sync = new();
     private readonly string _logPath;
+    private StreamWriter? _writer;
     private bool _disposed;
 
     public AppLogger(string logDirectory)
@@ -51,16 +54,34 @@ public sealed class AppLogger : IDisposable
         {
             try
             {
+                StreamWriter writer = _writer ??= OpenWriter();
                 string line = string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {message}{System.Environment.NewLine}");
-                File.AppendAllText(_logPath, line, Encoding.UTF8);
+                    $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {message}");
+                writer.WriteLine(line);
+                writer.Flush();
             }
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException)
             {
             }
         }
+    }
+
+    private StreamWriter OpenWriter()
+    {
+        string directory = Path.GetDirectoryName(_logPath)
+            ?? throw new InvalidOperationException("The log directory is missing.");
+        Directory.CreateDirectory(directory);
+        var stream = new FileStream(
+            _logPath,
+            FileMode.Append,
+            FileAccess.Write,
+            FileShare.Read);
+        return new StreamWriter(stream, new UTF8Encoding(false))
+        {
+            AutoFlush = true,
+        };
     }
 
     public void Dispose()
@@ -70,7 +91,13 @@ public sealed class AppLogger : IDisposable
             return;
         }
 
-        _disposed = true;
+        lock (_sync)
+        {
+            _disposed = true;
+            _writer?.Dispose();
+            _writer = null;
+        }
+
         GC.SuppressFinalize(this);
     }
 }

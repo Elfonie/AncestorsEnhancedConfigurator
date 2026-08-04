@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Infrastructure.Logging;
+using AncestorsEnhanced.Infrastructure.Logging;
 
 namespace AncestorsEnhanced.App;
 

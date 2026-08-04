@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
@@ -33,6 +33,10 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
         }
 
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
+        if (IsAncestorsRunning())
+        {
+            return new CheatApplyResult(false, "Close Ancestors before applying a cheat.");
+        }
 
         try
         {
@@ -42,7 +46,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                 return new CheatApplyResult(false, $"There is no save in slot {slot} to modify.");
             }
 
-            byte[] compressed = File.ReadAllBytes(slotPath);
+            byte[] compressed = ReadSaveWithRetries(slotPath);
             byte[] decompressed = SnappyBlockCodec.Decode(compressed);
 
             CheatInjectionResult injected = _injector.TryInject(
@@ -69,6 +73,44 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
         {
             return new CheatApplyResult(false, $"Nothing was applied: {exception.Message}");
         }
+    }
+
+    private static bool IsAncestorsRunning()
+    {
+        try
+        {
+            return System.Diagnostics.Process.GetProcessesByName("Ancestors-Win64-Shipping").Length > 0 ||
+                   System.Diagnostics.Process.GetProcessesByName("Ancestors").Length > 0;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
+    }
+
+    private static byte[] ReadSaveWithRetries(string slotPath)
+    {
+        const int maxAttempts = 3;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(
+                    slotPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite);
+                using var memory = new MemoryStream();
+                stream.CopyTo(memory);
+                return memory.ToArray();
+            }
+            catch (IOException) when (attempt < maxAttempts)
+            {
+                System.Threading.Thread.Sleep(150);
+            }
+        }
+
+        throw new IOException("The save file is locked by the game and could not be read.");
     }
 
     private static bool IsExpectedException(Exception exception) =>

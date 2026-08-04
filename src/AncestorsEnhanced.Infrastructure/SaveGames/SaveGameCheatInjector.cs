@@ -1,4 +1,4 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;

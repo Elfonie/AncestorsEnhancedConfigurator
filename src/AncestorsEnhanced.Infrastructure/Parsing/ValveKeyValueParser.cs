@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 namespace AncestorsEnhanced.Infrastructure.Parsing;
 
@@ -12,8 +12,17 @@ internal static class ValveKeyValueParser
         return ParseObject(reader, requiresClosingBrace: false);
     }
 
-    private static ValveKeyValueObject ParseObject(TokenReader reader, bool requiresClosingBrace)
+    private const int MaximumDepth = 64;
+
+    private static ValveKeyValueObject ParseObject(TokenReader reader, bool requiresClosingBrace) => ParseObject(reader, requiresClosingBrace, depth: 0);
+
+    private static ValveKeyValueObject ParseObject(TokenReader reader, bool requiresClosingBrace, int depth)
     {
+        if (depth >= MaximumDepth)
+        {
+            throw new FormatException("Valve KeyValues nesting is too deep.");
+        }
+
         ValveKeyValueObject result = new();
 
         while (reader.TryRead(out Token token))

@@ -9,7 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace AncestorsEnhanced.App.ViewModels;
 
-public partial class MainViewModel : ViewModelBase
+public partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
@@ -110,8 +110,8 @@ public partial class MainViewModel : ViewModelBase
         _saveManagerFactory = saveManagerFactory ?? (d => string.IsNullOrWhiteSpace(d) ? throw new InvalidOperationException("The user-data directory is required.") : new SafeSaveGameManager(d));
 
         ProductName = "Ancestors Enhanced Configurator";
-        string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.5.0";
-        Phase = $"{version} · save editing & cheats";
+        string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.8.0";
+        Phase = $"{version} Graphics, Saves and Cheats";
     }
 
     public string ProductName { get; }
@@ -452,6 +452,7 @@ public partial class MainViewModel : ViewModelBase
             ApplyViewMode();
             LoadTechnicalDetails(snapshot);
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
+            SaveManager?.Dispose();
             SaveManager = await CreateSaveManagerAsync(snapshot.UserDataDirectory);
             Cheat = CreateCheat(snapshot.UserDataDirectory);
             UpdatePendingChanges();
@@ -742,4 +743,14 @@ public partial class MainViewModel : ViewModelBase
         return $"{store}  {installation.Host}{layer}  " +
                $"Build {installation.BuildId ?? "content verified"}";
     }
+
+    public void Dispose()
+    {
+        GC.SuppressFinalize(this);
+        SaveManager?.Dispose();
+        SaveManager = null;
+        Cheat = null;
+    }
 }
+
+

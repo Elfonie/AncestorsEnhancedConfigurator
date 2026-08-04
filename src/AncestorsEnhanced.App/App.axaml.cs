@@ -1,4 +1,4 @@
-using AncestorsEnhanced.App.ViewModels;
+﻿using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.App.Views;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Inspection;
@@ -27,6 +27,7 @@ public partial class App : Application
                 DataContext = viewModel,
             };
             window.Opened += async (_, _) => await viewModel.InitializeAsync();
+            window.Closed += (_, _) => viewModel.Dispose();
             desktop.MainWindow = window;
         }
 

@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.App.ViewModels;
+using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Core.SaveGames;
 using Xunit;
 

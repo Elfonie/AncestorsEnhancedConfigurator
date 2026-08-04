@@ -1,4 +1,4 @@
-﻿namespace AncestorsEnhanced.Core.SaveGames;
+namespace AncestorsEnhanced.Core.SaveGames;
 
 /// <summary>Outcome of applying and saving a cheat injection.</summary>
 public sealed class CheatApplyResult

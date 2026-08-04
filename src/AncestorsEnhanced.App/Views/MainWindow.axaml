@@ -8,6 +8,7 @@
         d:DesignHeight="820"
         x:Class="AncestorsEnhanced.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
+        x:CompileBindings="True"
         Width="1180"
         Height="820"
         MinWidth="940"

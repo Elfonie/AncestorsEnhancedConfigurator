@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Core.SaveGames;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 

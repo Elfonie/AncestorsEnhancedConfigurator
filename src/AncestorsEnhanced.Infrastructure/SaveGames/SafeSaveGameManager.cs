@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
@@ -64,6 +65,14 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             }
 
             byte[] content = ReadSaveWithRetries(slotPath);
+            try
+            {
+                _ = SnappyBlockCodec.Decode(content);
+            }
+            catch (InvalidDataException)
+            {
+                return Failure($"Slot {slot} is currently being written or is corrupt; skipped backup.");
+            }
             IReadOnlyList<SaveGameCheckpoint> latest = SaveGameCheckpointStore.ListCheckpoints(_userDataDirectory, slot);
             if (latest.Count > 0 &&
                 IsIdentical(content, SaveGameCheckpointStore.Read(_userDataDirectory, slot, latest[0].Id)))
