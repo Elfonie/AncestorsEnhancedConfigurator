@@ -129,6 +129,18 @@
       <Setter Property="Background" Value="Transparent" />
     </Style>
 
+    <!-- Card header button: inert, no own hover border/fill. The card shows the hover ring. -->
+    <Style Selector="Button.CardHeader">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Button.CardHeader:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
 <Style Selector="Button.nav">
       <Setter Property="Padding" Value="14,10" />
       <Setter Property="CornerRadius" Value="7" />
@@ -175,6 +187,7 @@
       <Setter Property="BorderBrush" Value="#3A4A2E" />
       <Setter Property="Transitions">
         <Transitions>
+          <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.2" />
           <BrushTransition Property="BorderBrush" Duration="0:0:0.2" />
           <BrushTransition Property="Background" Duration="0:0:0.2" />
         </Transitions>

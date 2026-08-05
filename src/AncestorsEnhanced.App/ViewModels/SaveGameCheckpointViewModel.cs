@@ -1,5 +1,6 @@
-﻿using System.Globalization;
+using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace AncestorsEnhanced.App.ViewModels;
@@ -30,9 +31,22 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
 
     public string SizeLabel { get; }
 
+    [ObservableProperty]
+    public partial bool IsDeleteConfirmVisible { get; set; }
+
+    [RelayCommand]
+    private void OpenDeleteConfirm() => IsDeleteConfirmVisible = true;
+
+    [RelayCommand]
+    private void CancelDeleteConfirm() => IsDeleteConfirmVisible = false;
+
     [RelayCommand]
     private async Task LoadAsync() => await _load();
 
     [RelayCommand]
-    private async Task DeleteAsync() => await _delete();
+    private async Task DeleteAsync()
+    {
+        IsDeleteConfirmVisible = false;
+        await _delete();
+    }
 }

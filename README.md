@@ -1,4 +1,4 @@
-﻿# Ancestors Enhanced Configurator
+# Ancestors Enhanced Configurator
 
 Portable configurator for **Ancestors: The Humankind Odyssey**. Edit graphics settings, manage save checkpoints and apply safe cheats — all from a small desktop tool. No installation required.
 
@@ -14,21 +14,28 @@ Release packages are **self-contained** — you do **not** need .NET or any fram
 1. Start Ancestors at least once so the game creates its save data.
 2. Close Ancestors, then start the Configurator.
 3. The tool auto-detects your installation (Steam, Epic, GOG or Heroic) and user data.
-4. Adjust graphics settings, manage saves, or apply cheats.
+4. Use the **Graphics** tab to adjust settings, **Saves** to manage checkpoints, or **Cheats** to boost yourself.
+5. Review your changes before they are written — the tool never edits files without your confirmation.
 
 ## Features
 
 * Game detection: **Steam** (Windows + Linux/Proton), **Epic** (Windows), **GOG** (Windows), **Heroic Games Launcher** (Epic + GOG, Windows + Linux).
-* Simple and advanced graphics controls with "Review before write" and exact backups / undo.
-* System.sav controls: resolution, brightness, frame-rate limit and six quality categories.
-* Startup video control and configurable vignette strength (safe PAK patch, game files never changed).
-* Save Manager: keep and load old save states per slot (5 slots, 50 checkpoints each).
-* Auto-Backup Watchdog: creates background checkpoints whenever the game saves.
-* Cheats tab: Max Neuronal Energy, Max Needs, Heal Clan — each saved as a new checkpoint, never overwriting your live save.
+* **Graphics** — Simple and advanced controls with review-before-write, exact backups and undo.
+* **Save manager** — keep and load old save states per slot (5 slots, up to 50 checkpoints each).
+* **Auto-backup** — automatically saves a checkpoint whenever the game saves.
+* **Cheats** — Max Neuronal Energy, Max Needs, Heal Clan. Each is saved as a new checkpoint, your live save is never touched.
+* **System.sav controls** — resolution, brightness, frame-rate limit and six quality categories.
+* **Startup & camera** — skip startup videos and enable a free camera (F10 in-game).
+
+### What each cheat does
+
+* **Max Neuronal Energy** — sets your neuronal energy to maximum, filling every neuronal energy source.
+* **Max Needs** — fills the current ape's needs (stamina, energy and regimen).
+* **Heal Clan** — restores health, stamina and energy for the current ape and your clan.
 
 ## Troubleshooting helpers
 
-* A log file is written to `<local-app-data>\AncestorsEnhanced\Logs\AncestorsEnhanced.log` (Windows) or the equivalent local-app-data path (Linux). It records the detected store, whether user data was found, and any crash details. Attach it if you report an issue.
+A log file is written to `<local-app-data>\AncestorsEnhanced\Logs\AncestorsEnhanced.log` (Windows) or the equivalent local-app-data path (Linux). It records the detected store, whether user data was found, and any crash details. Attach it if you report an issue.
 
 ## Steam Cloud note
 

@@ -37,7 +37,7 @@ public static class ReadableSettingsCatalog
             "motion-blur-quality",
             "Quality and activation",
             "r.MotionBlurQuality",
-            "Quality 0 disables motion blur; levels 1 to 4 select its rendering quality.");
+            "Off disables motion blur; higher levels increase rendering quality.");
         FeatureSettingSnapshot scale = Decimal(
             snapshot,
             "motion-blur-scale",
@@ -87,7 +87,7 @@ public static class ReadableSettingsCatalog
             "dof-quality",
             "Quality and activation",
             "r.DepthOfFieldQuality",
-            "Quality 0 disables depth of field; higher levels change rendering quality, not a simple intensity.");
+            "Off disables depth of field; higher levels change rendering quality, not a simple intensity.");
 
         return new FeatureGroupSnapshot(
             "depth-of-field",
@@ -179,7 +179,7 @@ public static class ReadableSettingsCatalog
                     "dof-recombine-quality",
                     "Recombine quality",
                     "r.DOF.Recombine.Quality",
-                    value => $"Level {value}",
+                    value => MapQuality(value),
                     "Controls the final slight-out-of-focus recombination pass.",
                     isAdvanced: true),
                 Boolean(
@@ -235,9 +235,9 @@ public static class ReadableSettingsCatalog
         }
 
         string displayValue = percent is decimal value
-            ? $"{value:0}% of original"
+            ? $"{value:0}% of game default"
             : vignette.IsEditable
-                ? "100% original"
+                ? "Game Default (100%)"
                 : "Not verified";
         FeatureSettingSnapshot environment = new(
             "environment-vignette",
@@ -302,7 +302,7 @@ public static class ReadableSettingsCatalog
             "image-clarity",
             "Image quality",
             "Image clarity and anti-aliasing",
-            CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen), ("TAA", taa)),
+            CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen), ("TAA weight", taa)),
             "Controls edge smoothing, temporal response and final image sharpening.",
             IsEssential: true,
             CombineStates(antiAliasing, taa, sharpen),
@@ -461,18 +461,17 @@ public static class ReadableSettingsCatalog
             "Post-processing",
             overrides == 0
                 ? CreateCompactSummary(
-                    ("Bloom", settings.Single(setting => setting.Id == "bloom-quality")),
-                    ("Fringe", settings.Single(setting => setting.Id == "chromatic-aberration")),
-                    ("Shafts", settings.Single(setting => setting.Id == "light-shafts")))
+                    ("Glow", settings.Single(setting => setting.Id == "bloom-quality")),
+                    ("Color fringing", settings.Single(setting => setting.Id == "chromatic-aberration")),
+                    ("Sunbeams", settings.Single(setting => setting.Id == "light-shafts")))
                 : $"{overrides} custom overrides",
             "Lighting and lens-style effects applied after the scene is rendered.",
             IsEssential: true,
             CombineStates(settings),
             settings,
             SimpleSummary: CreateCompactSummary(
-                ("Bloom", settings.Single(setting => setting.Id == "bloom-quality")),
-                ("Fringe", settings.Single(setting => setting.Id == "chromatic-aberration")),
-                ("Shafts", settings.Single(setting => setting.Id == "light-shafts"))));
+                ("Glow", settings.Single(setting => setting.Id == "bloom-quality")),
+                ("Sunbeams", settings.Single(setting => setting.Id == "light-shafts"))));
     }
 
     private static FeatureGroupSnapshot CreateShadowGroup(GameInspectionSnapshot snapshot)
@@ -537,7 +536,7 @@ public static class ReadableSettingsCatalog
             "Renderer",
             "Effects and materials",
             overrides == 0
-                ? CreateCompactSummary(("Refraction", settings[0]), ("SSR", settings[1]))
+                ? CreateCompactSummary(("Refraction", settings[0]), ("Reflections", settings[1]))
                 : $"{overrides} custom overrides",
             "Advanced material, reflection, translucency and particle controls.",
             IsEssential: false,
@@ -1027,17 +1026,23 @@ public static class ReadableSettingsCatalog
                 $"{value.Label} {CompactValue(value.Setting.Value)}"));
     }
 
-    private static string CompactValue(string value) => value
-        .Replace("Quality ", string.Empty, StringComparison.Ordinal)
-        .Replace("Level ", string.Empty, StringComparison.Ordinal);
+    private static string CompactValue(string value) => value.Trim();
 
-    private static string FormatOffOrQuality(int value) =>
-        value == 0 ? "Off" : $"Quality {value}";
+    private static string FormatOffOrQuality(int value) => MapQuality(value);
 
-    private static string FormatQualityLevel(int value) => $"Level {value}";
+    private static string FormatQualityLevel(int value) => MapQuality(value);
 
     private static string FormatAutoLevel(int value) =>
-        value < 0 ? "Automatic" : value == 0 ? "Off" : $"Level {value}";
+        value < 0 ? "Automatic" : MapQuality(value);
+
+    private static string MapQuality(int value) => value switch
+    {
+        0 => "Off",
+        1 => "Low",
+        2 => "Medium",
+        3 => "High",
+        _ => "Ultra",
+    };
 
     private static string FormatMegabytes(int value) =>
         value >= 1024 ? $"{value / 1024d:0.##} GB" : $"{value} MB";

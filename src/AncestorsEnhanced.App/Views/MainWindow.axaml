@@ -39,19 +39,19 @@
                       IsChecked="{Binding ShowGraphicsView, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
-                      Content="  🌿 Graphics" />
+                      Content="  Graphics" />
         <ToggleButton Classes="nav"
                       Command="{Binding ShowSaveGamesCommand}"
                       IsChecked="{Binding ShowSaveGamesView, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
-                      Content="  💾 Saves" />
+                      Content="  Saves" />
         <ToggleButton Classes="nav"
                       Command="{Binding ShowCheatCommand}"
                       IsChecked="{Binding ShowCheatView, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
-                      Content="  ⚡ Cheats" />
+                      Content="  Cheats" />
 
         <Button Classes="nav"
                 Command="{Binding RefreshCommand}"
@@ -59,7 +59,7 @@
                 Margin="0,18,0,0"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Left"
-                Content="↻ Reload" />
+                Content="Reload" />
       </StackPanel>
     </Border>
 
@@ -151,10 +151,10 @@
             </StackPanel>
             <TextBox Grid.Column="1"
                                           Text="{Binding SearchText, Mode=TwoWay}"
-                     PlaceholderText="Search name or renderer key"
+                     PlaceholderText="Search settings…"
                      VerticalAlignment="Center">
               <TextBox.InnerLeftContent>
-                <TextBlock Text="🔍"
+                <TextBlock Text=""
                            VerticalAlignment="Center"
                            Margin="10,0,5,0"
                            Foreground="#81929D"
@@ -169,60 +169,37 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:FeatureGroupRowViewModel">
               <Border Margin="0,0,0,8"
-                      Classes="SettingCard"
-                      ClipToBounds="True">
+                      Classes="SettingCard">
                 <Grid RowDefinitions="Auto,Auto">
-                  <Button Command="{Binding ToggleExpandedCommand}"
+                  <Button Classes="CardHeader"
+                          Command="{Binding ToggleExpandedCommand}"
                           Padding="14,10"
+                          MinHeight="42"
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Stretch"
                           Background="Transparent"
                           BorderThickness="0">
-                    <Grid ColumnDefinitions="4,*,Auto,22" ColumnSpacing="12" MinHeight="42" IsHitTestVisible="False">
+                    <Grid ColumnDefinitions="4,*,Auto,22" ColumnSpacing="12" IsHitTestVisible="False">
                       <Border Background="{Binding AccentColor}" CornerRadius="2" />
                       <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                        <TextBlock Text="{Binding Category}"
-                                   FontSize="9"
-                                   FontWeight="SemiBold"
-                                   Foreground="#697B86" />
-                        <TextBlock Text="{Binding Name}"
-                                   FontSize="16"
-                                   FontWeight="SemiBold"
-                                   Foreground="#E6ECEF" />
-                        <TextBlock Text="{Binding Description}"
-                                   IsVisible="{Binding ShowDescription}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Foreground="#82939E" />
+                        <TextBlock Text="{Binding Category}" FontSize="9" FontWeight="SemiBold" Foreground="#697B86" />
+                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                        <TextBlock Text="{Binding Description}" IsVisible="{Binding ShowDescription}" FontSize="11" TextWrapping="Wrap" Foreground="#82939E" />
                       </StackPanel>
-                      <StackPanel Grid.Column="2"
-                                  VerticalAlignment="Center"
-                                  HorizontalAlignment="Right"
-                                  Spacing="1">
-                        <TextBlock Text="{Binding Summary}"
-                                   HorizontalAlignment="Right"
-                                   TextAlignment="Right"
-                                   TextWrapping="Wrap"
-                                   MaxWidth="280"
-                                   FontWeight="SemiBold"
-                                   Foreground="#E8E4D9" />
-                        <TextBlock Text="{Binding SettingCount}"
-                                   HorizontalAlignment="Right"
-                                   FontSize="9"
-                                   Foreground="#647580" />
+                      <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="1">
+                        <TextBlock Text="{Binding Summary}" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap" MaxWidth="280" FontWeight="SemiBold" Foreground="#E8E4D9" />
+                        <TextBlock Text="{Binding SettingCount}" HorizontalAlignment="Right" FontSize="9" Foreground="#647580" />
                       </StackPanel>
-                      <TextBlock Grid.Column="3"
-                                 Text="{Binding Chevron}"
-                                 HorizontalAlignment="Center"
-                                 VerticalAlignment="Center"
-                                 Foreground="#8B9AA4" />
+                      <TextBlock Grid.Column="3" Text="{Binding Chevron}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#8B9AA4" />
                     </Grid>
                   </Button>
 
-                  <ItemsControl Grid.Row="1"
-                                IsVisible="{Binding IsExpanded}"
-                                ItemsSource="{Binding Settings}">
-                    <ItemsControl.ItemTemplate>
+                  <Border Grid.Row="1"
+                          CornerRadius="0,0,9,9"
+                          ClipToBounds="True"
+                          IsVisible="{Binding IsExpanded}">
+                    <ItemsControl ItemsSource="{Binding Settings}">
+                      <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:FeatureSettingRowViewModel">
                         <Border Padding="14,16"
                                 Background="{DynamicResource AppBackgroundBrush}"
@@ -398,6 +375,7 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
+                  </Border>
                 </Grid>
               </Border>
             </DataTemplate>
@@ -525,7 +503,7 @@
                              OffContent="Off" OnContent="On"
                              VerticalAlignment="Center" />
               <StackPanel Grid.Column="1" Spacing="3">
-                <TextBlock Text="Enable Auto-Backup (Watchdog)" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                <TextBlock Text="Enable Auto-Backup" FontWeight="SemiBold" Foreground="#E6ECEF" />
                 <TextBlock Text="Automatically saves a checkpoint in the background whenever the game saves."
                            FontSize="11" Foreground="#82939D" TextWrapping="Wrap" />
                 <TextBlock Text="Close the game to load a save file."
@@ -580,16 +558,11 @@
                                 <TextBlock Text="{Binding CreatedLabel}" FontWeight="SemiBold" Foreground="#E1E7EA" />
                                 <TextBlock Text="{Binding SizeLabel}" FontSize="10" Foreground="#71828D" />
                               </StackPanel>
-                                <Button Grid.Column="3" Classes="Ghost" Content="🗑 Delete" Padding="12,6" Foreground="#D6BC84" Click="OnDeleteOpenClick">
-                                  <Button.Flyout>
-                                    <Flyout Placement="Bottom">
-                                      <StackPanel Spacing="10" Margin="4">
-                                        <TextBlock Text="Permanently delete this backup?" FontWeight="SemiBold" Foreground="#D92316" />
-                                        <Button Command="{Binding DeleteCommand}" Classes="DangerAction" Content="Yes, delete it" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="OnConfirmDeleteClick" />
-                                      </StackPanel>
-                                    </Flyout>
-                                  </Button.Flyout>
-                                </Button>
+                              <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+                                <Button Classes="Ghost" Content=" Delete" Padding="12,6" Foreground="#D6BC84" Command="{Binding OpenDeleteConfirmCommand}" />
+                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="DangerAction" Content="Yes, delete it" Padding="12,6" Command="{Binding DeleteCommand}" />
+                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelDeleteConfirmCommand}" />
+                              </StackPanel>
 
                               <Button Grid.Column="2" Command="{Binding LoadCommand}" Content="Load" Padding="12,6" />
                             </Grid>
@@ -634,12 +607,12 @@
             <TextBlock Text="Game is running - close Ancestors before injecting. The cheat buttons are disabled while the game is open." FontWeight="SemiBold" Foreground="#E8C08A" TextWrapping="Wrap" />
           </Border>
 
-          <TextBlock Text="✦ INI TWEAKS — no save changes" FontSize="12" FontWeight="Bold" Foreground="#B4D941" Margin="2,6,0,0" />
+          <TextBlock Text="INI TWEAKS — no save changes" FontSize="12" FontWeight="Bold" Foreground="#B4D941" Margin="2,6,0,0" />
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
               <StackPanel Spacing="2" VerticalAlignment="Center">
                 <TextBlock Text="UE4 Free Camera (F10)" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                <TextBlock Text="Flying camera for exploring the map. Press F10 in-game to toggle. Writes to Input.ini." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                <TextBlock Text="Flying camera for exploring the map. Press F10 in-game to toggle it." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
               </StackPanel>
               <ToggleSwitch Grid.Column="1"
                             IsChecked="{Binding Cheat.IsFreeCamEnabled, Mode=TwoWay}"
@@ -647,7 +620,7 @@
             </Grid>
           </Border>
 
-          <TextBlock Text="⚡ SAVEGAME CHEATS — new checkpoint per slot" FontSize="12" FontWeight="Bold" Foreground="#FF5A00" Margin="2,8,0,0" />
+          <TextBlock Text="SAVEGAME CHEATS — new checkpoint per slot" FontSize="12" FontWeight="Bold" Foreground="#FF5A00" Margin="2,8,0,0" />
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="16">
               <StackPanel Spacing="2" VerticalAlignment="Center">
@@ -665,8 +638,8 @@
             <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="🧠 Max Neuronal Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Sets all neural energy sources and the avatar energy to maximum." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Max Neuronal Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                  <TextBlock Text="Sets your neuronal energy to maximum, instantly filling every neuronal energy source you have." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Command="{Binding Cheat.MaxNeuronalEnergyCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
@@ -677,8 +650,8 @@
             <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="⚡ Max Needs" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Fills the avatar needs (stamina, energy and regimen) to their maximum values." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Max Needs" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                  <TextBlock Text="Fills the current ape's needs (stamina, energy and regimen) to their maximum." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Command="{Binding Cheat.MaxNeedsCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
@@ -689,8 +662,8 @@
             <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="❤️ Heal Clan" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Restores health, stamina and energy for the avatar and clan members." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Heal Clan" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                  <TextBlock Text="Restores health, stamina and energy for the current ape and your clan." FontSize="11" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Command="{Binding Cheat.HealClanCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
@@ -718,7 +691,7 @@
                 <GradientStop Offset="1" Color="#0D1C16" />
               </LinearGradientBrush>
             </Border.Background>
-            <TextBlock Text="User-data folder linked - cheats are ready. Your original saves are never overwritten." TextWrapping="Wrap" Foreground="#E8E4D9" />
+            <TextBlock Text="Cheats linked to your save files. New checkpoints only; your original saves are never overwritten." TextWrapping="Wrap" Foreground="#E8E4D9" />
           </Border>
 
           <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#3B3120" BorderThickness="1">
@@ -759,7 +732,7 @@
                   IsEnabled="{Binding CanUndo}"
                   IsVisible="{Binding ShowGraphicsView}"
                   Padding="16,7"
-                  Content="↩ Undo" />
+                  Content="Undo" />
           <Button Command="{Binding DiscardChangesCommand}"
                   IsVisible="{Binding ShowPendingActions}"
                   Content="Discard" />

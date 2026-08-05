@@ -175,9 +175,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     };
 
     public string PendingDetails => string.Join(
-        " Â· ",
+        " · ",
         PendingChanges.Take(3).Select(change => $"{change.Name}: {change.DesiredValue}")) +
-        (PendingChanges.Count > 3 ? $" Â· +{PendingChanges.Count - 3} more" : string.Empty);
+        (PendingChanges.Count > 3 ? $" · +{PendingChanges.Count - 3} more" : string.Empty);
 
     public int SettingCount => Settings.Count;
 
@@ -308,7 +308,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ReviewChanges = _reviewPlan.Changes
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
-                    $"{change.FileName} Â· {change.Key}",
+                    $"{change.FileName} · {change.Key}",
                     change.Before ?? "Game default",
                     change.After ?? "Game default"))
                 .ToArray();
@@ -487,7 +487,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         {
 
-            // Ein neuerer Tastendruck hat diese Suche abgelÃ¶st.
+            // Ein neuerer Tastendruck hat diese Suche abgelöst.
 
         }
 
@@ -549,8 +549,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
             SaveManager?.Dispose();
             SaveManager = await CreateSaveManagerAsync(snapshot.UserDataDirectory);
+            Cheat?.Dispose();
             Cheat = CreateCheat(snapshot.UserDataDirectory);
-            UpdatePendingChanges();
+            Cheat?.Start();
             return true;
         }
         catch (Exception exception)
@@ -705,7 +706,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ConfigurationFiles = snapshot.ConfigurationFiles
             .Select(file => new ConfigurationFileRowViewModel(
                 file.Name,
-                $"{FormatBytes(file.SizeBytes ?? 0)} Â· {file.Settings.Count} readable settings",
+                $"{FormatBytes(file.SizeBytes ?? 0)} · {file.Settings.Count} readable settings",
                 file.ReadError ?? "Read successfully"))
             .ToArray();
 
@@ -722,7 +723,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         PakFiles = snapshot.PakFiles
             .Select(file => new PakFileRowViewModel(
                 file.Name,
-                $"{FormatBytes(file.SizeBytes)} Â· {file.LastWriteTimeUtc.ToLocalTime():g}",
+                $"{FormatBytes(file.SizeBytes)} · {file.LastWriteTimeUtc.ToLocalTime():g}",
                 file.Classification switch
                 {
                     PakClassification.BaseGame => "Known base-game package",

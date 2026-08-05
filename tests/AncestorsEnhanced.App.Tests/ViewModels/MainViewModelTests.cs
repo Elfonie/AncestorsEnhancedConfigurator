@@ -217,7 +217,7 @@ public sealed class MainViewModelTests
             viewModel.FeatureGroups.SelectMany(group => group.Settings),
             setting => setting.Name == "Image sharpening");
 
-        Assert.Equal("No override", sharpening.ValueLabel);
+        Assert.Equal("Game default", sharpening.ValueLabel);
         Assert.Equal("Game controlled", sharpening.Value);
         Assert.True(sharpening.Editor!.ShowUnknownGameValue);
     }

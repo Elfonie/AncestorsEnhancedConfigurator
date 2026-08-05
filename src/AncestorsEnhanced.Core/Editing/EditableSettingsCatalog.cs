@@ -325,7 +325,17 @@ public static class EditableSettingsCatalog
             [.. Enumerable.Range(0, maximum + 1)
                 .Select(value => (
                     value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    value == 0 ? "Off" : $"Quality {value}"))]);
+                    SelectQualityLabel(value)))]);
+
+
+    private static string SelectQualityLabel(int value) => value switch
+    {
+        0 => "Off",
+        1 => "Low",
+        2 => "Medium",
+        3 => "High",
+        _ => "Ultra",
+    };
 
     private static SettingEditorTemplate Choice(
         string defaultValue,

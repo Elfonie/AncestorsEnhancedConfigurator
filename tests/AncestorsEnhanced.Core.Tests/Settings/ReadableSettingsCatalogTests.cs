@@ -45,7 +45,7 @@ public sealed class ReadableSettingsCatalogTests
             "120%",
             FindSetting(FindGroup(groups, "view-distance-foliage"), "view-distance").Value);
         Assert.Equal(
-            "50% of original",
+            "50% of game default",
             FindSetting(FindGroup(groups, "vignette"), "environment-vignette").Value);
         Assert.Equal("Videos skipped", FindGroup(groups, "convenience").Summary);
     }
@@ -63,7 +63,7 @@ public sealed class ReadableSettingsCatalogTests
         FeatureSettingSnapshot vignette = FindSetting(
             FindGroup(groups, "vignette"),
             "environment-vignette");
-        Assert.Equal("100% original", vignette.Value);
+        Assert.Equal("Game Default (100%)", vignette.Value);
         Assert.Equal("100", vignette.Editor!.GameControlledValue);
     }
 
@@ -144,7 +144,7 @@ public sealed class ReadableSettingsCatalogTests
             FindGroup(ReadableSettingsCatalog.CreateFeatureGroups(snapshot), "motion-blur"),
             "motion-blur-quality");
 
-        Assert.Equal("Quality 4", motionBlur.Value);
+        Assert.Equal("Ultra", motionBlur.Value);
     }
 
     [Fact]
@@ -184,8 +184,8 @@ public sealed class ReadableSettingsCatalogTests
         Assert.Collection(
             motionBlur.PresetValues!,
             low => Assert.Equal(new SettingPresetValueSnapshot("Low", "Off"), low),
-            medium => Assert.Equal(new SettingPresetValueSnapshot("Medium", "Quality 3"), medium),
-            high => Assert.Equal(new SettingPresetValueSnapshot("High", "Quality 3"), high));
+            medium => Assert.Equal(new SettingPresetValueSnapshot("Medium", "High"), medium),
+            high => Assert.Equal(new SettingPresetValueSnapshot("High", "High"), high));
         Assert.NotNull(motionBlur.Editor);
         Assert.Equal("0", motionBlur.Editor.DefaultValue);
         Assert.Null(motionBlur.Editor.CurrentOverride);
@@ -248,9 +248,9 @@ public sealed class ReadableSettingsCatalogTests
 
         Assert.Equal("150%", foliage.Value);
         Assert.Equal("High", foliage.ActivePresetName);
-        Assert.Equal("Level 4", bloom.Value);
+        Assert.Equal("Ultra", bloom.Value);
         Assert.Equal("Low", bloom.ActivePresetName);
-        Assert.Equal("Quality 4", shadow.Value);
+        Assert.Equal("Ultra", shadow.Value);
         Assert.Equal("Medium", shadow.ActivePresetName);
         Assert.Equal("Off", depthOfField.Value);
         Assert.Equal("Low", depthOfField.ActivePresetName);

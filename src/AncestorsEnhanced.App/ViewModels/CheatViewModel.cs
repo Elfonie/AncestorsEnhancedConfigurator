@@ -11,6 +11,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     private readonly ISaveGameCheatService _service;
     private readonly IniCheatService _iniCheat;
     private readonly CancellationTokenSource _gameCheckCts = new();
+    private bool _started;
+    private bool _disposed;
 
     [ObservableProperty]
     public partial IReadOnlyList<int> Slots { get; set; } = [0, 1, 2, 3, 4];
@@ -42,10 +44,18 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         ArgumentNullException.ThrowIfNull(iniCheat);
         _service = service;
         _iniCheat = iniCheat;
-
-        _ = Task.Run(() => PollGameRunningLoopAsync(_gameCheckCts.Token));
     }
 
+    public void Start()
+    {
+        if (_started)
+        {
+            return;
+        }
+
+        _started = true;
+        _ = Task.Run(() => PollGameRunningLoopAsync(_gameCheckCts.Token));
+    }
 
     private void SetStatus(string message, string accent)
     {
@@ -154,6 +164,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
         await Dispatcher.UIThread.InvokeAsync(() => IsGameRunning = running);
     }
+
     private static bool IsAncestorsRunning()
     {
         try
@@ -171,7 +182,14 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         GC.SuppressFinalize(this);
         _gameCheckCts.Cancel();
+        _gameCheckCts.Dispose();
     }
 }

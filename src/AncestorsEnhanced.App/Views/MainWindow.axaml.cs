@@ -36,21 +36,4 @@ public partial class MainWindow : Window
             });
         }
     }
-    private Flyout? _activeDeleteFlyout;
-
-    private void OnDeleteOpenClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (sender is Button { Flyout: Flyout flyout })
-        {
-            _activeDeleteFlyout = flyout;
-        }
-    }
-
-    private void OnConfirmDeleteClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        // Das transientliche Bestätigungs-Flyout nach der finalen Aktion sofort schließen.
-        _activeDeleteFlyout?.Hide();
-        _activeDeleteFlyout = null;
-    }
-
 }
