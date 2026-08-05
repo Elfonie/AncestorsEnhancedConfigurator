@@ -23,9 +23,9 @@ public sealed record FeatureSettingRowViewModel(
         ? $"{ActivePresetName} game preset"
         : HasPresetValues
             ? "Game preset value unknown"
-            : Source.StartsWith("No custom", StringComparison.Ordinal)
-                ? "No override"
-                : "Current";
+            : Editor?.HasCurrentOverride == true
+            ? "Current"
+            : "No override";
 
     public string PresetExplanation => ActivePresetName is null
         ? "The game selects one of these values, but its active preset could not be read safely."

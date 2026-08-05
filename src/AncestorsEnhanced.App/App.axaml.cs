@@ -3,6 +3,7 @@ using AncestorsEnhanced.App.Views;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Inspection;
 using Avalonia;
+using Avalonia.Threading;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
@@ -25,9 +26,31 @@ public partial class App : Application
             var window = new MainWindow
             {
                 DataContext = viewModel,
+            };            window.Opened += async (_, _) => await viewModel.InitializeAsync();
+            DispatcherTimer? retryTimer = null;
+            window.Closed += (_, _) =>
+            {
+                retryTimer?.Stop();
+                viewModel.Dispose();
             };
-            window.Opened += async (_, _) => await viewModel.InitializeAsync();
-            window.Closed += (_, _) => viewModel.Dispose();
+            retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            retryTimer.Tick += async (_, _) =>
+            {
+                if (viewModel.IsBusy)
+                {
+                    return;
+                }
+
+                bool allAvailable = !viewModel.IsCheatUnavailable && !viewModel.IsSaveManagerUnavailable;
+                if (allAvailable)
+                {
+                    retryTimer.Stop();
+                    return;
+                }
+
+                await viewModel.RefreshCommand.ExecuteAsync(null);
+            };
+            retryTimer.Start();
             desktop.MainWindow = window;
         }
 

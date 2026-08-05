@@ -56,6 +56,8 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     public bool HasHiddenCheckpoints => Checkpoints.Count > DefaultVisibleCheckpoints && !_showAllCheckpoints;
 
+    public bool HasExpandedCheckpoints =>
+        _showAllCheckpoints && Checkpoints.Count > DefaultVisibleCheckpoints;
     public int HiddenCheckpointCount =>
         Math.Max(0, Checkpoints.Count - DefaultVisibleCheckpoints);
 
@@ -82,5 +84,6 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasHiddenCheckpoints));
         OnPropertyChanged(nameof(HiddenCheckpointCount));
         OnPropertyChanged(nameof(ShowAllLabel));
+        OnPropertyChanged(nameof(HasExpandedCheckpoints));
     }
 }

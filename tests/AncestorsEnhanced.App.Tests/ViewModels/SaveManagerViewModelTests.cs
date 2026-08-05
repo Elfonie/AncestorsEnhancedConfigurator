@@ -94,6 +94,9 @@ public sealed class SaveManagerViewModelTests
         Assert.Equal(3, watchdog.SuppressedSlot);
     }
 
+    private static string TempUserData() =>
+        Path.Combine(Path.GetTempPath(), "aec-sm-" + Guid.NewGuid().ToString("N"));
+
     private static SaveGameSlotSnapshot[] Slots() =>
         Enumerable.Range(0, 5)
             .Select(slot => new SaveGameSlotSnapshot(
@@ -182,7 +185,7 @@ public sealed class SaveManagerViewModelTests
     {
         var watchdog = new FakeWatchdog();
         var viewModel = new SaveManagerViewModel(new FakeSaveGameManager(
-            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())), "user-data", watchdog);
+            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())), "user-data-tmp", watchdog);
 
         Assert.False(watchdog.StartCount > 0);
         viewModel.IsWatchdogEnabled = true;
@@ -200,7 +203,7 @@ public sealed class SaveManagerViewModelTests
         var watchdog = new FakeWatchdog();
         var inspectCount = new CountInspectManager(
             new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots()));
-        var viewModel = new SaveManagerViewModel(inspectCount, "user-data", watchdog);
+        var viewModel = new SaveManagerViewModel(inspectCount, "user-data", watchdog, action => action());
         viewModel.Refresh(inspectCount.Snapshot);
         int before = inspectCount.InspectCount;
 

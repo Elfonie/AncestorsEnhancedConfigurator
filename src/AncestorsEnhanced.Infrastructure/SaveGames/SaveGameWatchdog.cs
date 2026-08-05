@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
@@ -12,6 +12,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
     private readonly Dictionary<int, DateTimeOffset> _lastBackupTimes = new();
     private readonly Dictionary<int, DateTimeOffset> _suppressedUntil = new();
     private TimeSpan _cooldown = TimeSpan.FromMinutes(5);
+    private bool _stopped;
     private FileSystemWatcher? _watcher;
 
     public SaveGameWatchdog(string userDataDirectory)
@@ -52,6 +53,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
                 return;
             }
 
+            _stopped = false;
             var watcher = new FileSystemWatcher(
                 SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory))
             {
@@ -77,6 +79,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             _watcher.Changed -= OnChanged;
             _watcher.Dispose();
             _watcher = null;
+            _stopped = true;
         }
 
         CancelAllDebounces();
@@ -99,23 +102,37 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
 
         lock (_gate)
         {
+            if (_stopped)
+            {
+                return;
+            }
+
             if (_debounces.TryGetValue(slot, out CancellationTokenSource? existing))
             {
+                // Nicht hier disposen: der Task, der dieses Token besitzt,
+                // disposet es nach seinem Abschluss selbst (finally).
                 existing.Cancel();
-                existing.Dispose();
             }
 
             var source = new CancellationTokenSource();
             _debounces[slot] = source;
-            _ = Task.Run(() => DebouncedCheckpointAsync(slot, source.Token));
+            _ = Task.Run(() => DebouncedCheckpointAsync(slot, source, source.Token));
         }
     }
 
-    private async Task DebouncedCheckpointAsync(int slot, CancellationToken token)
+    private async Task DebouncedCheckpointAsync(int slot, CancellationTokenSource source, CancellationToken token)
     {
         try
         {
             await Task.Delay(500, token);
+            lock (_gate)
+            {
+                if (_stopped)
+                {
+                    return;
+                }
+            }
+
             if (IsSuppressed(slot))
             {
                 return;
@@ -143,12 +160,15 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         {
             lock (_gate)
             {
-                if (_debounces.TryGetValue(slot, out CancellationTokenSource? source) &&
-                    source.IsCancellationRequested)
+                if (_debounces.TryGetValue(slot, out CancellationTokenSource? current) &&
+                    ReferenceEquals(current, source))
                 {
                     _debounces.Remove(slot);
                 }
             }
+
+            // Diese Source gehört diesem Task und ist jetzt verbraucht.
+            source.Dispose();
         }
     }
 
@@ -206,7 +226,6 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         foreach (CancellationTokenSource source in current.Values)
         {
             source.Cancel();
-            source.Dispose();
         }
     }
 

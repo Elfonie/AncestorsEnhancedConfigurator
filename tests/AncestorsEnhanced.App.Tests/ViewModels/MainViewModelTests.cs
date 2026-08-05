@@ -150,12 +150,16 @@ public sealed class MainViewModelTests
 
         viewModel.SearchText = "r.Shadow.MaxResolution";
 
+        await Task.Delay(400);
+
         FeatureGroupRowViewModel result = Assert.Single(viewModel.FeatureGroups);
         FeatureSettingRowViewModel setting = Assert.Single(result.Settings);
         Assert.Equal("Maximum shadow resolution", setting.Name);
         Assert.True(result.IsExpanded);
 
         viewModel.SearchText = "setting-that-does-not-exist";
+
+        await Task.Delay(400);
 
         Assert.Empty(viewModel.FeatureGroups);
         Assert.True(viewModel.HasNoSearchResults);

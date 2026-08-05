@@ -1,4 +1,5 @@
-﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Core.SaveGames;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -9,7 +10,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private readonly ISaveGameManager _manager;
     private readonly ISaveGameWatchdog? _watchdog;
     private readonly string _userDataDirectory;
+    private readonly Action<Action> _dispatchToUi;
     private bool _loadingSettings;
+    private readonly SemaphoreSlim _settingsWriteLock = new(1, 1);
 
     private const string ToolSettingsFileName = "AncestorsEnhanced_ToolSettings.json";
     private static readonly System.Text.Json.JsonSerializerOptions JsonSettings =
@@ -19,7 +22,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     public partial string StatusMessage { get; set; } = "No save games loaded yet.";
 
     [ObservableProperty]
-    public partial string StatusAccent { get; set; } = "#8FA1AD";
+    public partial string StatusAccent { get; set; } = "#7A877A";
 
     [ObservableProperty]
     public partial IReadOnlyList<SaveGameSlotViewModel> Slots { get; set; } = [];
@@ -59,11 +62,21 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         ISaveGameManager manager,
         string userDataDirectory,
         ISaveGameWatchdog? watchdog = null)
+        : this(manager, userDataDirectory, watchdog, dispatchToUi: null)
+    {
+    }
+
+    public SaveManagerViewModel(
+        ISaveGameManager manager,
+        string userDataDirectory,
+        ISaveGameWatchdog? watchdog,
+        Action<Action>? dispatchToUi)
     {
         ArgumentNullException.ThrowIfNull(manager);
         _manager = manager;
         _userDataDirectory = userDataDirectory;
         _watchdog = watchdog;
+        _dispatchToUi = dispatchToUi ?? (action => Dispatcher.UIThread.Post(action));
         if (_watchdog is not null)
         {
             _watchdog.CheckpointCreated += OnWatchdogCheckpointCreated;
@@ -89,6 +102,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 checkpoint => () => RunLoad(slot.SlotNumber, checkpoint.Id),
                 checkpoint => () => RunDelete(slot.SlotNumber, checkpoint.Id)))
             .ToArray();
+
+
+        StatusMessage = HasSlots ? "Save games loaded successfully." : "No save games loaded yet.";
+        StatusAccent = HasSlots ? "#B4D941" : "#7A877A";
+
         NotifyState();
     }
 
@@ -102,19 +120,19 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
         IsBusy = true;
         StatusMessage = "Reloading save games...";
-        StatusAccent = "#78AEE8";
+        StatusAccent = "#FF5A00";
         NotifyState();
         try
         {
             SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
             Refresh(snapshot);
             StatusMessage = "Save games reloaded.";
-            StatusAccent = "#62C9A7";
+            StatusAccent = "#B4D941";
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {
             StatusMessage = $"Could not reload save games: {exception.Message}";
-            StatusAccent = "#D6BC84";
+            StatusAccent = "#D92316";
         }
         finally
         {
@@ -127,7 +145,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         IsBusy = true;
         StatusMessage = "Working...";
-        StatusAccent = "#78AEE8";
+        StatusAccent = "#FF5A00";
         NotifyState();
         SaveGameOperationResult result;
         try
@@ -146,18 +164,18 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
                 Refresh(snapshot);
                 StatusMessage = result.Message;
-                StatusAccent = "#62C9A7";
+                StatusAccent = "#B4D941";
             }
             catch (Exception exception) when (IsExpectedException(exception))
             {
                 StatusMessage = $"{result.Message} (checkpoints could not be refreshed: {exception.Message})";
-                StatusAccent = "#D6BC84";
+                StatusAccent = "#D92316";
             }
         }
         else
         {
             StatusMessage = result.Message;
-            StatusAccent = "#D6BC84";
+            StatusAccent = "#D92316";
         }
 
         NotifyState();
@@ -201,6 +219,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
+        _settingsWriteLock.Dispose();
         if (_watchdog is not null)
         {
             _watchdog.CheckpointCreated -= OnWatchdogCheckpointCreated;
@@ -234,7 +253,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private void LoadSettings()
     {
         string path = ToolSettingsPath();
-        if (!File.Exists(path))
+        string? directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory) || !File.Exists(path))
         {
             return;
         }
@@ -268,28 +288,35 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     private void SaveSettings()
     {
-        try
+        var settings = new ToolSettings
         {
-            var settings = new ToolSettings
-            {
-                IsWatchdogEnabled = IsWatchdogEnabled,
-                WatchdogIntervalMinutes = _cooldownMinutes,
-            };
+            IsWatchdogEnabled = IsWatchdogEnabled,
+            WatchdogIntervalMinutes = _cooldownMinutes,
+        };
 
-            string? directory = Path.GetDirectoryName(ToolSettingsPath());
-            if (!string.IsNullOrWhiteSpace(directory))
+        string? directory = Path.GetDirectoryName(ToolSettingsPath());
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        string path = ToolSettingsPath();
+        _ = Task.Run(async () =>
+        {
+            await _settingsWriteLock.WaitAsync();
+            try
             {
-                Directory.CreateDirectory(directory);
+                File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(settings, JsonSettings));
             }
-
-            File.WriteAllText(
-                ToolSettingsPath(),
-                System.Text.Json.JsonSerializer.Serialize(settings, JsonSettings));
-        }
-        catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException)
-        {
-        }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+            }
+            finally
+            {
+                _settingsWriteLock.Release();
+            }
+        });
     }
 
     partial void OnIsBusyChanged(bool value)
@@ -297,9 +324,31 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanCreate));
     }
 
-    private async void OnWatchdogCheckpointCreated(object? sender, string slotNumber)
+    private void OnWatchdogCheckpointCreated(object? sender, string slotNumber)
     {
-        await RefreshAsync();
+        // Der Watchdog feuert vom Thread-Pool; UI-Änderungen gehören auf den UI-Thread.
+        // In Tests ohne UI-Loop läuft der Aufruf synchron über CheckAccess.
+        void Refresh()
+        {
+            try
+            {
+                _ = RefreshAsync();
+            }
+            catch (Exception exception) when (IsExpectedException(exception))
+            {
+                StatusMessage = $"Could not refresh after auto-backup: {exception.Message}";
+                StatusAccent = "#D92316";
+            }
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Refresh();
+        }
+        else
+        {
+            _dispatchToUi(Refresh);
+        }
     }
 
     private void NotifyState()

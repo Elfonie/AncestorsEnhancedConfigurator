@@ -81,6 +81,8 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public bool HasActiveOverride => ShowOverrideToggle && _initialValue is not null;
 
+    public bool HasCurrentOverride => _snapshot.CurrentOverride is not null;
+
     public bool HasKnownGameValue => _snapshot.GameControlledValue is not null;
 
     public bool ShowValueEditor =>

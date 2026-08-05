@@ -45,13 +45,18 @@ public sealed class AppLogger : IDisposable
 
     public void Write(string message)
     {
-        if (_disposed || string.IsNullOrWhiteSpace(message))
+        if (string.IsNullOrWhiteSpace(message))
         {
             return;
         }
 
         lock (_sync)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             try
             {
                 StreamWriter writer = _writer ??= OpenWriter();

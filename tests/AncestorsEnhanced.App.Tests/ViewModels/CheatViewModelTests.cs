@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.App.ViewModels;
+using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Core.SaveGames;
 using Xunit;
@@ -49,7 +49,7 @@ public sealed class CheatViewModelTests
         await viewModel.MaxNeedsCommand.ExecuteAsync(null);
 
         Assert.False(service.LastResult.Succeeded);
-        Assert.Equal("#D6BC84", viewModel.StatusAccent);
+        Assert.Equal("#D92316", viewModel.StatusAccent);
     }
 
     private static readonly string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aec-cheatvm-"+System.Guid.NewGuid().ToString("N"));

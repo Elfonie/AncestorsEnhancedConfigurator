@@ -2,28 +2,196 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="AncestorsEnhanced.App.App"
              RequestedThemeVariant="Default">
-    <Application.Resources>
-        <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0C1115" />
-        <SolidColorBrush x:Key="SurfaceBrush" Color="#151C22" />
-        <SolidColorBrush x:Key="RaisedSurfaceBrush" Color="#161D23" />
-        <SolidColorBrush x:Key="BorderBrush" Color="#273139" />
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F2F5F7" />
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#71828D" />
-        <SolidColorBrush x:Key="SuccessBrush" Color="#62C9A7" />
-        <SolidColorBrush x:Key="WarningBrush" Color="#D6BC84" />
-        <SolidColorBrush x:Key="InfoBrush" Color="#78C7E8" />
-    </Application.Resources>
-    <Application.Styles>
-        <FluentTheme />
-        <Style Selector="ToggleButton.mode">
-            <Setter Property="Padding" Value="18,8" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-        </Style>
-        <Style Selector="ToggleButton.mode:checked">
-            <Setter Property="Background" Value="#315E78" />
-            <Setter Property="Foreground" Value="#F4FAFD" />
-        </Style>
-    </Application.Styles>
+  <Application.Resources>
+    <!-- Tiefe, organische Dschungel-Schattierungen (Primal Survival) -->
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#070907" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#121612" />
+    <SolidColorBrush x:Key="RaisedSurfaceBrush" Color="#191F19" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#2A332A" />
+    <!-- Knochenweiß & Schilfgrün für warmen, harten Kontrast -->
+    <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E8E4D9" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#7A877A" />
+    <!-- Aggressive Akzente: giftiges Flora-Grün, Feuer-Orange, Blut -->
+    <SolidColorBrush x:Key="SuccessBrush" Color="#B4D941" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FF5A00" />
+    <SolidColorBrush x:Key="InfoBrush" Color="#FF5A00" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#D92316" />
+    <SolidColorBrush x:Key="FloraBrush" Color="#B4D941" />
+    <SolidColorBrush x:Key="BloodBrush" Color="#D92316" />
+    <!-- Avalonia Default-Blau für ToggleSwitches mit Flora-Grün überschreiben -->
+    <SolidColorBrush x:Key="ToggleSwitchCurtainFillOn" Color="#B4D941" />
+    <SolidColorBrush x:Key="ToggleSwitchCurtainFillOnPointerOver" Color="#9ABF31" />
+    <SolidColorBrush x:Key="ToggleSwitchCurtainStrokeOn" Color="#B4D941" />
+    <SolidColorBrush x:Key="ToggleSwitchCurtainStrokeOnPointerOver" Color="#9ABF31" />
+    <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#070907" />
+    <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#070907" />
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+
+    <!-- Global Buttons: Dunkel, taktisch, robust -->
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Background" Value="#1A221A" />
+      <Setter Property="BorderBrush" Value="#3A4A2E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Foreground" Value="#C8CFC4" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.1" />
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.1" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#253025" />
+      <Setter Property="BorderBrush" Value="#B4D941" />
+      <Setter Property="Foreground" Value="#E8E4D9" />
+    </Style>
+
+    <!-- Primary action: aggressiver Feuer-Verlauf (rot -> orange) -->
+    <Style Selector="Button.PrimaryAction">
+      <Setter Property="Foreground" Value="#FFF3EA" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Padding" Value="16,8" />
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#B02318" />
+            <GradientStop Offset="1" Color="#FF7A1A" />
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button.PrimaryAction:pointerover">
+      <Setter Property="Opacity" Value="0.86" />
+    </Style>
+    <Style Selector="Button.PrimaryAction:pressed">
+      <Setter Property="RenderTransform" Value="scale(0.96)" />
+    </Style>
+
+    <!-- Destructive / danger -->
+    <Style Selector="Button.DangerAction">
+      <Setter Property="Foreground" Value="#FFF" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#D92316" />
+            <GradientStop Offset="1" Color="#9E1A10" />
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Sidebar nav buttons -->
+    <Style Selector="ToggleButton.nav">
+      <Setter Property="Padding" Value="14,10" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Foreground" Value="#C8CFC4" />
+    </Style>
+    <Style Selector="ToggleButton.nav:pointerover">
+      <Setter Property="Background" Value="#1E2720" />
+    </Style>
+    <!-- Sidebar Nav Buttons Active State -->
+    <Style Selector="ToggleButton.nav:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#4A5A23" />
+            <GradientStop Offset="1" Color="#1E2720" />
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+      <Setter Property="Foreground" Value="#B4D941" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+        <Style Selector="Button.Ghost">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.Ghost:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+<Style Selector="Button.nav">
+      <Setter Property="Padding" Value="14,10" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="#C8CFC4" />
+    </Style>
+    <Style Selector="Button.nav:pointerover">
+      <Setter Property="Background" Value="#1E2720" />
+    </Style>
+    <!-- Mode toggle: Dschungel-Moos wenn aktiv -->
+    <Style Selector="ToggleButton.mode">
+      <Setter Property="Padding" Value="18,8" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- Mode Toggle Buttons (Simple/Advanced) Active State -->
+    <Style Selector="ToggleButton.mode:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Offset="0" Color="#4A5A23" />
+            <GradientStop Offset="1" Color="#1E2720" />
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+      <Setter Property="Foreground" Value="#B4D941" />
+    </Style>
+
+    <!-- Disabled -->
+    <Style Selector="Button:disabled, ToggleButton:disabled">
+      <Setter Property="Opacity" Value="0.35" />
+    </Style>
+
+    <!-- Floating card: rahmenlose "Survival-Slate", nur linker Akzent -->
+    <Style Selector="Border.SettingCard">
+      <Setter Property="Background" Value="#121612" />
+      <Setter Property="CornerRadius" Value="9" />
+      <Setter Property="BoxShadow" Value="0 5 16 0 #33000000" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="#3A4A2E" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.2" />
+          <BrushTransition Property="Background" Duration="0:0:0.2" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Border.SettingCard:pointerover">
+      <Setter Property="Background" Value="#181F18" />
+      <Setter Property="BorderBrush" Value="#FF5A00" />
+      <Setter Property="BoxShadow" Value="0 0 16 3 #FF5A0033" />
+    </Style>
+
+    <!-- Inputs abgerundet -->
+    <Style Selector="TextBox">
+      <Setter Property="CornerRadius" Value="7" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="CornerRadius" Value="7" />
+    </Style>
+  </Application.Styles>
 </Application>

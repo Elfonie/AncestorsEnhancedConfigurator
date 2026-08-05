@@ -10,7 +10,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 {
     private readonly ISaveGameCheatService _service;
     private readonly IniCheatService _iniCheat;
-    private readonly DispatcherTimer _gameCheckTimer;
+    private readonly CancellationTokenSource _gameCheckCts = new();
 
     [ObservableProperty]
     public partial IReadOnlyList<int> Slots { get; set; } = [0, 1, 2, 3, 4];
@@ -31,7 +31,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     public partial string StatusMessage { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string StatusAccent { get; set; } = "#8FA1AD";
+    public partial string StatusAccent { get; set; } = "#7A877A";
 
     [ObservableProperty]
     public partial bool HasStatus { get; set; }
@@ -43,13 +43,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         _service = service;
         _iniCheat = iniCheat;
 
-        _gameCheckTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(2),
-        };
-        _gameCheckTimer.Tick += (_, _) => UpdateGameRunning();
-        _gameCheckTimer.Start();
-        UpdateGameRunning();
+        _ = Task.Run(() => PollGameRunningLoopAsync(_gameCheckCts.Token));
     }
 
 
@@ -86,7 +80,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
         IsBusy = true;
         StatusMessage = "Applying...";
-        StatusAccent = "#78AEE8";
+        StatusAccent = "#FF5A00";
         NotifyState();
 
         CheatApplyResult result;
@@ -100,23 +94,23 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             IsBusy = false;
         }
 
-        SetStatus(result.Message, result.Succeeded ? "#62C9A7" : "#D6BC84");
+        SetStatus(result.Message, result.Succeeded ? "#B4D941" : "#D92316");
         NotifyState();
     }
 
     partial void OnIsFreeCamEnabledChanged(bool value)
     {
-        SetStatus("Updating free camera setting...", "#78AEE8");
+        SetStatus("Updating free camera setting...", "#FF5A00");
         try
         {
             _iniCheat.SetFreeCamera(value);
-            SetStatus(value ? "Free camera (F10) enabled. Press F10 in-game to toggle." : "Free camera disabled.", "#62C9A7");
+            SetStatus(value ? "Free camera (F10) enabled. Press F10 in-game to toggle." : "Free camera disabled.", "#B4D941");
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or InvalidOperationException or
                 ArgumentException or NotSupportedException)
         {
-            SetStatus($"Could not update free camera: {exception.Message}", "#D6BC84");
+            SetStatus($"Could not update free camera: {exception.Message}", "#D92316");
             IsFreeCamEnabled = !value;
         }
     }
@@ -125,11 +119,41 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     partial void OnIsGameRunningChanged(bool value) => NotifyState();
 
-    private void UpdateGameRunning()
+    private async Task PollGameRunningLoopAsync(CancellationToken token)
     {
-        IsGameRunning = IsAncestorsRunning();
+        // Rotiert vollständig losgelöst vom UI-Thread; der UI-Thread wird nur bei
+        // einer Statusänderung benachrichtigt.
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+            bool lastRunning = IsAncestorsRunning();
+            await PublishGameRunningAsync(lastRunning);
+
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                bool running = IsAncestorsRunning();
+                if (running != lastRunning)
+                {
+                    lastRunning = running;
+                    await PublishGameRunningAsync(running);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
+    private async Task PublishGameRunningAsync(bool running)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            IsGameRunning = running;
+            return;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() => IsGameRunning = running);
+    }
     private static bool IsAncestorsRunning()
     {
         try
@@ -148,6 +172,6 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
-        _gameCheckTimer.Stop();
+        _gameCheckCts.Cancel();
     }
 }

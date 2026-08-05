@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+using System.ComponentModel;
+using System.Globalization;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.SaveGames;
@@ -67,7 +68,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial string OperationMessage { get; set; } = "Ready. Nothing is written until you review and confirm.";
 
     [ObservableProperty]
-    public partial string OperationAccent { get; set; } = "#8FA1AD";
+    public partial string OperationAccent { get; set; } = "#7A877A";
 
     [ObservableProperty]
     public partial bool CanRevertLast { get; set; }
@@ -141,6 +142,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool ShowReviewActions => IsReviewingChanges;
 
+    public bool ShowBottomBar => ShowGraphicsView || HasPendingChanges || IsReviewingChanges;
+
+    public bool IsAnyOperationRunning =>
+        IsBusy ||
+        (SaveManager?.IsBusy ?? false) ||
+        (Cheat?.IsBusy ?? false);
     public bool CanEditSettings => !IsReviewingChanges && !IsBusy;
 
     public bool CanRestoreGameDefaults =>
@@ -168,9 +175,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     };
 
     public string PendingDetails => string.Join(
-        " · ",
+        " Â· ",
         PendingChanges.Take(3).Select(change => $"{change.Name}: {change.DesiredValue}")) +
-        (PendingChanges.Count > 3 ? $" · +{PendingChanges.Count - 3} more" : string.Empty);
+        (PendingChanges.Count > 3 ? $" Â· +{PendingChanges.Count - 3} more" : string.Empty);
 
     public int SettingCount => Settings.Count;
 
@@ -178,7 +185,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         if (await RefreshFromDiskAsync())
         {
-            ShowMessage("Configuration loaded. No files were changed.", "#8FA1AD");
+            ShowMessage("Configuration loaded. No files were changed.", "#7A877A");
         }
     }
 
@@ -192,13 +199,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         if (HasPendingChanges)
         {
-            ShowMessage("Apply or discard the pending changes before refreshing.", "#D6BC84");
+            ShowMessage("Apply or discard the pending changes before refreshing.", "#D92316");
             return;
         }
 
         if (await RefreshFromDiskAsync())
         {
-            ShowMessage("Configuration reloaded from disk.", "#62C9A7");
+            ShowMessage("Configuration reloaded from disk.", "#B4D941");
         }
     }
 
@@ -223,6 +230,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         UpdateViewVisibility();
     }
 
+    private void OnChildPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SaveManagerViewModel.IsBusy) ||
+            e.PropertyName == nameof(CheatViewModel.IsBusy))
+        {
+            OnPropertyChanged(nameof(IsAnyOperationRunning));
+        }
+    }
     private void UpdateViewVisibility()
     {
         OnPropertyChanged(nameof(ShowGraphicsView));
@@ -248,7 +263,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         UpdatePendingChanges();
-        ShowMessage("Pending changes discarded. No files were changed.", "#8FA1AD");
+        ShowMessage("Pending changes discarded. No files were changed.", "#7A877A");
     }
 
     [RelayCommand]
@@ -260,7 +275,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 _editors.Values.Any(editor => editor.HasActiveOverride)
                     ? "Apply or discard the current work before restoring game defaults."
                     : "No configurator overrides are active.",
-                "#8FA1AD");
+                "#7A877A");
             return;
         }
 
@@ -273,7 +288,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OpenReview();
         ShowMessage(
             "Review the complete removal of configurator overrides, then confirm.",
-            "#78AEE8");
+            "#FF5A00");
     }
 
     [RelayCommand]
@@ -293,16 +308,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ReviewChanges = _reviewPlan.Changes
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
-                    $"{change.FileName} · {change.Key}",
+                    $"{change.FileName} Â· {change.Key}",
                     change.Before ?? "Game default",
                     change.After ?? "Game default"))
                 .ToArray();
             IsReviewingChanges = true;
-            ShowMessage("Check every value, then confirm the write.", "#78AEE8");
+            ShowMessage("Check every value, then confirm the write.", "#FF5A00");
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
-            ShowMessage(exception.Message, "#D6BC84");
+            ShowMessage(exception.Message, "#D92316");
         }
     }
 
@@ -310,7 +325,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private void CancelReview()
     {
         CloseReview();
-        ShowMessage("Review closed. Your pending values are unchanged.", "#8FA1AD");
+        ShowMessage("Review closed. Your pending values are unchanged.", "#7A877A");
     }
 
     [RelayCommand]
@@ -326,7 +341,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         IsReviewingChanges = false;
         ReviewChanges = [];
         IsBusy = true;
-        ShowMessage("Applying the reviewed changes...", "#78AEE8");
+        ShowMessage("Applying the reviewed changes...", "#FF5A00");
         SettingsOperationResult result;
         try
         {
@@ -334,7 +349,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
-            ShowMessage($"No changes were kept: {exception.Message}", "#D6BC84");
+            ShowMessage($"No changes were kept: {exception.Message}", "#D92316");
             return;
         }
         finally
@@ -346,7 +361,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             await RefreshFromDiskAsync();
         }
 
-        ShowMessage(result.Message, result.Succeeded ? "#62C9A7" : "#D6BC84");
+        ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#D92316");
     }
 
     [RelayCommand]
@@ -358,7 +373,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         IsBusy = true;
-        ShowMessage("Restoring the last configurator backup...", "#78AEE8");
+        ShowMessage("Restoring the last configurator backup...", "#FF5A00");
         SettingsOperationResult result;
         try
         {
@@ -373,11 +388,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             await RefreshFromDiskAsync();
         }
 
-        ShowMessage(result.Message, result.Succeeded ? "#62C9A7" : "#D6BC84");
+        ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#D92316");
     }
 
     partial void OnIsAdvancedModeChanged(bool value)
     {
+        if (!value)
+        {
+            SearchText = string.Empty;
+        }
+
         OnPropertyChanged(nameof(IsSimpleMode));
         ApplyViewMode();
     }
@@ -386,6 +406,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(ShowGraphicsView));
         OnPropertyChanged(nameof(ShowSaveGamesView));
+        OnPropertyChanged(nameof(ShowBottomBar));
     }
 
     partial void OnIsCheatViewChanged(bool value)
@@ -393,21 +414,92 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowCheatView));
         OnPropertyChanged(nameof(ShowGraphicsView));
         OnPropertyChanged(nameof(ShowSaveGamesView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnSaveManagerChanging(SaveManagerViewModel? oldValue, SaveManagerViewModel? newValue)
+    {
+        if (oldValue is not null) oldValue.PropertyChanged -= OnChildPropertyChanged;
+        if (newValue is not null) newValue.PropertyChanged += OnChildPropertyChanged;
     }
 
     partial void OnSaveManagerChanged(SaveManagerViewModel? value)
     {
         OnPropertyChanged(nameof(IsSaveManagerAvailable));
+        OnPropertyChanged(nameof(IsAnyOperationRunning));
         OnPropertyChanged(nameof(IsSaveManagerUnavailable));
     }
 
-    partial void OnSearchTextChanged(string value) => ApplyViewMode();
+    partial void OnCheatChanging(CheatViewModel? oldValue, CheatViewModel? newValue)
+    {
+        if (oldValue is not null) oldValue.PropertyChanged -= OnChildPropertyChanged;
+        if (newValue is not null) newValue.PropertyChanged += OnChildPropertyChanged;
+    }
+
+    partial void OnCheatChanged(CheatViewModel? value)
+    {
+        OnPropertyChanged(nameof(IsCheatAvailable));
+        OnPropertyChanged(nameof(IsCheatUnavailable));
+        OnPropertyChanged(nameof(IsAnyOperationRunning));
+    }
+
+    private CancellationTokenSource? _searchDebounceSource;
+
+
+
+    partial void OnSearchTextChanged(string value)
+
+    {
+
+        _searchDebounceSource?.Cancel();
+
+        _searchDebounceSource = new CancellationTokenSource();
+
+        CancellationToken token = _searchDebounceSource.Token;
+
+        _ = DebouncedSearchApplyAsync(token);
+
+    }
+
+
+
+    private async Task DebouncedSearchApplyAsync(CancellationToken token)
+
+    {
+
+        try
+
+        {
+
+            await Task.Delay(250, token);
+
+            if (Avalonia.Application.Current is null)
+            {
+                // Headless-Unit-Test ohne Avalonia-Application/Message-Pump.
+                ApplyViewMode();
+                return;
+            }
+
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ApplyViewMode);
+        }
+
+        catch (OperationCanceledException)
+
+        {
+
+            // Ein neuerer Tastendruck hat diese Suche abgelÃ¶st.
+
+        }
+
+    }
+
 
     partial void OnCanRevertLastChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
 
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(IsAnyOperationRunning));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
     }
@@ -416,7 +508,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(ShowPendingActions));
+        OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(ShowReviewActions));
+        OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
     }
@@ -429,7 +523,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         CloseReview();
         IsBusy = true;
         DetectionStatus = "Scanning game files";
-        ShowMessage("Reading the installation and settings...", "#78AEE8");
+        ShowMessage("Reading the installation and settings...", "#FF5A00");
         try
         {
             GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
@@ -474,7 +568,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             PakFiles = [];
             Notices = [new NoticeRowViewModel("Error", exception.Message)];
             CanRevertLast = false;
-            ShowMessage($"Scan failed: {exception.Message}", "#D6BC84");
+            ShowMessage($"Scan failed: {exception.Message}", "#D92316");
             LogDetection("failed: "+exception.Message);
             return false;
         }
@@ -491,18 +585,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return null;
         }
 
-        ISaveGameManager manager = _saveManagerFactory(userDataDirectory);
-        var watchdog = new SaveGameWatchdog(userDataDirectory);
-        var viewModel = new SaveManagerViewModel(manager, userDataDirectory, watchdog);
         try
         {
+            ISaveGameManager manager = _saveManagerFactory(userDataDirectory);
             SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
+            var watchdog = new SaveGameWatchdog(userDataDirectory);
+            var viewModel = new SaveManagerViewModel(manager, userDataDirectory, watchdog);
             viewModel.Refresh(snapshot);
             return viewModel;
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
-            return new SaveManagerViewModel(manager, userDataDirectory, watchdog);
+            ShowMessage($"Could not load save games: {exception.Message}", "#D92316");
+            return null;
         }
     }
 
@@ -548,7 +643,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ? "Editable controls and useful technical values"
             : "The settings that make the clearest visual difference";
 
-        string query = IsAdvancedMode ? SearchText.Trim() : "";
+        string query = SearchText.Trim();
         FeatureGroups = _allFeatureGroups
             .Where(group => IsAdvancedMode || group.IsEssential)
             .Select(group => CreateGroupRow(group, query))
@@ -588,7 +683,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             IsAdvancedMode ? group.Summary : group.SimpleSummary ?? group.Summary,
             group.Description,
             GetAccentColor(group.State),
-            settings.Length == 1 ? "1 option" : $"{settings.Length} options",
+            settings.Length == 1 ? "1 setting" : $"{settings.Length} settings",
             settings,
             IsAdvancedMode,
             query.Length > 0);
@@ -610,7 +705,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ConfigurationFiles = snapshot.ConfigurationFiles
             .Select(file => new ConfigurationFileRowViewModel(
                 file.Name,
-                $"{FormatBytes(file.SizeBytes ?? 0)} · {file.Settings.Count} readable settings",
+                $"{FormatBytes(file.SizeBytes ?? 0)} Â· {file.Settings.Count} readable settings",
                 file.ReadError ?? "Read successfully"))
             .ToArray();
 
@@ -627,7 +722,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         PakFiles = snapshot.PakFiles
             .Select(file => new PakFileRowViewModel(
                 file.Name,
-                $"{FormatBytes(file.SizeBytes)} · {file.LastWriteTimeUtc.ToLocalTime():g}",
+                $"{FormatBytes(file.SizeBytes)} Â· {file.LastWriteTimeUtc.ToLocalTime():g}",
                 file.Classification switch
                 {
                     PakClassification.BaseGame => "Known base-game package",
@@ -651,7 +746,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         UpdatePendingChanges();
         if (HasPendingChanges)
         {
-            ShowMessage("Review the pending values, then apply or discard them.", "#D6BC84");
+            ShowMessage("Review the pending values, then apply or discard them.", "#D92316");
         }
     }
 
@@ -706,10 +801,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     private static string GetAccentColor(ReadableSettingState state) => state switch
     {
-        ReadableSettingState.Enabled => "#62C9A7",
-        ReadableSettingState.Disabled => "#8FA1AD",
-        ReadableSettingState.Modified => "#78AEE8",
-        _ => "#C3A66A",
+        ReadableSettingState.Enabled => "#B4D941",
+        ReadableSettingState.Disabled => "#7A877A",
+        ReadableSettingState.Modified => "#FF5A00",
+        _ => "#687668",
     };
 
     private static bool IsExpectedUserOperationException(Exception exception) =>
@@ -749,9 +844,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
+        _searchDebounceSource?.Cancel();
         SaveManager?.Dispose();
         SaveManager = null;
-        Cheat = null;
+        Cheat?.Dispose();
+Cheat = null;
     }
 }
 

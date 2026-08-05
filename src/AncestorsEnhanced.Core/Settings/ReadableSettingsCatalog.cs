@@ -593,7 +593,7 @@ public static class ReadableSettingsCatalog
                 : graphics.OverallQuality.ToString(),
             "Settings saved directly by Ancestors in System.sav.",
             IsEssential: true,
-            ReadableSettingState.Modified,
+            ReadableSettingState.Unknown,
             details);
     }
 
@@ -632,7 +632,7 @@ public static class ReadableSettingsCatalog
             "Controls whether the startup splash movies are played.",
             skipped ? "Game.ini override" : "No verified override",
             "!StartupMovies",
-            skipped ? ReadableSettingState.Enabled : ReadableSettingState.Unknown,
+            ReadableSettingState.Unknown,
             IsAdvanced: false,
             Editor: EditableSettingsCatalog.Create(snapshot, "!StartupMovies", clearMovies?.Value));
 
