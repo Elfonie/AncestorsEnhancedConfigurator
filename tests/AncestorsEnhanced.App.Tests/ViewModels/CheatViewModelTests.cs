@@ -12,8 +12,9 @@ public sealed class CheatViewModelTests
     {
         var viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
 
-        Assert.Equal([0, 1, 2, 3, 4], viewModel.Slots);
-        Assert.Equal(0, viewModel.SelectedSlot);
+        Assert.Equal(5, viewModel.Slots.Count);
+        Assert.Equal("Slot 1", viewModel.Slots[0].Label);
+        Assert.Equal(0, viewModel.SelectedSlot.Number);
         Assert.True(viewModel.CanApply);
     }
 
@@ -26,7 +27,7 @@ public sealed class CheatViewModelTests
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
         Assert.Equal(CheatKind.MaxNeuronalEnergy, service.LastKind);
-        Assert.Contains("applied", viewModel.StatusMessage);
+        Assert.Contains("checkpoint created", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -75,6 +76,52 @@ public sealed class CheatViewModelTests
             if (System.IO.Directory.Exists(tmp)) { System.IO.Directory.Delete(tmp, true); }
         }
     }
+
+
+    [Fact]
+    public void FreeCameraFailureRevertsWithoutRecursing()
+    {
+        // Point the user-data directory at an existing FILE so that creating the
+        // Config\WindowsNoEditor folder inside it fails with an IOException.
+        string asFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aec-file-"+System.Guid.NewGuid().ToString("N"));
+        System.IO.File.WriteAllText(asFile, "occupied");
+        CheatViewModel viewModel = null!;
+        try
+        {
+            viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(asFile));
+            viewModel.IsFreeCamEnabled = true;
+
+            // The write failed: the toggle must revert to false *and* stop (no recursion).
+            Assert.False(viewModel.IsFreeCamEnabled);
+            Assert.Contains("Could not update free camera", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            viewModel?.Dispose();
+            if (System.IO.File.Exists(asFile)) { System.IO.File.Delete(asFile); }
+        }
+    }
+
+
+    [Fact]
+    public async Task RestoreLastCheckpointCallsBackWithSlotAndId()
+    {
+        var service = new FakeCheatService();
+        var restored = new List<(string Slot, string Id)>();
+        var viewModel = new CheatViewModel(
+            service,
+            new IniCheatService(tmp),
+            (slot, id) => { restored.Add((slot, id)); return Task.CompletedTask; });
+        await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.CanRestoreLastCheckpoint);
+        await viewModel.RestoreLastCheckpointCommand.ExecuteAsync(null);
+
+        var pair = Assert.Single(restored);
+        Assert.Equal("0", pair.Slot);
+        Assert.Equal("cp-1", pair.Id);
+    }
+
 
     private sealed class FakeCheatService : ISaveGameCheatService
     {

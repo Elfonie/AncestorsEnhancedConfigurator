@@ -15,7 +15,7 @@ internal sealed class SaveGameCheckpointStore(
 
     private readonly Func<DateTimeOffset> _utcNow = utcNow;
 
-    public string Create(string userDataDirectory, int slotNumber, byte[] content)
+    public string Create(string userDataDirectory, int slotNumber, byte[] content, string origin = "Manual")
     {
         ArgumentNullException.ThrowIfNull(content);
         if (content.Length == 0)
@@ -34,7 +34,7 @@ internal sealed class SaveGameCheckpointStore(
         WriteBytesAtomically(Path.Combine(checkpointDirectory, "save.sav"), content);
         WriteManifest(
             checkpointDirectory,
-            new CheckpointManifest(createdAt, content.Length, Sha256(content)));
+            new CheckpointManifest(createdAt, content.Length, Sha256(content), origin));
 
         EnforceCap(slotRoot, maxCheckpointsPerSlot);
         return checkpointId;
@@ -82,7 +82,8 @@ internal sealed class SaveGameCheckpointStore(
                         manifest.CreatedAtUtc,
                         slotNumber.ToString(CultureInfo.InvariantCulture),
                         manifest.SizeBytes,
-                        manifest.Sha256);
+                        manifest.Sha256,
+                        manifest.Origin);
             })
             .OfType<SaveGameCheckpoint>()
             .OrderByDescending(checkpoint => checkpoint.CreatedAtUtc)
@@ -151,4 +152,5 @@ internal sealed class SaveGameCheckpointStore(
 internal sealed record CheckpointManifest(
     DateTimeOffset CreatedAtUtc,
     long SizeBytes,
-    string Sha256);
+    string Sha256,
+    string Origin = "Manual");

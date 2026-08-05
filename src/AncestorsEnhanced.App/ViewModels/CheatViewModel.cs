@@ -10,15 +10,23 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 {
     private readonly ISaveGameCheatService _service;
     private readonly IniCheatService _iniCheat;
+    private readonly Func<string, string, Task>? _restoreCheckpoint;
     private readonly CancellationTokenSource _gameCheckCts = new();
     private bool _started;
     private bool _disposed;
+    private bool _suppressFreeCamChanged;
+    private Task? _pollTask;
+    private string? _lastCheckpointSlot;
+    private string? _lastCheckpointId;
 
     [ObservableProperty]
-    public partial IReadOnlyList<int> Slots { get; set; } = [0, 1, 2, 3, 4];
+    public partial IReadOnlyList<CheatSlotChoice> Slots { get; set; } =
+        Enumerable.Range(0, 5)
+            .Select(number => new CheatSlotChoice(number, $"Slot {number + 1}"))
+            .ToArray();
 
     [ObservableProperty]
-    public partial int SelectedSlot { get; set; } = 0;
+    public partial CheatSlotChoice SelectedSlot { get; set; } = null!;
 
     [ObservableProperty]
     public partial bool IsBusy { get; set; }
@@ -38,12 +46,14 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial bool HasStatus { get; set; }
 
-    public CheatViewModel(ISaveGameCheatService service, IniCheatService iniCheat)
+    public CheatViewModel(ISaveGameCheatService service, IniCheatService iniCheat, Func<string, string, Task>? restoreCheckpoint = null)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(iniCheat);
         _service = service;
         _iniCheat = iniCheat;
+        _restoreCheckpoint = restoreCheckpoint;
+        SelectedSlot = Slots[0];
     }
 
     public void Start()
@@ -54,7 +64,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
 
         _started = true;
-        _ = Task.Run(() => PollGameRunningLoopAsync(_gameCheckCts.Token));
+        _pollTask = Task.Run(() => PollGameRunningLoopAsync(_gameCheckCts.Token));
     }
 
     private void SetStatus(string message, string accent)
@@ -96,7 +106,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         CheatApplyResult result;
         try
         {
-            string slot = SelectedSlot.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string slot = (SelectedSlot?.Number ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
             result = await Task.Run(() => _service.Apply(kind, slot));
         }
         finally
@@ -104,12 +114,62 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             IsBusy = false;
         }
 
-        SetStatus(result.Message, result.Succeeded ? "#B4D941" : "#D92316");
+        if (result.Succeeded && result.CheckpointId is not null)
+        {
+            _lastCheckpointSlot = (SelectedSlot?.Number ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _lastCheckpointId = result.CheckpointId;
+            StatusMessage = "Cheat checkpoint created. Restore it now to use it in the game.";
+            StatusAccent = "#B4D941";
+            HasStatus = true;
+            OnPropertyChanged(nameof(CanRestoreLastCheckpoint));
+        }
+        else
+        {
+            SetStatus(result.Message, result.Succeeded ? "#B4D941" : "#D92316");
+        }
         NotifyState();
     }
 
+    public bool CanRestoreLastCheckpoint => _lastCheckpointId is not null && !IsBusy && !IsGameRunning;
+
+    [RelayCommand]
+    private async Task RestoreLastCheckpointAsync()
+    {
+        if (_lastCheckpointId is null || _lastCheckpointSlot is null || _restoreCheckpoint is null)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        NotifyState();
+        try
+        {
+            await _restoreCheckpoint(_lastCheckpointSlot, _lastCheckpointId);
+            SetStatus("Cheat checkpoint restored. Start Ancestors to continue.", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedRestoreException(exception))
+        {
+            SetStatus($"Could not restore: {exception.Message}", "#D92316");
+        }
+        finally
+        {
+            IsBusy = false;
+            OnPropertyChanged(nameof(CanRestoreLastCheckpoint));
+            NotifyState();
+        }
+    }
+
+    private static bool IsExpectedRestoreException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or InvalidOperationException or
+            ArgumentException or NotSupportedException or InvalidDataException;
+
     partial void OnIsFreeCamEnabledChanged(bool value)
     {
+        if (_suppressFreeCamChanged)
+        {
+            return;
+        }
+
         SetStatus("Updating free camera setting...", "#FF5A00");
         try
         {
@@ -121,7 +181,20 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
                 ArgumentException or NotSupportedException)
         {
             SetStatus($"Could not update free camera: {exception.Message}", "#D92316");
-            IsFreeCamEnabled = !value;
+            RevertFreeCameraToggle(value);
+        }
+    }
+
+    private void RevertFreeCameraToggle(bool attemptedValue)
+    {
+        _suppressFreeCamChanged = true;
+        try
+        {
+            IsFreeCamEnabled = !attemptedValue;
+        }
+        finally
+        {
+            _suppressFreeCamChanged = false;
         }
     }
 
@@ -190,6 +263,22 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         _disposed = true;
         GC.SuppressFinalize(this);
         _gameCheckCts.Cancel();
+        try
+        {
+            // Kurz warten statt endlos: der Poll-Task marshal ke bleibt an den
+            // UI-Dispatcher gebunden und darf einen Test-/Shutdown-Thread nicht blockieren.
+            _pollTask?.Wait(TimeSpan.FromMilliseconds(300));
+        }
+        catch (AggregateException)
+        {
+        }
         _gameCheckCts.Dispose();
+        _pollTask = null;
     }
+}
+
+
+public sealed record CheatSlotChoice(int Number, string Label)
+{
+    public override string ToString() => Label;
 }

@@ -19,6 +19,7 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         SlotNumber = checkpoint.SlotNumber;
         CreatedLabel = checkpoint.CreatedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
         SizeLabel = string.Create(CultureInfo.CurrentCulture, $"{checkpoint.SizeBytes} bytes");
+        OriginLabel = FormatOrigin(checkpoint.Origin);
         _load = load;
         _delete = delete;
     }
@@ -31,8 +32,13 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
 
     public string SizeLabel { get; }
 
+    public string OriginLabel { get; }
+
     [ObservableProperty]
     public partial bool IsDeleteConfirmVisible { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsRestoreConfirmVisible { get; set; }
 
     [RelayCommand]
     private void OpenDeleteConfirm() => IsDeleteConfirmVisible = true;
@@ -41,7 +47,17 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     private void CancelDeleteConfirm() => IsDeleteConfirmVisible = false;
 
     [RelayCommand]
-    private async Task LoadAsync() => await _load();
+    private void OpenRestoreConfirm() => IsRestoreConfirmVisible = true;
+
+    [RelayCommand]
+    private void CancelRestoreConfirm() => IsRestoreConfirmVisible = false;
+
+    [RelayCommand]
+    private async Task LoadAsync()
+    {
+        IsRestoreConfirmVisible = false;
+        await _load();
+    }
 
     [RelayCommand]
     private async Task DeleteAsync()
@@ -49,4 +65,13 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         IsDeleteConfirmVisible = false;
         await _delete();
     }
+
+    private static string FormatOrigin(string origin) => origin switch
+    {
+        "Manual" => "Manual backup",
+        "AutoBackup" => "Auto-backup",
+        "PreRestore" => "Before restore",
+        string s when s.StartsWith("Cheat:", StringComparison.Ordinal) => s["Cheat:".Length..] + " cheat",
+        _ => origin,
+    };
 }

@@ -117,7 +117,7 @@ public sealed class MainViewModelTests
         Assert.Single(shadows.Settings);
         Assert.Equal("Shadow quality", shadows.Settings[0].Name);
         Assert.All(viewModel.FeatureGroups.SelectMany(group => group.Settings), setting =>
-            Assert.False(setting.ShowDescription));
+            Assert.True(setting.ShowDescription));
 
         FeatureSettingRowViewModel foliage = Assert.Single(
             viewModel.FeatureGroups.SelectMany(group => group.Settings),

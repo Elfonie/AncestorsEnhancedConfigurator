@@ -5,4 +5,5 @@ public sealed record SaveGameCheckpoint(
     DateTimeOffset CreatedAtUtc,
     string SlotNumber,
     long SizeBytes,
-    string Sha256);
+    string Sha256,
+    string Origin = "Manual");

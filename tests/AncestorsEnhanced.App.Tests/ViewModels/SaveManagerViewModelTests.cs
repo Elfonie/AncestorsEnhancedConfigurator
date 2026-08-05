@@ -20,9 +20,35 @@ public sealed class SaveManagerViewModelTests
         await viewModel.InitializeAsync();
 
         Assert.NotNull(viewModel.SaveManager);
-        Assert.True(viewModel.SaveManager.HasSlots);
         Assert.Equal(5, viewModel.SaveManager.Slots.Count);
+        // Alle Test-Slots sind leer (Exists=false) -> korrekt als "keine Saves" gemeldet.
+        Assert.False(viewModel.SaveManager.HasSlots);
     }
+
+    [Fact]
+    public async Task HasSlotsIsTrueWhenASlotHasASaveFile()
+    {
+        var slot = new SaveGameSlotSnapshot(
+            "0",
+            "Savegame0.sav",
+            "path-0",
+            Exists: true,
+            42,
+            DateTimeOffset.UnixEpoch,
+            []);
+        var manager = new FakeSaveGameManager(
+            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", [slot]));
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            _ => manager);
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.SaveManager!.HasSlots);
+        Assert.Single(viewModel.SaveManager.Slots);
+    }
+
 
     [Fact]
     public void TabsSwitchBetweenGraphicsAndSaveGames()
@@ -163,7 +189,7 @@ public sealed class SaveManagerViewModelTests
 
         public SaveGamesSnapshot Inspect() => snapshot;
 
-        public SaveGameOperationResult CreateCheckpoint(string slotNumber)
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual")
         {
             if (slotNumber == "0")
             {
@@ -246,7 +272,7 @@ public sealed class SaveManagerViewModelTests
             return snapshot;
         }
 
-        public SaveGameOperationResult CreateCheckpoint(string slotNumber) =>
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual") =>
             new(true, "Checkpoint saved.");
 
           public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>

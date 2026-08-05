@@ -51,7 +51,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         }
     }
 
-    public SaveGameOperationResult CreateCheckpoint(string slotNumber)
+    public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual")
     {
         int slot = ParseSlot(slotNumber);
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
@@ -80,7 +80,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 return new SaveGameOperationResult(true, $"Slot {slot} is unchanged; no checkpoint was created.");
             }
 
-            string checkpointId = _store.Create(_userDataDirectory, slot, content);
+            string checkpointId = _store.Create(_userDataDirectory, slot, content, origin);
             return new SaveGameOperationResult(
                 true,
                 $"Checkpoint saved for slot {slot}.",
@@ -113,7 +113,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 byte[] current = File.ReadAllBytes(slotPath);
                 if (!IsIdentical(current, checkpoint))
                 {
-                    _store.Create(_userDataDirectory, slot, current);
+                    _store.Create(_userDataDirectory, slot, current, "PreRestore");
                 }
             }
 

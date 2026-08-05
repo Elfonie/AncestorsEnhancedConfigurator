@@ -1,0 +1,32 @@
+name: build-and-test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore AncestorsEnhanced.slnx
+
+      - name: Build
+        run: dotnet build AncestorsEnhanced.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test AncestorsEnhanced.slnx -c Release --no-build

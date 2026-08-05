@@ -36,7 +36,7 @@ public partial class App : Application
             retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             retryTimer.Tick += async (_, _) =>
             {
-                if (viewModel.IsBusy)
+                if (viewModel.IsAnyOperationRunning)
                 {
                     return;
                 }

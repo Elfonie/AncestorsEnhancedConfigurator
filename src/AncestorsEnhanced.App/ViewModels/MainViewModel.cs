@@ -26,6 +26,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial string DetectionStatus { get; set; } = "Not checked yet";
 
     [ObservableProperty]
+    public partial string DetectionColor { get; set; } = "#7A877A";
+
+    [ObservableProperty]
+    public partial string DetectionDotColor { get; set; } = "#7A877A";
+
+    [ObservableProperty]
     public partial string InstallationPath { get; set; } = "Not detected";
 
     [ObservableProperty]
@@ -162,6 +168,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         IsAdvancedMode &&
         SearchText.Trim().Length > 0 &&
         FeatureGroups.Count == 0;
+
+    public int CustomOverrideCount =>
+        _allFeatureGroups
+            .SelectMany(g => g.Settings)
+            .Count(s => s.State == AncestorsEnhanced.Core.Settings.ReadableSettingState.Modified);
+
+    public string GamePresetName
+    {
+        get
+        {
+            var menu = _allFeatureGroups.FirstOrDefault(g => g.Id == "game-menu-settings");
+            return menu?.Summary ?? "Unknown";
+        }
+    }
 
     public string ReviewSummary => ReviewChanges.Count == 1
         ? "Review 1 change before writing"
@@ -518,6 +538,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnReviewChangesChanged(IReadOnlyList<ChangeReviewRowViewModel> value) =>
         OnPropertyChanged(nameof(ReviewSummary));
 
+
+    private void SetDetection(string status, string statusColor, string dotColor)
+    {
+        DetectionStatus = status;
+        DetectionColor = statusColor;
+        DetectionDotColor = dotColor;
+        OnPropertyChanged(nameof(DetectionStatus));
+    }
+
     private async Task<bool> RefreshFromDiskAsync()
     {
         CloseReview();
@@ -528,11 +557,18 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
             _snapshot = snapshot;
-            DetectionStatus = snapshot.IsGameDetected
-                ? snapshot.HasErrors
-                    ? "Ancestors detected with problems"
-                    : "Ancestors is ready"
-                : "Ancestors installation not detected";
+            if (snapshot.HasErrors)
+            {
+                SetDetection("Ancestors detected with problems", "#D6BC84", "#D6BC84");
+            }
+            else if (snapshot.IsGameDetected)
+            {
+                SetDetection("Ancestors is ready", "#B4D941", "#B4D941");
+            }
+            else
+            {
+                SetDetection("Ancestors installation not detected", "#7A877A", "#7A877A");
+            }
             InstallationPath = snapshot.Installation?.InstallDirectory ?? "Not detected";
             InstallationDetails = snapshot.Installation is null
                 ? "Store and build unknown"
@@ -543,6 +579,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             LogDetection("detected");
 
             _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
+            OnPropertyChanged(nameof(CustomOverrideCount));
+            OnPropertyChanged(nameof(GamePresetName));
             RebuildEditors();
             ApplyViewMode();
             LoadTechnicalDetails(snapshot);
@@ -557,7 +595,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         catch (Exception exception)
         {
             _snapshot = null;
-            DetectionStatus = "Scan failed";
+            SetDetection("Scan failed", "#D92316", "#D92316");
             InstallationPath = "Not available";
             InstallationDetails = "The previous result was cleared";
             UserDataPath = "Not available";
@@ -603,7 +641,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
 
-    private static CheatViewModel? CreateCheat(string? userDataDirectory)
+    private CheatViewModel? CreateCheat(string? userDataDirectory)
     {
         if (string.IsNullOrWhiteSpace(userDataDirectory))
         {
@@ -613,10 +651,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         var injector = new SaveGameCheatInjector();
         var service = new SaveGameCheatService(injector, userDataDirectory);
         var iniCheat = new IniCheatService(userDataDirectory);
-        return new CheatViewModel(service, iniCheat);
-    }
+        return new CheatViewModel(
+            service,
+            iniCheat,
+            async (slot, checkpointId) =>
+            {
+                if (SaveManager is null)
+                {
+                    throw new InvalidOperationException("Save manager is not available; reload first.");
+                }
 
-    private void RebuildEditors()
+                await SaveManager.RunLoad(slot, checkpointId);
+            });
+    }    private void RebuildEditors()
     {
         foreach (SettingEditorViewModel editor in _editors.Values)
         {
@@ -669,7 +716,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 setting.Source,
                 setting.TechnicalKey ?? setting.Source,
                 GetAccentColor(setting.State),
-                IsAdvancedMode,
+                true,
                 IsAdvancedMode,
                 setting.PresetValues?
                     .Select(value => new SettingPresetValueRowViewModel(value.Name, value.Value))

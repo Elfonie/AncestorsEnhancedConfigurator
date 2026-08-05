@@ -143,7 +143,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
                 return;
             }
 
-            SaveGameOperationResult result = _manager.CreateCheckpoint(slot.ToString(CultureInfo.InvariantCulture));
+            SaveGameOperationResult result = _manager.CreateCheckpoint(slot.ToString(CultureInfo.InvariantCulture), "AutoBackup");
             if (result.Succeeded)
             {
                 RecordBackupTime(slot);

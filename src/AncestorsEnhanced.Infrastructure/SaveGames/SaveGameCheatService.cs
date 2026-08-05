@@ -62,7 +62,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
             var store = new SaveGameCheckpointStore(
                 () => DateTimeOffset.UtcNow,
                 maxCheckpointsPerSlot: 50);
-            string checkpointId = store.Create(_userDataDirectory, slot, recompressed);
+            string checkpointId = store.Create(_userDataDirectory, slot, recompressed, $"Cheat:{kind}");
 
             return new CheatApplyResult(
                 true,

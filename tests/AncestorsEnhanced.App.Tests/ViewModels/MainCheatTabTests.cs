@@ -90,7 +90,7 @@ public sealed class MainCheatTabTests
         public SaveGamesSnapshot Inspect() =>
             new(DateTimeOffset.UnixEpoch, "user-data", []);
 
-        public SaveGameOperationResult CreateCheckpoint(string slotNumber) =>
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual") =>
             new(true, "Checkpoint saved.");
 
         public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>

@@ -13,6 +13,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private readonly Action<Action> _dispatchToUi;
     private bool _loadingSettings;
     private readonly SemaphoreSlim _settingsWriteLock = new(1, 1);
+    private Task? _pendingSettingsWrite;
 
     private const string ToolSettingsFileName = "AncestorsEnhanced_ToolSettings.json";
     private static readonly System.Text.Json.JsonSerializerOptions JsonSettings =
@@ -85,7 +86,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         LoadSettings();
     }
 
-    public bool HasSlots => Slots.Count > 0;
+    public bool HasSlots => Slots.Any(slot => slot.HasSave);
 
     public int[] CooldownChoices { get; } = [5, 10, 20];
 
@@ -219,6 +220,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
+        _pendingSettingsWrite?.GetAwaiter().GetResult();
         _settingsWriteLock.Dispose();
         if (_watchdog is not null)
         {
@@ -301,7 +303,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
 
         string path = ToolSettingsPath();
-        _ = Task.Run(async () =>
+        _pendingSettingsWrite = Task.Run(async () =>
         {
             await _settingsWriteLock.WaitAsync();
             try

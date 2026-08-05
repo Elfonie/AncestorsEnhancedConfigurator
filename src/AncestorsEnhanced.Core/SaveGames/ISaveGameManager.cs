@@ -4,7 +4,7 @@ public interface ISaveGameManager
 {
     SaveGamesSnapshot Inspect();
 
-    SaveGameOperationResult CreateCheckpoint(string slotNumber);
+    SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual");
 
     SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId);
 

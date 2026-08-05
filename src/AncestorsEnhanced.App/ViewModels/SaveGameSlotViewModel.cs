@@ -50,6 +50,8 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     public IReadOnlyList<SaveGameCheckpointViewModel> VisibleCheckpoints { get; private set; } = [];
 
+    public bool HasSave => _exists;
+
     public bool HasCheckpoints => Checkpoints.Count > 0;
 
     public bool CanSaveCheckpoint => _exists;

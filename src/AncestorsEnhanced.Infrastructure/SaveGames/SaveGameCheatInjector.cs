@@ -7,9 +7,10 @@ namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
 /// <summary>
 /// Applies safe, schema-verified value injections to a decompressed lineage save.
-/// Scalar FloatProperty values are overwritten in place; FloatProperty arrays (e.g.
-/// NeuronalEnergySources) have every element set. Nothing is resized, so the
-/// tagged-property layout stays valid and the modified bytes re-encode cleanly.
+/// Only known object roots are patched: the active character's vitality/health and
+/// the neuronal energy array. Equally named fields owned by other objects are left
+/// untouched. Nothing is resized, so the tagged-property layout stays valid and the
+/// modified bytes re-encode cleanly.
 /// </summary>
 public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
 {
@@ -24,43 +25,14 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
         byte[] work = [.. decompressedSave];
         SaveGameSchemaNode root = SaveGameSchemaAnalyzer.Parse(work);
         float value = ValueFor(kind);
-        HashSet<string> scalars = ScalarTargetsFor(kind);
-        HashSet<string> arrays = ArrayTargetsFor(kind);
-        if (scalars.Count == 0 && arrays.Count == 0)
+        var scalarTargets = ScalarTargetsFor(kind);
+        var arrayTargets = ArrayTargetsFor(kind);
+        if (scalarTargets.Count == 0 && arrayTargets.Count == 0)
         {
             return new CheatInjectionResult(false, "The cheat has no supported fields.");
         }
 
-        int modified = 0;
-        foreach (SaveGameSchemaNode node in SaveGameSchemaAnalyzer.Flatten(root))
-        {
-            if (IsScalar(node, scalars, work))
-            {
-                BinaryPrimitives.WriteInt32LittleEndian(
-                    work.AsSpan(node.ValueOffset, 4),
-                    BitConverter.SingleToInt32Bits(value));
-                modified++;
-            }
-            else if (IsFloatArray(node, arrays, work))
-            {
-                int count = BinaryPrimitives.ReadInt32LittleEndian(
-                    work.AsSpan(node.ValueOffset, 4));
-                int capped = Math.Min(count, 1_000_000);
-                if (node.ValueOffset + 4 + capped * 4 > work.Length)
-                {
-                    continue;
-                }
-
-                for (int element = 0; element < capped; element++)
-                {
-                    BinaryPrimitives.WriteInt32LittleEndian(
-                        work.AsSpan(node.ValueOffset + 4 + element * 4, 4),
-                        BitConverter.SingleToInt32Bits(value));
-                }
-
-                modified += capped;
-            }
-        }
+        int modified = ApplyToTree(root, kind, value, scalarTargets, arrayTargets, work, []);
 
         if (modified == 0)
         {
@@ -75,6 +47,107 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
                 $"{kind} applied to {modified} float field(s)."),
             modified);
     }
+
+    private static int ApplyToTree(
+        SaveGameSchemaNode node,
+        CheatKind kind,
+        float value,
+        HashSet<string> scalarTargets,
+        HashSet<string> arrayTargets,
+        byte[] work,
+        List<string> path)
+    {
+        int modified = 0;
+        path.Add(node.Name);
+        if (!node.IsTerminator &&
+            IsScalar(node, scalarTargets, work) &&
+            IsUnderAllowedPath(path, kind, isArray: false))
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(
+                work.AsSpan(node.ValueOffset, 4),
+                BitConverter.SingleToInt32Bits(value));
+            modified++;
+        }
+        else if (IsFloatArray(node, arrayTargets, work) && IsUnderAllowedPath(path, kind, isArray: true))
+        {
+            int count = BinaryPrimitives.ReadInt32LittleEndian(
+                work.AsSpan(node.ValueOffset, 4));
+            int capped = Math.Min(count, 1_000_000);
+            if (node.ValueOffset + 4 + capped * 4 <= work.Length)
+            {
+                for (int element = 0; element < capped; element++)
+                {
+                    BinaryPrimitives.WriteInt32LittleEndian(
+                        work.AsSpan(node.ValueOffset + 4 + element * 4, 4),
+                        BitConverter.SingleToInt32Bits(value));
+                }
+
+                modified += capped;
+            }
+        }
+
+        foreach (SaveGameSchemaNode child in node.Children)
+        {
+            modified += ApplyToTree(child, kind, value, scalarTargets, arrayTargets, work, path);
+        }
+
+        path.RemoveAt(path.Count - 1);
+        return modified;
+    }
+
+    private static bool IsUnderAllowedPath(
+        List<string> path,
+        CheatKind kind,
+        bool isArray)
+    {
+        string[] allowedRoots = AllowedRootsFor(kind, isArray);
+        if (allowedRoots.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (string root in allowedRoots)
+        {
+            string[] segments = root.Split('/');
+            // The path starts with the synthetic "<save>" root; the allowed root must
+            // match the path prefix starting right after it.
+            if (path.Count < segments.Length + 1)
+            {
+                continue;
+            }
+
+            bool match = true;
+            for (int index = 0; index < segments.Length; index++)
+            {
+                if (!string.Equals(path[index + 1], segments[index], StringComparison.Ordinal))
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string[] AllowedRootsFor(CheatKind kind, bool isArray) => kind switch
+    {
+        CheatKind.MaxNeuronalEnergy when isArray =>
+            ["RPGData/NeuronalEnergySources"],
+        CheatKind.MaxNeeds =>
+            ["PlayerControllerData/CharacterData/VitalityData"],
+        CheatKind.HealClan =>
+            [
+                "PlayerControllerData/CharacterData/VitalityData",
+                "PlayerControllerData/CharacterData/HealthData",
+            ],
+        _ => [],
+    };
 
     private static bool IsScalar(
         SaveGameSchemaNode node,
@@ -106,7 +179,9 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
 
     private static HashSet<string> ScalarTargetsFor(CheatKind kind) => kind switch
     {
-        CheatKind.MaxNeuronalEnergy => new HashSet<string>(StringComparer.Ordinal) { "Energy" },
+        // MaxNeuronalEnergy patches only the NeuronalEnergySources array, not the
+        // character's global Energy scalar.
+        CheatKind.MaxNeuronalEnergy => new HashSet<string>(StringComparer.Ordinal),
         CheatKind.MaxNeeds => new HashSet<string>(StringComparer.Ordinal)
         {
             "RegimenStamina",
@@ -119,8 +194,6 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
             "Energy",
             "Stamina",
         },
-        // ForceMutations needs rework: PendingNodes is an array of names and NodeSaveData is a
-        // complex struct; safe float injection does not apply. Revisit with element-aware parsing.
         CheatKind.ForceMutations => [],
         _ => [],
     };
@@ -133,8 +206,6 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
         },
         CheatKind.MaxNeeds => [],
         CheatKind.HealClan => [],
-        // ForceMutations needs rework: PendingNodes is an array of names and NodeSaveData is a
-        // complex struct; safe float injection does not apply. Revisit with element-aware parsing.
         CheatKind.ForceMutations => [],
         _ => [],
     };

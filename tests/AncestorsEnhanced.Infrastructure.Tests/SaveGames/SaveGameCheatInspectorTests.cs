@@ -24,7 +24,7 @@ public sealed class SaveGameCheatInspectorTests
     [Fact]
     public void HealClanModifiesFloatFieldsInPlace()
     {
-        byte[] decompressed = DecompressedSaveWith(
+        byte[] decompressed = DecompressedSaveWithCurrentCharacter(
             ("Health", 0.5f),
             ("Energy", 0.5f),
             ("Stamina", 0.5f));
@@ -39,12 +39,10 @@ public sealed class SaveGameCheatInspectorTests
         Assert.Equal(3, result.ModifiedCount);
         Assert.NotNull(modified);
         Assert.Equal(decompressed.Length, modified!.Length);
-    }
-
-    [Fact]
+    }    [Fact]
     public void MaxNeedsModifiesFloatFieldsInPlace()
     {
-        byte[] decompressed = DecompressedSaveWith(
+        byte[] decompressed = DecompressedSaveWithCurrentCharacter(
             ("RegimenStamina", 0.5f),
             ("Energy", 0.5f),
             ("Stamina", 0.5f));
@@ -59,14 +57,10 @@ public sealed class SaveGameCheatInspectorTests
         Assert.Equal(3, result.ModifiedCount);
         Assert.NotNull(modified);
         Assert.Equal(decompressed.Length, modified!.Length);
-    }
-
-    [Fact]
-    public void MaxNeuronalEnergyPatchesTheFloatArrayInPlace()
+    }    [Fact]
+    public void MaxNeuronalEnergyPatchesTheRpgArrayInPlace()
     {
-        byte[] decompressed = DecompressedSaveWithArray(
-            name: "NeuronalEnergySources",
-            elements: [0.5f, 0.6f, 0.7f]);
+        byte[] decompressed = DecompressedSaveWithRpgArray([0.5f, 0.6f, 0.7f]);
         var injector = new SaveGameCheatInjector();
 
         CheatInjectionResult result = injector.TryInject(
@@ -78,6 +72,26 @@ public sealed class SaveGameCheatInspectorTests
         Assert.Equal(3, result.ModifiedCount);
         Assert.Equal(decompressed.Length, modified!.Length);
     }
+    [Fact]
+    public void HealClanDoesNotTouchUnrelatedHealthFields()
+    {
+        // A Health field owned by an unrelated object (not under the active character)
+        // must be left alone.
+        byte[] current = DecompressedSaveWithCurrentCharacter(("Health", 0.5f));
+        byte[] unrelated = DecompressedSaveWithRootHealth(0.5f);
+        byte[] decompressed = current.Concat(unrelated).ToArray();
+        var injector = new SaveGameCheatInjector();
+
+        CheatInjectionResult result = injector.TryInject(
+            decompressed,
+            CheatKind.HealClan,
+            out byte[]? modified);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.NotNull(modified);
+        Assert.Equal(1, result.ModifiedCount);
+    }
+
 
     [Fact]
     public void ForceMutationsReportsNoSupportedFields()
@@ -135,6 +149,86 @@ public sealed class SaveGameCheatInspectorTests
         stream.Write(UnrealTaggedProperties.EncodeTerminator());
         return stream.ToArray();
     }
+
+
+
+    private static byte[] DecompressedSaveWithCurrentCharacter(params (string Name, float Value)[] floats)
+    {
+        using var vitality = new MemoryStream();
+        foreach ((string name, float value) in floats.Where(f => f.Name != "Health"))
+        {
+            vitality.Write(UnrealTaggedProperties.EncodeFloat(name, value));
+        }
+
+        vitality.Write(UnrealTaggedProperties.EncodeTerminator());
+        using var health = new MemoryStream();
+        foreach ((string name, float value) in floats.Where(f => f.Name == "Health"))
+        {
+            health.Write(UnrealTaggedProperties.EncodeFloat(name, value));
+        }
+
+        health.Write(UnrealTaggedProperties.EncodeTerminator());
+        using var characterData = new MemoryStream();
+        if (vitality.Length > UnrealTaggedProperties.EncodeTerminator().Length)
+        {
+            characterData.Write(UnrealTaggedProperties.EncodeStruct(
+                "VitalityData",
+                "VitalityServiceData",
+                vitality.ToArray()));
+        }
+
+        if (health.Length > UnrealTaggedProperties.EncodeTerminator().Length)
+        {
+            characterData.Write(UnrealTaggedProperties.EncodeStruct(
+                "HealthData",
+                "HealthServiceData",
+                health.ToArray()));
+        }
+
+        characterData.Write(UnrealTaggedProperties.EncodeTerminator());
+        using var controller = new MemoryStream();
+        controller.Write(UnrealTaggedProperties.EncodeStruct(
+            "CharacterData",
+            "GameCharacterSaveGame",
+            characterData.ToArray()));
+        controller.Write(UnrealTaggedProperties.EncodeTerminator());
+        using var root = new MemoryStream();
+        root.Write(UnrealTaggedProperties.EncodeStruct(
+            "PlayerControllerData",
+            "GamePlayerControllerSaveData",
+            controller.ToArray()));
+        root.Write(UnrealTaggedProperties.EncodeTerminator());
+        return root.ToArray();
+    }
+
+    private static byte[] DecompressedSaveWithRpgArray(float[] elements)
+    {
+        byte[] array = DecompressedSaveWithArray("NeuronalEnergySources", elements);
+        byte[] rpg = Concat(array, UnrealTaggedProperties.EncodeTerminator());
+        byte[] root = Concat(
+            UnrealTaggedProperties.EncodeStruct("RPGData", "RPGData", rpg),
+            UnrealTaggedProperties.EncodeTerminator());
+        return root;
+    }
+
+    private static byte[] DecompressedSaveWithRootHealth(float value)
+    {
+        return Concat(
+            UnrealTaggedProperties.EncodeFloat("Health", value),
+            UnrealTaggedProperties.EncodeTerminator());
+    }
+
+    private static byte[] Concat(params byte[][] parts)
+    {
+        using var output = new MemoryStream();
+        foreach (byte[] part in parts)
+        {
+            output.Write(part);
+        }
+
+        return output.ToArray();
+    }
+
 
     private static byte[] EncodeString(string value)
     {
