@@ -214,6 +214,16 @@ public sealed class SaveManagerViewModelTests
             new(false, "Nothing to revert.");
     }
 
+    [Theory]
+    [InlineData(0, "0 B")]
+    [InlineData(512, "512 B")]
+    [InlineData(2048, "2 KB")]
+    [InlineData(5 * 1024 * 1024, "5 MB")]
+    public void FormatSizeProducesHumanReadableUnits(long bytes, string expected)
+    {
+        Assert.Equal(expected, SaveGameSlotViewModel.FormatSize(bytes));
+    }
+
     private sealed class FakeSaveGameManager(SaveGamesSnapshot snapshot) : ISaveGameManager
     {
         public bool CreatedSlot0 { get; private set; }
@@ -285,12 +295,36 @@ public sealed class SaveManagerViewModelTests
 
         public event EventHandler<string>? CheckpointCreated;
 
+        public event EventHandler<string>? WatcherError;
+
         public void Start() => StartCount++;
 
         public void StopWatch() => StopCount++;
 
         public void RaiseCheckpoint(string slotNumber) =>
             CheckpointCreated?.Invoke(this, slotNumber);
+
+        public void RaiseWatcherError(string message) =>
+            WatcherError?.Invoke(this, message);
+    }
+
+    [Fact]
+    public async Task WatcherErrorShowsAFailureStatus()
+    {
+        var watchdog = new FakeWatchdog();
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())),
+            "user-data",
+            watchdog,
+            action => action());
+
+        ReadOnlySpan<char> before = viewModel.StatusMessage.AsSpan();
+        _ = before.ToString();
+        watchdog.RaiseWatcherError("disk full");
+
+        Assert.Equal("#E04D42", viewModel.StatusAccent);
+        Assert.Contains("watch failed", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("disk full", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class CountInspectManager(SaveGamesSnapshot snapshot) : ISaveGameManager
@@ -328,6 +362,22 @@ public sealed class SaveManagerViewModelTests
         public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
             new(false, "failed");
     }
+    [Fact]
+    public void CooldownClampsNegativeAndExtremeValues()
+    {
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())),
+            "user-data",
+            watchdog: null);
+
+        viewModel.CooldownMinutes = -5;
+        Assert.True(viewModel.CooldownMinutes > 0);
+        Assert.Equal(1, viewModel.CooldownMinutes);
+
+        viewModel.CooldownMinutes = 100_000;
+        Assert.Equal(1440, viewModel.CooldownMinutes);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout, string failureMessage)
     {
         DateTime deadline = DateTime.UtcNow + timeout;

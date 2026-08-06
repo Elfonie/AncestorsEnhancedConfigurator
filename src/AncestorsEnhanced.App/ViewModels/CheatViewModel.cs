@@ -100,6 +100,17 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
 
         _started = true;
+        try
+        {
+            IsFreeCamEnabled = _iniCheat.IsFreeCameraEnabled();
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or InvalidOperationException or
+                ArgumentException or NotSupportedException)
+        {
+            IsFreeCamEnabled = false;
+        }
+
         _pollTask = Task.Run(() => PollGameRunningLoopAsync(_gameCheckCts.Token));
     }
 

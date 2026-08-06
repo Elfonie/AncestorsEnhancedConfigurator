@@ -24,53 +24,124 @@ public sealed class SaveGameCheatInspectorTests
     [Fact]
     public void HealClanModifiesFloatFieldsInPlace()
     {
-        byte[] decompressed = DecompressedSaveWithCurrentCharacter(
+        byte[] source = DecompressedSaveWithCurrentCharacter(
             ("Health", 0.5f),
             ("Energy", 0.5f),
             ("Stamina", 0.5f));
         var injector = new SaveGameCheatInjector();
 
         CheatInjectionResult result = injector.TryInject(
-            decompressed,
+            source,
             CheatKind.HealClan,
             out byte[]? modified);
 
         Assert.True(result.Succeeded, result.Message);
         Assert.Equal(3, result.ModifiedCount);
         Assert.NotNull(modified);
-        Assert.Equal(decompressed.Length, modified!.Length);
-    }    [Fact]
+        Assert.Equal(source.Length, modified!.Length);
+        Assert.Equal(3, result.ModifiedRanges.Count);
+        foreach (ByteRange range in result.ModifiedRanges)
+        {
+            Assert.Equal(1.0f, ReadFloat(modified, range.Offset));
+        }
+
+        Assert.True(ArraysEqualExcept(source, modified, result.ModifiedRanges));
+    }
+    [Fact]
     public void MaxNeedsModifiesFloatFieldsInPlace()
     {
-        byte[] decompressed = DecompressedSaveWithCurrentCharacter(
+        byte[] source = DecompressedSaveWithCurrentCharacter(
             ("RegimenStamina", 0.5f),
             ("Energy", 0.5f),
             ("Stamina", 0.5f));
         var injector = new SaveGameCheatInjector();
 
         CheatInjectionResult result = injector.TryInject(
-            decompressed,
+            source,
             CheatKind.MaxNeeds,
             out byte[]? modified);
 
         Assert.True(result.Succeeded, result.Message);
         Assert.Equal(3, result.ModifiedCount);
         Assert.NotNull(modified);
-        Assert.Equal(decompressed.Length, modified!.Length);
-    }    [Fact]
+        Assert.Equal(source.Length, modified!.Length);
+        Assert.Equal(3, result.ModifiedRanges.Count);
+        foreach (ByteRange range in result.ModifiedRanges)
+        {
+            Assert.Equal(1_000.0f, ReadFloat(modified, range.Offset));
+        }
+
+        Assert.True(ArraysEqualExcept(source, modified, result.ModifiedRanges));
+    }
+    [Fact]
     public void MaxNeuronalEnergyPatchesTheRpgArrayInPlace()
     {
-        byte[] decompressed = DecompressedSaveWithRpgArray([0.5f, 0.6f, 0.7f]);
+        byte[] source = DecompressedSaveWithRpgArray([0.5f, 0.6f, 0.7f]);
         var injector = new SaveGameCheatInjector();
 
         CheatInjectionResult result = injector.TryInject(
-            decompressed,
+            source,
             CheatKind.MaxNeuronalEnergy,
             out byte[]? modified);
 
         Assert.True(result.Succeeded, result.Message);
         Assert.Equal(3, result.ModifiedCount);
-        Assert.Equal(decompressed.Length, modified!.Length);
+        Assert.NotNull(modified);
+        Assert.Equal(source.Length, modified!.Length);
+        Assert.Equal(999_999.0f, ReadFloat(modified, result.ModifiedRanges.Single().Offset + 4));
+        Assert.Equal(999_999.0f, ReadFloat(modified, result.ModifiedRanges.Single().Offset + 8));
+        Assert.Equal(999_999.0f, ReadFloat(modified, result.ModifiedRanges.Single().Offset + 12));
+        Assert.True(ArraysEqualExcept(source, modified, result.ModifiedRanges));
+    }
+
+    [Fact]
+    public void ArrayElementCountBeyondNodePayloadIsClampedToZero()
+    {
+        // Array claims 10 elements but the node payload only contains 4 bytes (the count).
+        byte[] source = DecompressedSaveWithArray("NeuronalEnergySources", [0.5f, 0.6f, 0.7f]);
+        using var stream = new MemoryStream();
+        // Re-encode with a count of 10 but a payload of only 4 bytes.
+        stream.Write(EncodeString("NeuronalEnergySources"));
+        stream.Write(EncodeString("ArrayProperty"));
+        Span<byte> size = stackalloc byte[8];
+        BinaryPrimitives.WriteInt64LittleEndian(size, 4);
+        stream.Write(size);
+        stream.Write(EncodeString("FloatProperty"));
+        stream.WriteByte(0);
+        Span<byte> count = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(count, 10);
+        stream.Write(count);
+        stream.Write(UnrealTaggedProperties.EncodeTerminator());
+        byte[] malformed = stream.ToArray();
+
+        var injector = new SaveGameCheatInjector();
+        CheatInjectionResult result = injector.TryInject(
+            malformed,
+            CheatKind.MaxNeuronalEnergy,
+            out byte[]? modified);
+
+        // Zero elements fit inside the node payload, so nothing may be patched.
+        Assert.False(result.Succeeded);
+        Assert.Contains("no matching", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(modified);
+    }
+
+    private static float ReadFloat(byte[] data, int offset) =>
+        BitConverter.Int32BitsToSingle(
+            BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset, 4)));
+
+    private static bool ArraysEqualExcept(byte[] expected, byte[] actual, IReadOnlyList<ByteRange> ranges)
+    {
+        byte[] copy = (byte[])expected.Clone();
+        foreach (ByteRange range in ranges)
+        {
+            for (int i = range.Offset; i < range.EndExclusive; i++)
+            {
+                copy[i] = actual[i];
+            }
+        }
+
+        return copy.AsSpan().SequenceEqual(actual);
     }
     [Fact]
     public void HealClanDoesNotTouchUnrelatedHealthFields()

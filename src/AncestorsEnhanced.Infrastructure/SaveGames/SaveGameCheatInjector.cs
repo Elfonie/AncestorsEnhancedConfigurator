@@ -32,7 +32,8 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
             return new CheatInjectionResult(false, "The cheat has no supported fields.");
         }
 
-        int modified = ApplyToTree(root, kind, value, scalarTargets, arrayTargets, work, []);
+        var ranges = new List<ByteRange>();
+        int modified = ApplyToTree(root, kind, value, scalarTargets, arrayTargets, work, [], ranges);
 
         if (modified == 0)
         {
@@ -45,7 +46,8 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
             string.Create(
                 CultureInfo.InvariantCulture,
                 $"{kind} applied to {modified} float field(s)."),
-            modified);
+            modified,
+            ranges);
     }
 
     private static int ApplyToTree(
@@ -55,7 +57,8 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
         HashSet<string> scalarTargets,
         HashSet<string> arrayTargets,
         byte[] work,
-        List<string> path)
+        List<string> path,
+        List<ByteRange> ranges)
     {
         int modified = 0;
         path.Add(node.Name);
@@ -66,13 +69,21 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
             BinaryPrimitives.WriteInt32LittleEndian(
                 work.AsSpan(node.ValueOffset, 4),
                 BitConverter.SingleToInt32Bits(value));
+            ranges.Add(new ByteRange(node.ValueOffset, 4));
             modified++;
         }
         else if (IsFloatArray(node, arrayTargets, work) && IsUnderAllowedPath(path, kind, isArray: true))
         {
             int count = BinaryPrimitives.ReadInt32LittleEndian(
                 work.AsSpan(node.ValueOffset, 4));
-            int capped = Math.Min(count, 1_000_000);
+            // The declared element count must never exceed the node's own payload.
+            int limit = (node.ValueLength - 4) / 4;
+            if (limit < 0)
+            {
+                limit = 0;
+            }
+
+            int capped = Math.Min(count, limit);
             if (node.ValueOffset + 4 + capped * 4 <= work.Length)
             {
                 for (int element = 0; element < capped; element++)
@@ -82,13 +93,18 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
                         BitConverter.SingleToInt32Bits(value));
                 }
 
+                if (capped > 0)
+                {
+                    ranges.Add(new ByteRange(node.ValueOffset, 4 + capped * 4));
+                }
+
                 modified += capped;
             }
         }
 
         foreach (SaveGameSchemaNode child in node.Children)
         {
-            modified += ApplyToTree(child, kind, value, scalarTargets, arrayTargets, work, path);
+            modified += ApplyToTree(child, kind, value, scalarTargets, arrayTargets, work, path, ranges);
         }
 
         path.RemoveAt(path.Count - 1);

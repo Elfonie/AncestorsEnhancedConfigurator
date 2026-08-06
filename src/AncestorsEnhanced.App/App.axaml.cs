@@ -27,6 +27,8 @@ public partial class App : Application
             {
                 DataContext = viewModel,
             };            window.Opened += async (_, _) => await viewModel.InitializeAsync();
+            int retryCount = 0;
+            const int MaxAutomaticRetries = 3;
             DispatcherTimer? retryTimer = null;
             window.Closed += (_, _) =>
             {
@@ -48,6 +50,15 @@ public partial class App : Application
                     return;
                 }
 
+                // Only a few automatic retries; afterwards the user uses the
+                // visible Reload / Scan-again buttons.
+                if (retryCount >= MaxAutomaticRetries)
+                {
+                    retryTimer.Stop();
+                    return;
+                }
+
+                retryCount++;
                 await viewModel.RefreshCommand.ExecuteAsync(null);
             };
             retryTimer.Start();

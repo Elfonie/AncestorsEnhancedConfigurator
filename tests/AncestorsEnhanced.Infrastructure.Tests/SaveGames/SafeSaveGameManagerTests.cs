@@ -148,6 +148,73 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.Empty(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("../other")]
+    [InlineData(@"..\other")]
+    [InlineData("/absolute")]
+    [InlineData("C:\\absolute")]
+    [InlineData("id.with.dot")]
+    [InlineData("id/with/slash")]
+    [InlineData("id\\with\\backslash")]
+    [InlineData("id:with:colon")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public void InvalidCheckpointIdsAreRejectedForLoad(string checkpointId)
+    {
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+
+        SaveGameOperationResult result = manager.LoadCheckpoint("0", checkpointId);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("../other")]
+    [InlineData(@"..\other")]
+    [InlineData("/absolute")]
+    [InlineData("C:\\absolute")]
+    [InlineData("id.with.dot")]
+    [InlineData("id/with/slash")]
+    [InlineData("id\\with\\backslash")]
+    [InlineData("id:with:colon")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public void InvalidCheckpointIdsNeverDeleteAnything(string checkpointId)
+    {
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string validId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
+
+        SaveGameOperationResult result = manager.DeleteCheckpoint("0", checkpointId);
+
+        Assert.False(result.Succeeded);
+        Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
+        Assert.True(Directory.Exists(SaveGamePaths.GetSlotRoot(userData, 0)));
+        Assert.True(File.Exists(SaveGamePaths.GetCheckpointPath(userData, 0, validId)));
+    }
+
+    [Fact]
+    public void GeneratedCheckpointIdsPassStrictValidation()
+    {
+        string userData = CreateUserDataWithSave(0, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+
+        SaveGameOperationResult result = manager.CreateCheckpoint("0");
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.CreatedCheckpointId);
+        SaveGamePaths.ValidateCheckpointId(result.CreatedCheckpointId);
+        Assert.Equal(32, result.CreatedCheckpointId.Length);
+    }
+
     private string CreateUserDataWithSave(int slotNumber, byte[] content)
     {
         string userData = Path.Combine(_temporaryDirectory, "Saved");

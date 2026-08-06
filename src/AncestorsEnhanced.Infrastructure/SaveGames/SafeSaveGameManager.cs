@@ -77,7 +77,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             if (latest.Count > 0 &&
                 IsIdentical(content, SaveGameCheckpointStore.Read(_userDataDirectory, slot, latest[0].Id)))
             {
-                return new SaveGameOperationResult(true, $"Slot {slot} is unchanged; no checkpoint was created.");
+                return new SaveGameOperationResult(true, $"Slot {slot} is unchanged; no checkpoint was created.", null);
             }
 
             string checkpointId = _store.Create(_userDataDirectory, slot, content, origin);
@@ -96,7 +96,6 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     {
         int slot = ParseSlot(slotNumber);
         ArgumentNullException.ThrowIfNull(checkpointId);
-        SaveGamePaths.ValidateCheckpointId(checkpointId);
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
         if (_isGameRunning())
         {
@@ -105,6 +104,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
 
         try
         {
+            SaveGamePaths.ValidateCheckpointId(checkpointId);
             string slotPath = SaveGamePaths.GetSlotPath(_userDataDirectory, slot);
             byte[] checkpoint = SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpointId);
 
@@ -133,12 +133,13 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     {
         int slot = ParseSlot(slotNumber);
         ArgumentNullException.ThrowIfNull(checkpointId);
-        SaveGamePaths.ValidateCheckpointId(checkpointId);
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
 
         try
         {
-            string checkpointDirectory = Path.Combine(
+            SaveGamePaths.ValidateCheckpointId(checkpointId);
+            // Validated again with containment checks immediately before the recursive delete.
+            string checkpointDirectory = SaveGamePaths.GetCheckpointDirectory(
                 SaveGamePaths.GetSlotRoot(_userDataDirectory, slot),
                 checkpointId);
             if (!Directory.Exists(checkpointDirectory))

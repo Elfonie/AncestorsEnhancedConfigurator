@@ -184,7 +184,11 @@ public static class EditableSettingsCatalog
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(request);
 
-        SettingEditSnapshot? editor = Create(snapshot, request.Key, currentOverride: null);
+        // Validate against the actual current value from the snapshot so that an
+        // unknown/unsupported existing override cannot silently bypass the same
+        // restrictions the UI applies.
+        string? currentOverride = FindCurrentOverride(snapshot, request);
+        SettingEditSnapshot? editor = Create(snapshot, request.Key, currentOverride);
         if (editor is null ||
             !string.Equals(request.FileName, editor.FileName, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(request.Section, editor.Section, StringComparison.OrdinalIgnoreCase))
@@ -209,6 +213,55 @@ public static class EditableSettingsCatalog
 
         error = valid ? null : $"{request.Value} is not a valid value for {request.Key}.";
         return valid;
+    }
+
+    private static string? FindCurrentOverride(
+        GameInspectionSnapshot snapshot,
+        SettingChangeRequest request)
+    {
+        // System.sav-backed settings live in the binary settings file.
+        if (string.Equals(
+                request.FileName,
+                "System.sav",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return ReadSystemSaveValue(snapshot, request.Key);
+        }
+
+        ConfigurationFileSnapshot? file = snapshot.ConfigurationFiles
+            .FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, request.FileName, StringComparison.OrdinalIgnoreCase));
+        IniSettingSnapshot? entry = file?.Settings
+            .FirstOrDefault(setting =>
+                string.Equals(setting.Key, request.Key, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(setting.Section, request.Section, StringComparison.OrdinalIgnoreCase));
+        return entry?.Value;
+    }
+
+    private static string? ReadSystemSaveValue(
+        GameInspectionSnapshot snapshot,
+        string key)
+    {
+        SystemGraphicsSettingsSnapshot? graphics = snapshot.BinarySettingsFile?.GraphicsSettings;
+        if (graphics is null)
+        {
+            return null;
+        }
+
+        return key switch
+        {
+            SystemSaveSettingKeys.FullscreenResolution =>
+                $"{graphics.FullscreenWidth}x{graphics.FullscreenHeight}",
+            SystemSaveSettingKeys.Brightness => graphics.Brightness.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            SystemSaveSettingKeys.FrameRateLimit => graphics.FrameRateLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            SystemSaveSettingKeys.ViewDistanceQuality => graphics.ViewDistanceQuality.ToString(),
+            SystemSaveSettingKeys.PostProcessingQuality => graphics.PostProcessingQuality.ToString(),
+            SystemSaveSettingKeys.ShadowQuality => graphics.ShadowQuality.ToString(),
+            SystemSaveSettingKeys.TextureQuality => graphics.TextureQuality.ToString(),
+            SystemSaveSettingKeys.VisualEffectsQuality => graphics.VisualEffectsQuality.ToString(),
+            SystemSaveSettingKeys.FoliageQuality => graphics.FoliageQuality.ToString(),
+            _ => null,
+        };
     }
 
     public static bool IsVerifiedEditingTarget(GameInspectionSnapshot snapshot)

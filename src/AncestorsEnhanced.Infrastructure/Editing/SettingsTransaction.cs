@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 using System.Text.Json;
 using AncestorsEnhanced.Core;
@@ -97,12 +98,19 @@ internal sealed class SettingsTransaction(
             }
             catch
             {
-                RestoreFiles(applied);
+                List<string> rollbackFailures = RestoreFilesBestEffort(applied);
+                if (rollbackFailures.Count > 0)
+                {
+                    return SettingsOperationResult.PartialRollbackRequired(
+                        "Some files could not be restored automatically. Restore them manually from the backup folder:\n" +
+                        string.Join(System.Environment.NewLine, rollbackFailures),
+                        SettingsBackupStore.GetManifestPath(operationDirectory));
+                }
+
                 throw;
             }
 
-            return new SettingsOperationResult(
-                true,
+            return SettingsOperationResult.Applied(
                 $"Applied {plan.Changes.Count} change{(plan.Changes.Count == 1 ? string.Empty : "s")}. A backup was created.",
                 SettingsBackupStore.GetManifestPath(operationDirectory));
         }
@@ -201,7 +209,15 @@ internal sealed class SettingsTransaction(
             }
             catch
             {
-                RestoreCurrentFiles(operation, restored);
+                List<string> restoreFailures = RestoreCurrentFilesBestEffort(operation, restored);
+                if (restoreFailures.Count > 0)
+                {
+                    return SettingsOperationResult.PartialRollbackRequired(
+                        "Not all files could be restored automatically. Restore them manually from the backup folder:\n" +
+                        string.Join(System.Environment.NewLine, restoreFailures) + "\nBackup folder: " + operation.Directory,
+                        operation.Directory);
+                }
+
                 throw;
             }
 
@@ -211,13 +227,11 @@ internal sealed class SettingsTransaction(
             }
             catch (Exception exception) when (IsExpectedWriteException(exception))
             {
-                return new SettingsOperationResult(
-                    true,
-                    $"The configuration was restored, but its history marker could not be written: {exception.Message}");
+                return SettingsOperationResult.RolledBack(
+                    "The configuration was restored, but its history marker could not be written: " + exception.Message);
             }
 
-            return new SettingsOperationResult(
-                true,
+            return SettingsOperationResult.RolledBack(
                 "The last configurator change was restored from its backup.");
         }
         catch (Exception exception) when (IsExpectedWriteException(exception))
@@ -248,6 +262,50 @@ internal sealed class SettingsTransaction(
         }
     }
 
+    private static List<string> RestoreCurrentFilesBestEffort(
+        StoredSettingsOperation operation,
+        IEnumerable<(ManifestFile File, byte[] Current)> restored)
+    {
+        var failures = new List<string>();
+        foreach ((ManifestFile file, byte[] current) in restored)
+        {
+            try
+            {
+                string targetPath = GetTargetPath(
+                    operation.Manifest.UserDataDirectory,
+                    operation.Manifest.InstallDirectory,
+                    file.FileName,
+                    file.Target);
+                if (file.ResultExists)
+                {
+                    WriteBytesAtomically(targetPath, current);
+                    bool valid = File.Exists(targetPath) && string.Equals(
+                        Sha256(File.ReadAllBytes(targetPath)),
+                        Sha256(current),
+                        StringComparison.Ordinal);
+                    if (!valid)
+                    {
+                        failures.Add(file.FileName);
+                    }
+                }
+                else
+                {
+                    File.Delete(targetPath);
+                    if (File.Exists(targetPath))
+                    {
+                        failures.Add(file.FileName);
+                    }
+                }
+            }
+            catch (Exception exception) when (IsExpectedWriteException(exception))
+            {
+                failures.Add(file.FileName);
+            }
+        }
+
+        return failures;
+    }
+
     private static bool MatchesCurrentFile(ConfigurationFileChangePlan file)
     {
         if (File.Exists(file.FullPath) != file.Existed)
@@ -275,6 +333,47 @@ internal sealed class SettingsTransaction(
                 File.Delete(file.FullPath);
             }
         }
+    }
+
+    /// <summary>
+    /// Restores every touched file best-effort. Returns the names of files that could
+    /// not be restored (empty list means the rollback was complete).
+    /// </summary>
+    private static List<string> RestoreFilesBestEffort(IEnumerable<ConfigurationFileChangePlan> files)
+    {
+        var failures = new List<string>();
+        foreach (ConfigurationFileChangePlan file in files.Reverse())
+        {
+            try
+            {
+                if (file.Existed)
+                {
+                    WriteBytesAtomically(file.FullPath, file.OriginalContent);
+                    bool restored = File.Exists(file.FullPath) && string.Equals(
+                        Sha256(File.ReadAllBytes(file.FullPath)),
+                        file.OriginalSha256,
+                        StringComparison.Ordinal);
+                    if (!restored)
+                    {
+                        failures.Add(file.FileName);
+                    }
+                }
+                else
+                {
+                    File.Delete(file.FullPath);
+                    if (File.Exists(file.FullPath))
+                    {
+                        failures.Add(file.FileName);
+                    }
+                }
+            }
+            catch (Exception exception) when (IsExpectedWriteException(exception))
+            {
+                failures.Add(file.FileName);
+            }
+        }
+
+        return failures;
     }
 
     private static SettingsOperationResult Failure(string message) => new(false, message);

@@ -16,6 +16,22 @@ sealed class Program
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, eventArgs) =>
             AppDiagnostics.Logger?.Write($"Unobserved task exception: {eventArgs.Exception}");
 
+        if (args.Contains("--version", StringComparer.Ordinal))
+        {
+            // No UI, no game files: print product name and version, exit 0.
+            string bareVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+            Console.WriteLine($"Ancestors Enhanced Configurator {bareVersion}");
+            return;
+        }
+
+        using var singleInstance = new AncestorsEnhanced.Infrastructure.Platform.SingleInstanceGuard(
+            "AncestorsEnhancedConfigurator");
+        if (!singleInstance.IsAcquired)
+        {
+            AppDiagnostics.Logger?.Write("Second instance detected; shutting down.");
+            return;
+        }
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 

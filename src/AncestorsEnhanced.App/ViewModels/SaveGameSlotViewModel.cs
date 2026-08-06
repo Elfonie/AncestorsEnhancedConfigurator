@@ -21,8 +21,11 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         _exists = slot.Exists;
         SlotNumber = slot.SlotNumber;
         FileName = slot.FileName;
+        Title = int.TryParse(slot.SlotNumber, NumberStyles.Integer, CultureInfo.InvariantCulture, out int slotIndex)
+            ? string.Create(CultureInfo.CurrentCulture, $"Slot {slotIndex + 1}")
+            : slot.SlotNumber;
         Status = slot.Exists
-            ? string.Create(CultureInfo.CurrentCulture, $"{slot.SizeBytes ?? 0} bytes \u00b7 last write {slot.LastWriteTimeUtc?.ToLocalTime():g}")
+            ? string.Create(CultureInfo.CurrentCulture, $"{FormatSize(slot.SizeBytes ?? 0)} \u00b7 last write {slot.LastWriteTimeUtc?.ToLocalTime():g}")
             : "No save in this slot";
         CheckpointCount = slot.Checkpoints.Count == 1
             ? "1 checkpoint"
@@ -41,6 +44,9 @@ public partial class SaveGameSlotViewModel : ViewModelBase
     public string SlotNumber { get; }
 
     public string FileName { get; }
+
+    /// <summary>User-facing one-based slot title, e.g. "Slot 1".</summary>
+    public string Title { get; }
 
     public string Status { get; }
 
@@ -75,6 +81,13 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     [RelayCommand]
     private async Task CreateCheckpointAsync() => await _create();
+
+    public static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => string.Create(CultureInfo.CurrentCulture, $"{bytes} B"),
+        < 1024 * 1024 => string.Create(CultureInfo.CurrentCulture, $"{bytes / 1024.0:0.#} KB"),
+        _ => string.Create(CultureInfo.CurrentCulture, $"{bytes / (1024.0 * 1024.0):0.##} MB"),
+    };
 
     private void UpdateVisibleCheckpoints(bool? showAll = null)
     {

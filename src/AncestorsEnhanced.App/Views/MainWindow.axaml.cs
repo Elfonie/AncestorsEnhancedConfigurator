@@ -16,6 +16,11 @@ public partial class MainWindow : Window
 
     private void OnDataContextChanged(object? sender, System.EventArgs e)
     {
+        if (sender is MainViewModel previousViewModel)
+        {
+            previousViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        }
+
         if (DataContext is MainViewModel viewModel)
         {
             viewModel.PropertyChanged += OnViewModelPropertyChanged;

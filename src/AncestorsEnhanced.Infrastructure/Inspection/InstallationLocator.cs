@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 
@@ -22,6 +22,8 @@ internal sealed class InstallationLocator
 
     public GameInstallationSnapshot? Find(List<InspectionNotice> notices)
     {
+        // Deterministic preference instead of silently picking the first random hit:
+        // Steam, then Epic, then GOG, then Heroic.
         List<GameInstallationSnapshot> installations = [];
         installations.AddRange(_steam.Find(notices));
         installations.AddRange(_epic.Find(notices));
@@ -39,10 +41,11 @@ internal sealed class InstallationLocator
 
         if (installations.Count > 1)
         {
+            GameInstallationSnapshot selected = installations[0];
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "game.multiple-installations",
-                "Multiple Ancestors installations were detected. The first valid installation is displayed."));
+                $"Multiple Ancestors installations were detected. Using {selected.Store} at {selected.InstallDirectory}."));
         }
 
         return installations[0];

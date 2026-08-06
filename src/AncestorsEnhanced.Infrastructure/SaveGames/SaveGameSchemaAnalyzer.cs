@@ -16,6 +16,10 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     // Structs whose payload is serialized data (not a nested tagged-property list).
+    private const int MaxNodeCount = 1_000_000;
+    private const int MaxParseDepth = 128;
+    private const int MaxStringLength = 65_536;
+
     private static readonly HashSet<string> BinaryStructs = new(StringComparer.Ordinal)
     {
         "Vector",
@@ -43,7 +47,8 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
     {
         ArgumentNullException.ThrowIfNull(decompressed);
         var root = new SaveGameSchemaNode("<save>", null);
-        ParsePropertyList(decompressed, 0, decompressed.Length, root, depth: 0);
+        int nodeCount = 0;
+        ParsePropertyList(decompressed, 0, decompressed.Length, root, depth: 0, ref nodeCount);
         return root;
     }
 
@@ -52,12 +57,26 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
         int start,
         int limit,
         SaveGameSchemaNode parent,
-        int depth)
+        int depth,
+        ref int nodeCount)
     {
+        if (depth > MaxParseDepth)
+        {
+            throw new InvalidDataException(
+                $"A save property list exceeds the maximum nesting depth of {MaxParseDepth} at offset 0x{start:X}.");
+        }
+
         int offset = start;
         while (offset < limit)
         {
             int propertyStart = offset;
+            nodeCount++;
+            if (nodeCount > MaxNodeCount)
+            {
+                throw new InvalidDataException(
+                    $"A save exceeds the maximum node count of {MaxNodeCount}.");
+            }
+
             string name = ReadString(data, ref offset, limit);
             if (name == "None")
             {
@@ -131,11 +150,11 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
             bool isBinaryStruct = structType is not null && BinaryStructs.Contains(structType);
             if (type == "StructProperty" && valueLength > 0 && depth < 40 && !isBinaryStruct)
             {
-                ParsePropertyList(data, valueOffset, valueOffset + valueLength, node, depth + 1);
+                ParsePropertyList(data, valueOffset, valueOffset + valueLength, node, depth + 1, ref nodeCount);
             }
         }
 
-        throw new InvalidDataException("A save property list has no None terminator.");
+        throw new InvalidDataException($"A save property list starting at 0x{start:X} has no None terminator.");
     }
 
     private static List<SaveGameSchemaNode> FindInterestingNodes(SaveGameSchemaNode root)
@@ -189,6 +208,12 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
         {
             throw new InvalidDataException(
                 $"A save contains an invalid Unreal string at offset 0x{start:X}.");
+        }
+
+        if (length > MaxStringLength)
+        {
+            throw new InvalidDataException(
+                $"A save string exceeds the maximum length of {MaxStringLength} at offset 0x{start:X}.");
         }
 
         string value = StrictUtf8.GetString(data, offset, length - 1);

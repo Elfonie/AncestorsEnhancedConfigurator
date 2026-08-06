@@ -155,8 +155,18 @@ internal static class PakV5Archive
             throw new InvalidDataException("The PAK compression method is not supported.");
         }
 
+        if (entry.UncompressedSize > maximumSize)
+        {
+            throw new InvalidDataException($"{fileName} is unexpectedly large.");
+        }
+
+        // Validate the block layout before reading anything: blocks must cover the
+        // entry, never overlap, never run backwards, and stay inside the entry area.
+        ValidateBlockLayout(entry);
+
         using var result = new MemoryStream((int)entry.UncompressedSize);
         using var compressedContent = new MemoryStream((int)entry.Size);
+        long written = 0;
         foreach (PakBlock block in entry.Blocks)
         {
             long start = checked(entry.Offset + block.Start);
@@ -166,16 +176,80 @@ internal static class PakV5Archive
             compressedContent.Write(compressed);
             using var compressedStream = new MemoryStream(compressed, writable: false);
             using var zlib = new ZLibStream(compressedStream, CompressionMode.Decompress);
-            zlib.CopyTo(result);
+            // Never decompress past the declared uncompressed size.
+            written += CopyBounded(zlib, result, entry.UncompressedSize - written);
         }
 
         VerifyHash(compressedContent.ToArray(), entry.Hash, "compressed PAK entry");
-        if (result.Length != entry.UncompressedSize)
+        if (result.Length != entry.UncompressedSize || written != entry.UncompressedSize)
         {
             throw new InvalidDataException("The decompressed PAK entry has an unexpected size.");
         }
 
         return result.ToArray();
+    }
+
+    /// <summary>
+    /// Copies at most <paramref name="maxBytes"/> bytes from the stream. Throws as soon
+    /// as an extra byte would exceed the declared uncompressed size.
+    /// </summary>
+    private static long CopyBounded(Stream source, Stream destination, long maxBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxBytes);
+        byte[] buffer = new byte[81920];
+        long copied = 0;
+        int read;
+        while ((read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, maxBytes - copied))) > 0)
+        {
+            destination.Write(buffer, 0, read);
+            copied += read;
+        }
+
+        if (copied > maxBytes)
+        {
+            throw new InvalidDataException("The decompressed PAK entry exceeded its declared size.");
+        }
+
+        // Try to detect overlong zlib output that our bounded read stops before.
+        if (maxBytes > 0 && copied == maxBytes)
+        {
+            int extra = source.ReadByte();
+            if (extra >= 0)
+            {
+                throw new InvalidDataException("The decompressed PAK entry exceeded its declared size.");
+            }
+        }
+
+        return copied;
+    }
+
+    private static void ValidateBlockLayout(PakEntry entry)
+    {
+        long previousEnd = -1;
+        foreach (PakBlock block in entry.Blocks)
+        {
+            if (block.Start < 0 || block.End < block.Start)
+            {
+                throw new InvalidDataException("A PAK compression block is invalid.");
+            }
+
+            if (entry.Size >= 0 && block.End > entry.Size)
+            {
+                throw new InvalidDataException("A PAK compression block lies outside the entry area.");
+            }
+
+            if (block.Start <= previousEnd)
+            {
+                throw new InvalidDataException("PAK compression blocks must not overlap.");
+            }
+
+            previousEnd = block.End;
+        }
+
+        if (entry.Blocks.Count > 0 && previousEnd > entry.Size)
+        {
+            throw new InvalidDataException("PAK compression blocks exceed the compressed entry size.");
+        }
     }
 
     private static PakEntry? FindEntry(Stream stream, string fileName)

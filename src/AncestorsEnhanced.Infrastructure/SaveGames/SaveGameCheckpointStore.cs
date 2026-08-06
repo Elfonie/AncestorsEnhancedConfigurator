@@ -23,18 +23,53 @@ internal sealed class SaveGameCheckpointStore(
             throw new InvalidOperationException("The save file is empty and was not backed up.");
         }
 
+        string digest = Sha256(content);
         string slotRoot = SaveGamePaths.GetSlotRoot(userDataDirectory, slotNumber);
         Directory.CreateDirectory(slotRoot);
 
         DateTimeOffset createdAt = _utcNow();
-        string checkpointId = $"{createdAt:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}"[..32];
+        string checkpointId = SaveGamePaths.NewCheckpointId(createdAt);
         string checkpointDirectory = Path.Combine(slotRoot, checkpointId);
-        Directory.CreateDirectory(checkpointDirectory);
+        string tempDirectory = Path.Combine(slotRoot, $".{checkpointId}.tmp");
+        try
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                throw new IOException("A stale temporary checkpoint directory already exists.");
+            }
 
-        WriteBytesAtomically(Path.Combine(checkpointDirectory, "save.sav"), content);
-        WriteManifest(
-            checkpointDirectory,
-            new CheckpointManifest(createdAt, content.Length, Sha256(content), origin));
+            // 1. Build the checkpoint fully in a temporary directory.
+            Directory.CreateDirectory(tempDirectory);
+            WriteBytesAtomically(Path.Combine(tempDirectory, "save.sav"), content);
+            WriteManifest(
+                tempDirectory,
+                new CheckpointManifest(createdAt, content.Length, digest, origin));
+
+            // 2. Re-read and validate the manifest before publishing anything.
+            CheckpointManifest? manifest = ReadManifest(tempDirectory);
+            if (manifest is null ||
+                manifest.SizeBytes != content.Length ||
+                !string.Equals(manifest.Sha256, digest, StringComparison.Ordinal) ||
+                !string.Equals(manifest.Origin, origin, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("The checkpoint manifest failed validation.");
+            }
+
+            // 3. Validate the stored save before publishing.
+            byte[] stored = File.ReadAllBytes(Path.Combine(tempDirectory, "save.sav"));
+            if (!string.Equals(Sha256(stored), digest, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("The checkpoint save failed validation.");
+            }
+
+            // 4. Publish atomically: the temporary directory becomes the final one.
+            Directory.Move(tempDirectory, checkpointDirectory);
+        }
+        catch
+        {
+            TryDeleteDirectory(tempDirectory);
+            throw;
+        }
 
         EnforceCap(slotRoot, maxCheckpointsPerSlot);
         return checkpointId;

@@ -41,11 +41,13 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         get => _cooldownMinutes;
         set
         {
-            if (SetProperty(ref _cooldownMinutes, value))
+            // Only sane, bounded cooldowns are accepted (1..1440 minutes).
+            int normalized = Math.Clamp(value, 1, 1440);
+            if (SetProperty(ref _cooldownMinutes, normalized))
             {
                 if (_watchdog is not null)
                 {
-                    _watchdog.Cooldown = TimeSpan.FromMinutes(value);
+                    _watchdog.Cooldown = TimeSpan.FromMinutes(normalized);
                 }
 
                 if (!_loadingSettings)
@@ -81,6 +83,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         if (_watchdog is not null)
         {
             _watchdog.CheckpointCreated += OnWatchdogCheckpointCreated;
+            _watchdog.WatcherError += OnWatcherError;
         }
 
         LoadSettings();
@@ -221,12 +224,38 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
-        _pendingSettingsWrite?.GetAwaiter().GetResult();
+        try
+        {
+            _pendingSettingsWrite?.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (AggregateException)
+        {
+        }
+
         _settingsWriteLock.Dispose();
         if (_watchdog is not null)
         {
             _watchdog.CheckpointCreated -= OnWatchdogCheckpointCreated;
+            _watchdog.WatcherError -= OnWatcherError;
             _watchdog.StopWatch();
+        }
+    }
+
+    private void OnWatcherError(object? sender, string message)
+    {
+        void Update()
+        {
+            StatusMessage = $"Auto-backup watch failed: {message}";
+            StatusAccent = "#E04D42";
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Update();
+        }
+        else
+        {
+            _dispatchToUi(Update);
         }
     }
 
@@ -309,17 +338,41 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             await _settingsWriteLock.WaitAsync();
             try
             {
-                File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(settings, JsonSettings));
+                byte[] payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(settings, JsonSettings);
+                // Atomic replace: write a temp file then move it over the target,
+                // so a crash never leaves a truncated settings file.
+                string temp = path + ".tmp";
+                File.WriteAllBytes(temp, payload);
+                File.Move(temp, path, overwrite: true);
             }
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException)
             {
+                ReportStatus("Could not save tool settings: " + exception.Message, "#E04D42");
             }
             finally
             {
                 _settingsWriteLock.Release();
             }
         });
+    }
+
+    private void ReportStatus(string message, string accent)
+    {
+        void Update()
+        {
+            StatusMessage = message;
+            StatusAccent = accent;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Update();
+        }
+        else
+        {
+            _dispatchToUi(Update);
+        }
     }
 
     partial void OnIsBusyChanged(bool value)

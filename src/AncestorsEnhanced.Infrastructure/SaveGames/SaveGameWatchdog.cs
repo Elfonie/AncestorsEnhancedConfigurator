@@ -23,6 +23,8 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
 
     public event EventHandler<string>? CheckpointCreated;
 
+    public event EventHandler<string>? WatcherError;
+
     public bool IsRunning => _watcher is not null;
 
     public TimeSpan Cooldown
@@ -58,10 +60,14 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
                 SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory))
             {
                 Filter = "Savegame*.sav",
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size |
+                             NotifyFilters.FileName | NotifyFilters.CreationTime,
                 EnableRaisingEvents = true,
             };
             watcher.Changed += OnChanged;
+            watcher.Created += OnChanged;
+            watcher.Renamed += OnRenamed;
+            watcher.Error += OnWatcherError;
             _watcher = watcher;
         }
     }
@@ -77,6 +83,9 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
 
             _watcher.EnableRaisingEvents = false;
             _watcher.Changed -= OnChanged;
+            _watcher.Created -= OnChanged;
+            _watcher.Renamed -= OnRenamed;
+            _watcher.Error -= OnWatcherError;
             _watcher.Dispose();
             _watcher = null;
             _stopped = true;
@@ -90,6 +99,46 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         lock (_gate)
         {
             _suppressedUntil[slotNumber] = DateTimeOffset.UtcNow + duration;
+        }
+    }
+
+    private void OnRenamed(object sender, RenamedEventArgs args)
+    {
+        // A rename into the watched pattern behaves like a fresh file the same way
+        // as a create would.
+        OnChanged(sender, new FileSystemEventArgs(
+            WatcherChangeTypes.Renamed,
+            args.FullPath,
+            args.Name ?? string.Empty));
+    }
+
+    private void OnWatcherError(object sender, ErrorEventArgs args)
+    {
+        string message = args.GetException()?.Message ?? "Unknown filesystem watcher error";
+        WatcherError?.Invoke(this, message);
+        RestartWatcher();
+    }
+
+    private void RestartWatcher()
+    {
+        lock (_gate)
+        {
+            if (_stopped || _watcher is null)
+            {
+                return;
+            }
+
+            try
+            {
+                _watcher.EnableRaisingEvents = false;
+                _watcher.EnableRaisingEvents = true;
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                // A watcher that cannot be restarted is still reported as an error;
+                // the UI keeps the failed state visible.
+            }
         }
     }
 
@@ -144,7 +193,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             }
 
             SaveGameOperationResult result = _manager.CreateCheckpoint(slot.ToString(CultureInfo.InvariantCulture), "AutoBackup");
-            if (result.Succeeded)
+            if (result.Succeeded && result.CreatedCheckpointId is not null)
             {
                 RecordBackupTime(slot);
                 CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
@@ -153,8 +202,15 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         catch (OperationCanceledException)
         {
         }
-        catch (Exception)
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or InvalidOperationException or
+                ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException)
         {
+            WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot}: {exception.Message}");
+        }
+        catch (Exception exception)
+        {
+            WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot}: {exception.Message}");
         }
         finally
         {

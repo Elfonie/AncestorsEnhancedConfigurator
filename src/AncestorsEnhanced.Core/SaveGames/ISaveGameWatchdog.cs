@@ -13,4 +13,7 @@ public interface ISaveGameWatchdog
     void SuppressSlot(int slotNumber, TimeSpan duration);
 
     event EventHandler<string>? CheckpointCreated;
+
+    /// <summary>Raised when the filesystem watcher reports an error.</summary>
+    event EventHandler<string>? WatcherError;
 }

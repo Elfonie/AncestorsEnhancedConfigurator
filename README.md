@@ -6,8 +6,8 @@ Portable configurator for **Ancestors: The Humankind Odyssey**. Edit graphics se
 
 Release packages are **self-contained** — you do **not** need .NET or any framework installed.
 
-* **Windows**: download `AncestorsEnhanced-0.8.0-win-x64.zip`, extract it, double-click `AncestorsEnhanced.App.exe`.
-* **Linux**: download `AncestorsEnhanced-0.8.0-linux-x64.zip`, extract it, and run `./AncestorsEnhanced.App`.
+* **Windows**: download `AncestorsEnhanced-0.9.0-win-x64.zip`, extract it, double-click `AncestorsEnhanced.App.exe`.
+* **Linux**: download `AncestorsEnhanced-0.9.0-linux-x64.zip`, extract it, and run `./AncestorsEnhanced.App`.
 
 ## Quick start
 

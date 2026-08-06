@@ -2,13 +2,20 @@ namespace AncestorsEnhanced.Infrastructure.SystemSave;
 
 internal static class SnappyBlockCodec
 {
-    public static byte[] Decode(ReadOnlySpan<byte> input)
+    public static byte[] Decode(ReadOnlySpan<byte> input) =>
+        Decode(input, DefaultMaximumDecompressedLength);
+
+    /// <summary>Default upper bound for decompressed Snappy payloads (16 MiB).</summary>
+    public const int DefaultMaximumDecompressedLength = 16 * 1024 * 1024;
+
+    public static byte[] Decode(ReadOnlySpan<byte> input, int maximumLength)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumLength);
         int inputOffset = 0;
         uint expectedLength = ReadVarint(input, ref inputOffset);
-        if (expectedLength > 16 * 1024 * 1024)
+        if (expectedLength > maximumLength)
         {
-            throw new InvalidDataException("The System.sav payload is unexpectedly large.");
+            throw new InvalidDataException("The Snappy payload is unexpectedly large.");
         }
 
         byte[] output = new byte[expectedLength];
@@ -61,7 +68,7 @@ internal static class SnappyBlockCodec
 
             if (copyOffset <= 0 || copyOffset > outputOffset)
             {
-                throw new InvalidDataException("System.sav contains an invalid Snappy copy offset.");
+                throw new InvalidDataException("Snappy contains an invalid copy offset.");
             }
 
             EnsureAvailable(output.Length, outputOffset, copyLength);
@@ -74,7 +81,7 @@ internal static class SnappyBlockCodec
 
         if (outputOffset != output.Length)
         {
-            throw new InvalidDataException("System.sav ended before its declared payload length.");
+            throw new InvalidDataException("Snappy ended before its declared payload length.");
         }
 
         return output;
@@ -102,7 +109,7 @@ internal static class SnappyBlockCodec
     {
         if (byteCount is < 1 or > 4)
         {
-            throw new InvalidDataException("System.sav contains an invalid Snappy literal length.");
+            throw new InvalidDataException("Snappy contains an invalid literal length.");
         }
 
         EnsureAvailable(input.Length, offset, byteCount);
@@ -129,7 +136,7 @@ internal static class SnappyBlockCodec
             }
         }
 
-        throw new InvalidDataException("System.sav has an invalid Snappy size prefix.");
+        throw new InvalidDataException("Snappy has an invalid size prefix.");
     }
 
     private static void WriteVarint(Stream output, uint value)

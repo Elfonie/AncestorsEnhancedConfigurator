@@ -18,7 +18,7 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         Id = checkpoint.Id;
         SlotNumber = checkpoint.SlotNumber;
         CreatedLabel = checkpoint.CreatedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
-        SizeLabel = string.Create(CultureInfo.CurrentCulture, $"{checkpoint.SizeBytes} bytes");
+        SizeLabel = SaveGameSlotViewModel.FormatSize(checkpoint.SizeBytes);
         OriginLabel = FormatOrigin(checkpoint.Origin);
         _load = load;
         _delete = delete;

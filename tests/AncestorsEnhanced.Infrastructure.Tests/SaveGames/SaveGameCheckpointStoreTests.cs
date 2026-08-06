@@ -63,6 +63,34 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         Assert.Throws<InvalidDataException>(() => SaveGameCheckpointStore.Read(userData, 0, checkpointId));
     }
 
+    [Fact]
+    public void CreateLeavesNoTemporaryDirectoryBehind()
+    {
+        string userData = CreateUserData();
+        var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
+
+        string checkpointId = store.Create(userData, 0, [1, 2, 3]);
+
+        string slotRoot = SaveGamePaths.GetSlotRoot(userData, 0);
+        Assert.DoesNotContain(Directory.EnumerateDirectories(slotRoot), dir =>
+            Path.GetFileName(dir).EndsWith(".tmp", StringComparison.Ordinal));
+        Assert.True(Directory.Exists(Path.Combine(slotRoot, checkpointId)));
+    }
+
+    [Fact]
+    public void OrphanedTemporaryDirectoryDoesNotBlockNewCheckpoints()
+    {
+        string userData = CreateUserData();
+        string slotRoot = SaveGamePaths.GetSlotRoot(userData, 0);
+        Directory.CreateDirectory(Path.Combine(slotRoot, ".orphaned.tmp"));
+
+        var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
+        string checkpointId = store.Create(userData, 0, [1, 2, 3]);
+
+        Assert.Single(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
+        Assert.True(File.Exists(SaveGamePaths.GetCheckpointPath(userData, 0, checkpointId)));
+    }
+
     private static readonly DateTimeOffset FixedTime = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
 
     private string CreateUserData()

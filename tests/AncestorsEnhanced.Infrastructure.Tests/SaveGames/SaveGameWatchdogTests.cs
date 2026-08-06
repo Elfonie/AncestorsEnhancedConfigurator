@@ -56,6 +56,64 @@ public sealed class SaveGameWatchdogTests : IDisposable
         Assert.Equal(TimeSpan.FromMinutes(20), watchdog.Cooldown);
     }
 
+    [Fact]
+    public void UnchangedSaveDoesNotCreateACheckpointOrRaiseAnEvent()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        var watchdog = new SaveGameWatchdog(userData);
+        int events = 0;
+        watchdog.CheckpointCreated += (_, _) => events++;
+
+        watchdog.Start();
+        try
+        {
+            // First change creates a checkpoint.
+            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([4, 5, 6, 7]));
+            WaitFor(() => SaveGameCheckpointStore.ListCheckpoints(userData, 0).Count == 1);
+
+            // Writing back the identical content must not create a backup or raise an event.
+            File.SetLastWriteTimeUtc(slotPath, DateTimeOffset.UtcNow.UtcDateTime);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            int countAfterFirst = SaveGameCheckpointStore.ListCheckpoints(userData, 0).Count;
+            Thread.Sleep(700);
+            File.SetLastWriteTimeUtc(slotPath, DateTimeOffset.UtcNow.UtcDateTime);
+
+            Assert.Equal(countAfterFirst, SaveGameCheckpointStore.ListCheckpoints(userData, 0).Count);
+            Assert.Equal(1, events);
+        }
+        finally
+        {
+            watchdog.StopWatch();
+        }
+    }
+
+    [Fact]
+    public void RepeatedChangeWithinCooldownCreatesOnlyOneCheckpoint()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        var watchdog = new SaveGameWatchdog(userData) { Cooldown = TimeSpan.FromMinutes(5) };
+
+        watchdog.Start();
+        try
+        {
+            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([4, 5, 6, 7]));
+            WaitFor(() => SaveGameCheckpointStore.ListCheckpoints(userData, 0).Count == 1);
+            Thread.Sleep(100);
+            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([8, 9, 10, 11]));
+            Thread.Sleep(700);
+
+            Assert.Single(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
+        }
+        finally
+        {
+            watchdog.StopWatch();
+        }
+    }
+
     private string CreateUserData()
     {
         string userData = Path.Combine(_temporaryDirectory, "Saved");

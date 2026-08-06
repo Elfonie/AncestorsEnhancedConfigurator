@@ -551,7 +551,8 @@
                   <StackPanel Spacing="9">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                       <StackPanel Spacing="1">
-                        <TextBlock Text="{Binding FileName}" FontSize="15" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                        <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="#71828D" />
                         <TextBlock Text="{Binding Status}" FontSize="12" Foreground="#82939E" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding CheckpointCount}" FontSize="12" Foreground="#FF5A00" />
                       </StackPanel>
@@ -621,8 +622,12 @@
 
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   IsVisible="{Binding IsSaveManagerUnavailable}">
-            <TextBlock Text="Save Games are only available when an Ancestors user-data folder was found. Install or start Ancestors once, then reload."
-                       TextWrapping="Wrap" Foreground="#82939D" />
+            <StackPanel Spacing="8">
+              <TextBlock Text="Save Games are only available when an Ancestors user-data folder was found. Install or start Ancestors once, then reload."
+                         TextWrapping="Wrap" Foreground="#82939D" />
+              <Button Classes="PrimaryAction" Content="Scan again" Command="{Binding RefreshCommand}"
+                      HorizontalAlignment="Left" />
+            </StackPanel>
           </Border>
         </StackPanel>
         <StackPanel IsVisible="{Binding ShowCheatView}" Spacing="12">

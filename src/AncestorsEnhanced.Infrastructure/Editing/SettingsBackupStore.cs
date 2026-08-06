@@ -9,6 +9,7 @@ namespace AncestorsEnhanced.Infrastructure.Editing;
 internal static class SettingsBackupStore
 {
     private const string ManifestFileName = "operation.json";
+    private const int MaxRetainedOperations = 50;
     private const string AppliedMarkerName = "applied";
     private const string RevertedMarkerName = "reverted";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -37,6 +38,7 @@ internal static class SettingsBackupStore
             }
         }
 
+        EnforceRetention(GetBackupRoot(plan.UserDataDirectory));
         return directory;
     }
 
@@ -66,13 +68,15 @@ internal static class SettingsBackupStore
         foreach (string directory in Directory.EnumerateDirectories(backupRoot)
                      .OrderByDescending(path => path, StringComparer.Ordinal))
         {
+            // A reparse point is a security violation: stop looking entirely.
             if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
             {
                 return null;
             }
 
             if (!File.Exists(Path.Combine(directory, AppliedMarkerName)) ||
-                File.Exists(Path.Combine(directory, RevertedMarkerName)))
+                File.Exists(Path.Combine(directory, RevertedMarkerName)) ||
+                Directory.EnumerateFiles(directory).Any(name => IsReparsePointFile(Path.Combine(directory, name))))
             {
                 continue;
             }
@@ -86,48 +90,114 @@ internal static class SettingsBackupStore
                     Path.GetFullPath(snapshot.UserDataDirectory!),
                     StringComparison.OrdinalIgnoreCase))
             {
-                return null;
+                // Damaged, incompatible or belonging to another build/data path:
+                // skip and keep looking for an older valid operation.
+                continue;
             }
 
-            bool validFiles = manifest.Files.Count > 0 && manifest.Files.All(file =>
+            bool validFiles;
+            try
             {
-                _ = GetTargetPath(
-                    manifest.UserDataDirectory,
-                    manifest.InstallDirectory,
-                    file.FileName,
-                    file.Target);
-                string? expectedBackup = file.Existed ? $"{file.FileName}.before" : null;
-                return string.Equals(
-                    file.BackupFileName,
-                    expectedBackup,
-                    StringComparison.OrdinalIgnoreCase) &&
-                    (!file.Existed || IsNormalFile(Path.Combine(directory, expectedBackup!)));
-            });
+                validFiles = manifest.Files.Count > 0 && manifest.Files.All(file =>
+                {
+                    _ = GetTargetPath(
+                        manifest.UserDataDirectory,
+                        manifest.InstallDirectory,
+                        file.FileName,
+                        file.Target);
+                    string? expectedBackup = file.Existed ? $"{file.FileName}.before" : null;
+                    return string.Equals(
+                        file.BackupFileName,
+                        expectedBackup,
+                        StringComparison.OrdinalIgnoreCase) &&
+                        (!file.Existed || IsNormalFile(Path.Combine(directory, expectedBackup!)));
+                });
+            }
+            catch (Exception exception) when (IsExpectedStoreException(exception))
+            {
+                // A damaged entry must not block older valid ones.
+                continue;
+            }
+
             if (!validFiles)
             {
-                return null;
+                continue;
             }
 
-            bool unchanged = manifest.Files.All(file =>
+            bool unchanged;
+            try
             {
-                string path = GetTargetPath(
-                    manifest.UserDataDirectory,
-                    manifest.InstallDirectory,
-                    file.FileName,
-                    file.Target);
-                return file.ResultExists
-                    ? File.Exists(path) && string.Equals(
-                        Sha256(File.ReadAllBytes(path)),
-                        file.ResultSha256,
-                        StringComparison.Ordinal)
-                    : !File.Exists(path);
-            });
+                unchanged = manifest.Files.All(file =>
+                {
+                    string path = GetTargetPath(
+                        manifest.UserDataDirectory,
+                        manifest.InstallDirectory,
+                        file.FileName,
+                        file.Target);
+                    return file.ResultExists
+                        ? File.Exists(path) && string.Equals(
+                            Sha256(File.ReadAllBytes(path)),
+                            file.ResultSha256,
+                            StringComparison.Ordinal)
+                        : !File.Exists(path);
+                });
+            }
+            catch (Exception exception) when (IsExpectedStoreException(exception))
+            {
+                continue;
+            }
 
             return unchanged ? new StoredSettingsOperation(directory, manifest) : null;
         }
 
         return null;
     }
+
+    private static bool IsReparsePointFile(string path)
+    {
+        try
+        {
+            return File.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
+        }
+        catch (Exception exception) when (IsExpectedStoreException(exception))
+        {
+            return true;
+        }
+    }
+
+    private static bool IsExpectedStoreException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or NotSupportedException or
+            System.Text.Json.JsonException or ArgumentException;
+
+    private static void EnforceRetention(string backupRoot)
+    {
+        List<string> operations = Directory
+            .EnumerateDirectories(backupRoot)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToList();
+        int overflow = operations.Count - MaxRetainedOperations;
+        for (int index = 0; index < overflow; index++)
+        {
+            try
+            {
+                // Never prune directories that are currently applied but not reverted;
+                // the list is ordered oldest first and older applied operations are
+                // still needed for an Undo, so only remove entries that are either
+                // already reverted or were never applied.
+                string candidate = operations[index];
+                if (File.Exists(Path.Combine(candidate, RevertedMarkerName)) ||
+                    !File.Exists(Path.Combine(candidate, AppliedMarkerName)))
+                {
+                    Directory.Delete(candidate, recursive: true);
+                }
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
 
     private static OperationManifest CreateManifest(SettingsChangePlan plan) =>
         new(

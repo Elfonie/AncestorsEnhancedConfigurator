@@ -193,10 +193,22 @@
         </Transitions>
       </Setter>
     </Style>
-    <Style Selector="Border.SettingCard:pointerover">
+    <!-- Interaktive Karten (klickbar) erhalten einen dezenten Hover-Glow und eine
+         sichtbare Fokusmarkierung; rein visuelle Container nutzen nur SettingCard. -->
+    <Style Selector="Border.SettingCard.InteractiveCard">
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Border.SettingCard.InteractiveCard:pointerover">
       <Setter Property="Background" Value="#181F18" />
       <Setter Property="BorderBrush" Value="#FF5A00" />
       <Setter Property="BoxShadow" Value="0 0 16 3 #FF5A0033" />
+    </Style>
+    <Style Selector="Border.SettingCard.InteractiveCard:focus-visible">
+      <Setter Property="BorderBrush" Value="#B4D941" />
+      <Setter Property="BoxShadow" Value="0 0 0 2 #B4D94166" />
+    </Style>
+    <Style Selector="Border.SettingCard:pointerover">
+      <Setter Property="Background" Value="#141914" />
     </Style>
 
     <!-- Inputs abgerundet -->

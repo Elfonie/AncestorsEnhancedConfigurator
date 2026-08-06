@@ -5,8 +5,10 @@ namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
 /// <summary>
 /// Orchestrates a cheat injection: reads the live slot save, decompresses it, applies
-/// the chosen injection, recompresses, and stores the modified save as a NEW checkpoint.
-/// The live slot file is never overwritten, so the original is always recoverable.
+/// the chosen injection, recompresses, and only then stores the modified save as a NEW
+/// checkpoint after verifying the compress/decompress round trip, the re-parsed schema
+/// and the patched byte ranges. The live slot file is never overwritten, so the
+/// original is always recoverable.
 /// </summary>
 public sealed class SaveGameCheatService : ISaveGameCheatService
 {
@@ -59,6 +61,41 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
             }
 
             byte[] recompressed = SnappyBlockCodec.EncodeLiteral(modified);
+
+            // Pre-store validation: a checkpointed cheat must survive a full
+            // compress -> decompress round trip, re-parse to the same schema, keep
+            // every patch inside the payload and expose the expected target nodes
+            // with the expected values.
+            byte[] roundTripped;
+            SaveGameSchemaNode roundTripRoot;
+            try
+            {
+                roundTripped = SnappyBlockCodec.Decode(recompressed);
+                roundTripRoot = SaveGameSchemaAnalyzer.Parse(roundTripped);
+            }
+            catch (InvalidDataException exception)
+            {
+                return new CheatApplyResult(false, $"The modified save failed compression validation: {exception.Message}");
+            }
+
+            if (!IsByteRoundTripFaithful(modified, roundTripped))
+            {
+                return new CheatApplyResult(false, "The modified save failed the byte round-trip check.");
+            }
+
+            foreach (ByteRange range in injected.ModifiedRanges)
+            {
+                if (!IsRangeInsidePayload(roundTripped, range))
+                {
+                    return new CheatApplyResult(false, "The modified save failed the byte-range check.");
+                }
+            }
+
+            if (!VerifyPatchedFields(roundTripRoot, kind, injected.ModifiedRanges, roundTripped))
+            {
+                return new CheatApplyResult(false, "The modified save failed field verification.");
+            }
+
             var store = new SaveGameCheckpointStore(
                 () => DateTimeOffset.UtcNow,
                 maxCheckpointsPerSlot: 50);
@@ -72,6 +109,108 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
         catch (Exception exception) when (IsExpectedException(exception))
         {
             return new CheatApplyResult(false, $"Nothing was applied: {exception.Message}");
+        }
+    }
+
+    private static bool IsByteRoundTripFaithful(byte[] deferred, byte[] roundTripped) =>
+        deferred.AsSpan().SequenceEqual(roundTripped);
+
+    private static bool IsRangeInsidePayload(byte[] payload, ByteRange range) =>
+        range.Offset >= 0 && range.Length > 0 && range.EndExclusive <= payload.Length;
+
+    /// <summary>
+    /// Every reported patched range must resolve to a schema node of the exact expected
+    /// name and type whose stored float value(s) equal the injected target value.
+    /// </summary>
+    private static bool VerifyPatchedFields(
+        SaveGameSchemaNode root,
+        CheatKind kind,
+        IReadOnlyList<ByteRange> ranges,
+        byte[] payload)
+    {
+        if (ranges.Count == 0)
+        {
+            return false;
+        }
+
+        (HashSet<string> Names, bool IsArray, float Target) expected = ExpectedTargetFor(kind);
+        List<SaveGameSchemaNode> candidates = EnumerateSchemaNodes(root)
+            .Where(node => !node.IsTerminator && expected.Names.Contains(node.Name))
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (ByteRange range in ranges)
+        {
+            SaveGameSchemaNode? match = candidates.FirstOrDefault(node =>
+                range.Offset >= node.ValueOffset && range.Offset < node.ValueOffset + node.ValueLength);
+            if (match is null)
+            {
+                return false;
+            }
+
+            bool isArray = string.Equals(match.Type, "ArrayProperty", StringComparison.Ordinal) &&
+                string.Equals(match.ElementType, "FloatProperty", StringComparison.Ordinal);
+            bool isScalar = string.Equals(match.Type, "FloatProperty", StringComparison.Ordinal);
+            if (isArray != expected.IsArray || (!isArray && !isScalar))
+            {
+                return false;
+            }
+
+            if (!VerifyValueAt(range, expected.Target, payload))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool VerifyValueAt(ByteRange range, float expected, byte[] payload)
+    {
+        if (range.EndExclusive > payload.Length)
+        {
+            return false;
+        }
+
+        for (int offset = range.Offset; offset < range.EndExclusive; offset += 4)
+        {
+            float actual = BitConverter.Int32BitsToSingle(
+                System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(
+                    payload.AsSpan(offset, 4)));
+            if (actual != expected)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static (HashSet<string> Names, bool IsArray, float Target) ExpectedTargetFor(CheatKind kind) =>
+        kind switch
+        {
+            CheatKind.MaxNeuronalEnergy => (new HashSet<string>(StringComparer.Ordinal) { "NeuronalEnergySources" }, true, 999_999.0f),
+            CheatKind.MaxNeeds => (new HashSet<string>(StringComparer.Ordinal) { "RegimenStamina", "Energy", "Stamina" }, false, 1_000.0f),
+            CheatKind.HealClan => (new HashSet<string>(StringComparer.Ordinal) { "Health", "Energy", "Stamina" }, false, 1.0f),
+            CheatKind.ForceMutations => (new HashSet<string>(StringComparer.Ordinal) { "ForceMutations" }, false, 1.0f),
+            _ => (new HashSet<string>(StringComparer.Ordinal), false, 0.0f),
+        };
+
+    private static IEnumerable<SaveGameSchemaNode> EnumerateSchemaNodes(SaveGameSchemaNode root)
+    {
+        var stack = new Stack<SaveGameSchemaNode>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            SaveGameSchemaNode node = stack.Pop();
+            yield return node;
+            foreach (SaveGameSchemaNode child in node.Children)
+            {
+                stack.Push(child);
+            }
         }
     }
 
