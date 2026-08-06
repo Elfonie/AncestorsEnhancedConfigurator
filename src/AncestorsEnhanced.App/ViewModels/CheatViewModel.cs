@@ -1,3 +1,4 @@
+using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.Editing;
 using Avalonia.Threading;
@@ -54,9 +55,22 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
 
         Slots = slotViewModels
-            .Select(slot => new CheatSlotChoice(
-                System.Convert.ToInt32(slot.SlotNumber, System.Globalization.CultureInfo.InvariantCulture),
-                slot.HasSave ? $"Slot {slot.SlotNumber+1} \u00b7 saved" : $"Slot {slot.SlotNumber+1} \u00b7 empty"))
+            .Select(slot =>
+            {
+                int number = int.TryParse(
+                    slot.SlotNumber,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out int parsed)
+                        ? parsed
+                        : 0;
+                string label = number >= 0
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Slot {number + 1} \u00b7 {(slot.HasSave ? "saved" : "empty")}")
+                    : slot.HasSave ? "saved" : "empty";
+                return new CheatSlotChoice(number, label);
+            })
             .ToArray();
         if (SelectedSlot is null || SelectedSlot.Number >= Slots.Count)
         {

@@ -19,6 +19,22 @@ public sealed class CheatViewModelTests
     }
 
     [Fact]
+    public void UpdateSlotAvailabilityLabelsSlotsOneBased()
+    {
+        var viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
+
+        viewModel.UpdateSlotAvailability(
+        [
+            Slot("0", saved: true),
+            Slot("4", saved: false),
+        ]);
+
+        Assert.Equal("Slot 1 \u00b7 saved", viewModel.Slots[0].Label);
+        Assert.Equal("Slot 5 \u00b7 empty", viewModel.Slots[1].Label);
+        Assert.All(viewModel.Slots, slot => Assert.DoesNotContain("Slot 01", slot.Label, StringComparison.Ordinal));
+        Assert.All(viewModel.Slots, slot => Assert.DoesNotContain("Slot 11", slot.Label, StringComparison.Ordinal));
+    }
+    [Fact]
     public async Task MaxNeuronalEnergyDelegatesToService()
     {
         var service = new FakeCheatService();
@@ -140,6 +156,22 @@ public sealed class CheatViewModelTests
     }
 
 
+    private static SaveGameSlotViewModel Slot(string slotNumber, bool saved)
+    {
+        var snapshot = new SaveGameSlotSnapshot(
+            slotNumber,
+            $"Savegame{slotNumber}.sav",
+            $"path-{slotNumber}",
+            Exists: saved,
+            null,
+            null,
+            []);
+        return new SaveGameSlotViewModel(
+            snapshot,
+            () => Task.CompletedTask,
+            _ => () => Task.CompletedTask,
+            _ => () => Task.CompletedTask);
+    }
     private sealed class FakeCheatService : ISaveGameCheatService
     {
         public CheatKind? LastKind { get; private set; }

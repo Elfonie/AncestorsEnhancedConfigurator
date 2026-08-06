@@ -83,16 +83,19 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
             switch (type)
             {
                 case "StructProperty":
-                    _ = ReadString(data, ref offset, limit); // struct type
-                    Advance(ref offset, 16, limit); // property guid
-                    break;
-                case "ArrayProperty":
-                case "SetProperty":
-                    _ = ReadString(data, ref offset, limit); // element type
+                    structType = ReadString(data, ref offset, limit);
+                    Advance(ref offset, 16, limit);
                     break;
                 case "EnumProperty":
                 case "ByteProperty":
-                    _ = ReadString(data, ref offset, limit);
+                    enumType = ReadString(data, ref offset, limit);
+                    break;
+                case "BoolProperty":
+                    Advance(ref offset, 1, limit);
+                    break;
+                case "ArrayProperty":
+                case "SetProperty":
+                    elementType = ReadString(data, ref offset, limit);
                     break;
                 case "MapProperty":
                     _ = ReadString(data, ref offset, limit);
@@ -129,93 +132,6 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
             if (type == "StructProperty" && valueLength > 0 && depth < 40 && !isBinaryStruct)
             {
                 ParsePropertyList(data, valueOffset, valueOffset + valueLength, node, depth + 1);
-            }
-            else if (type == "ArrayProperty" && string.Equals(elementType, "StructProperty", StringComparison.Ordinal) && valueLength >= 4 && depth < 40)
-            {
-                int count = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(valueOffset, 4));
-                int elementOffset = valueOffset + 4;
-                int arrayLimit = valueOffset + valueLength;
-                for (int index = 0; index < count && elementOffset < arrayLimit; index++)
-                {
-                    int elementEnd = ScanPropertyListEnd(data, elementOffset, arrayLimit);
-                    if (elementEnd <= elementOffset)
-                    {
-                        break;
-                    }
-
-                    var element = new SaveGameSchemaNode($"{node.Name}[{index}]", null)
-                    {
-                        ValueOffset = elementOffset,
-                        ValueLength = elementEnd - elementOffset,
-                    };
-                    System.IO.File.AppendAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "dbg_arr.txt"), string.Concat("elemOff=", elementOffset, " elemEnd=", elementEnd, " node=", node.Name, " count=", count, " arrLimit=", arrayLimit, "\n"));
-                    ParsePropertyList(data, elementOffset, elementEnd, element, depth + 1);
-                    node.Children.Add(element);
-                    elementOffset = elementEnd;
-                }
-            }
-
-        }
-        throw new InvalidDataException("A save property list has no None terminator.");
-    }
-
-    /// <summary>Fast boundary scan: returns the offset just past the terminating None of a top-level property list, without recursing.</summary>
-    private static int ScanPropertyListEnd(byte[] data, int start, int limit)
-    {
-        int offset = start;
-        while (offset < limit)
-        {
-            int propertyStart = offset;
-            string name = ReadString(data, ref offset, limit);
-            if (name == "None")
-            {
-                return offset;
-            }
-
-            string type = ReadString(data, ref offset, limit);
-            long longSize = ReadInt64(data, ref offset, limit);
-            if (longSize is < 0 or > int.MaxValue)
-            {
-                throw new InvalidDataException($"Property {name} has an invalid size.");
-            }
-
-            int valueLength = (int)longSize;
-            switch (type)
-            {
-                case "StructProperty":
-                    _ = ReadString(data, ref offset, limit); // struct type
-                    Advance(ref offset, 16, limit); // property guid
-                    break;
-                case "ArrayProperty":
-                case "SetProperty":
-                    _ = ReadString(data, ref offset, limit); // element type
-                    break;
-                case "EnumProperty":
-                case "ByteProperty":
-                    _ = ReadString(data, ref offset, limit);
-                    break;
-                case "MapProperty":
-                    _ = ReadString(data, ref offset, limit);
-                    _ = ReadString(data, ref offset, limit);
-                    break;
-            }
-
-            Advance(ref offset, 1, limit);
-            byte hasPropertyGuid = data[offset - 1];
-            if (hasPropertyGuid > 1)
-            {
-                throw new InvalidDataException($"Property {name} has an invalid GUID marker.");
-            }
-
-            if (hasPropertyGuid == 1)
-            {
-                Advance(ref offset, 16, limit);
-            }
-
-            Advance(ref offset, valueLength, limit);
-            if (offset > limit)
-            {
-                throw new InvalidDataException($"Property {name} is truncated.");
             }
         }
 

@@ -94,25 +94,6 @@ public sealed class SaveGameCheatInspectorTests
 
 
     [Fact]
-    public void HealClanAlsoTargetsClanMembersInCharacterDataList()
-    {
-        // Build a save where the active character AND a clan member each have a Health field.
-        byte[] active = DecompressedSaveWithCurrentCharacter(("Health", 0.5f));
-        byte[] clanMember = DecompressedSaveWithClanMember(0.4f);
-        byte[] decompressed = active.Concat(clanMember).ToArray();
-        var injector = new SaveGameCheatInjector();
-
-        CheatInjectionResult result = injector.TryInject(
-            decompressed,
-            CheatKind.HealClan,
-            out byte[]? modified);
-
-        Assert.True(result.Succeeded, result.Message);
-        Assert.NotNull(modified);
-        // Health under the active character (1) plus under the clan member list (1).
-        Assert.Equal(2, result.ModifiedCount);
-    }
-    [Fact]
     public void ForceMutationsReportsNoSupportedFields()
     {
         byte[] decompressed = DecompressedSaveWith(("Health", 0.5f));
@@ -220,66 +201,6 @@ public sealed class SaveGameCheatInspectorTests
         return root.ToArray();
     }
 
-    private static byte[] EncodeArrayOfStruct(string name, byte[][] elements)
-    {
-        using var payload = new MemoryStream();
-        Span<byte> count = stackalloc byte[4];
-        BinaryPrimitives.WriteInt32LittleEndian(count, elements.Length);
-        payload.Write(count);
-        foreach (byte[] element in elements)
-        {
-            payload.Write(element);
-        }
-
-        using var meta = new MemoryStream();
-        meta.Write(System.Text.Encoding.UTF8.GetBytes("StructProperty").Length is var _ ? EncodeString("StructProperty") : []);
-        // ArrayProperty metadata = element type string then a zero byte.
-        // We need full EncodeProperty with ArrayProperty type + metadata = EncodeString("StructProperty") + 0.
-        using var output = new MemoryStream();
-        WriteManualArrayProperty(output, name, payload.ToArray());
-        return output.ToArray();
-    }
-
-    private static void WriteManualArrayProperty(Stream output, string name, byte[] payload)
-    {
-        output.Write(EncodeString(name));
-        output.Write(EncodeString("ArrayProperty"));
-        Span<byte> size = stackalloc byte[8];
-        BinaryPrimitives.WriteInt64LittleEndian(size, payload.Length);
-        output.Write(size);
-        output.Write(EncodeString("StructProperty"));
-        output.WriteByte(0);
-        output.Write(payload);
-    }
-    private static byte[] DecompressedSaveWithClanMember(float health)
-    {
-        using var healthData = new MemoryStream();
-        healthData.Write(UnrealTaggedProperties.EncodeFloat("Health", health));
-        healthData.Write(UnrealTaggedProperties.EncodeTerminator());
-        using var characterData = new MemoryStream();
-        characterData.Write(UnrealTaggedProperties.EncodeStruct(
-            "CharacterData",
-            "GameCharacterSaveGame",
-            healthData.ToArray()));
-        characterData.Write(UnrealTaggedProperties.EncodeTerminator());
-        using var clan = new MemoryStream();
-        clan.Write(UnrealTaggedProperties.EncodeStruct(
-            "ClanData",
-            "ClanCharacterSaveData",
-            characterData.ToArray()));
-        clan.Write(UnrealTaggedProperties.EncodeTerminator());
-        using var list = new MemoryStream();
-            list.Write(EncodeArrayOfStruct(
-            "CharacterDataList",
-            [clan.ToArray()]));
-        using var root = new MemoryStream();
-        root.Write(UnrealTaggedProperties.EncodeStruct(
-            "PlayerClanData",
-            "ClanData",
-            list.ToArray()));
-        root.Write(UnrealTaggedProperties.EncodeTerminator());
-        return root.ToArray();
-    }
     private static byte[] DecompressedSaveWithRpgArray(float[] elements)
     {
         byte[] array = DecompressedSaveWithArray("NeuronalEnergySources", elements);

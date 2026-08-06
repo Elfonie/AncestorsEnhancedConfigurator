@@ -106,13 +106,6 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
             return false;
         }
 
-            if (kind == CheatKind.HealClan && IsInsideCharacterDataList(path))
-            {
-                // Clan members live in PlayerClanData/CharacterDataList. Every
-                // CharacterData struct there is a valid target for the clan-wide heal.
-                return true;
-            }
-
         foreach (string root in allowedRoots)
         {
             string[] segments = root.Split('/');
@@ -140,29 +133,6 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
         }
 
         return false;
-    }
-
-    // true when the current path descends into PlayerClanData/CharacterDataList.
-    private static bool IsInsideCharacterDataList(List<string> path)
-    {
-        // path = ["<save>", "PlayerClanData", "CharacterDataList", ...] (or deeper after a list element).
-        int clanIndex = IndexOf(path, "PlayerClanData");
-        return clanIndex >= 0 &&
-               path.Count > clanIndex + 1 &&
-               string.Equals(path[clanIndex + 1], "CharacterDataList", StringComparison.Ordinal);
-    }
-
-    private static int IndexOf(List<string> path, string segment)
-    {
-        for (int i = 0; i < path.Count; i++)
-        {
-            if (string.Equals(path[i], segment, StringComparison.Ordinal))
-            {
-                return i;
-            }
-        }
-
-        return -1;
     }
 
     private static string[] AllowedRootsFor(CheatKind kind, bool isArray) => kind switch

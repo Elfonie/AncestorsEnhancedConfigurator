@@ -663,7 +663,7 @@
               <ComboBox Grid.Column="1" ItemsSource="{Binding Cheat.Slots}"
                         SelectedItem="{Binding Cheat.SelectedSlot}"
                         VerticalAlignment="Center"
-                        Width="110" MinWidth="110">
+                        Width="180" MinWidth="180">
                 <ComboBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:CheatSlotChoice">
                     <TextBlock Text="{Binding Label}" />
@@ -678,7 +678,7 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
                   <TextBlock Text="Max Neuronal Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Sets your neuronal energy to maximum, instantly filling every neuronal energy source you have." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Sets your neuronal energy to maximum." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Command="{Binding Cheat.MaxNeuronalEnergyCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
