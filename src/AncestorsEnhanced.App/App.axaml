@@ -15,9 +15,9 @@
     <SolidColorBrush x:Key="SuccessBrush" Color="#B4D941" />
     <SolidColorBrush x:Key="WarningBrush" Color="#FF5A00" />
     <SolidColorBrush x:Key="InfoBrush" Color="#FF5A00" />
-    <SolidColorBrush x:Key="DangerBrush" Color="#D92316" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#E04D42" />
     <SolidColorBrush x:Key="FloraBrush" Color="#B4D941" />
-    <SolidColorBrush x:Key="BloodBrush" Color="#D92316" />
+    <SolidColorBrush x:Key="BloodBrush" Color="#E04D42" />
     <!-- Avalonia Default-Blau für ToggleSwitches mit Flora-Grün überschreiben -->
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOn" Color="#B4D941" />
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOnPointerOver" Color="#9ABF31" />
@@ -88,8 +88,8 @@
       <Setter Property="Background">
         <Setter.Value>
           <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-            <GradientStop Offset="0" Color="#D92316" />
-            <GradientStop Offset="1" Color="#9E1A10" />
+            <GradientStop Offset="0" Color="#E04D42" />
+            <GradientStop Offset="1" Color="#B3342B" />
           </LinearGradientBrush>
         </Setter.Value>
       </Setter>

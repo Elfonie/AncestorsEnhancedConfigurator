@@ -10,7 +10,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 {
     private readonly ISaveGameCheatService _service;
     private readonly IniCheatService _iniCheat;
-    private readonly Func<string, string, Task>? _restoreCheckpoint;
+    private readonly Func<string, string, Task<SaveGameOperationResult>>? _restoreCheckpoint;
     private readonly CancellationTokenSource _gameCheckCts = new();
     private bool _started;
     private bool _disposed;
@@ -22,7 +22,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial IReadOnlyList<CheatSlotChoice> Slots { get; set; } =
         Enumerable.Range(0, 5)
-            .Select(number => new CheatSlotChoice(number, $"Slot {number + 1}"))
+            .Select(number => new CheatSlotChoice(number, $"Slot {number+1}"))
             .ToArray();
 
     [ObservableProperty]
@@ -46,7 +46,29 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial bool HasStatus { get; set; }
 
-    public CheatViewModel(ISaveGameCheatService service, IniCheatService iniCheat, Func<string, string, Task>? restoreCheckpoint = null)
+    public void UpdateSlotAvailability(IReadOnlyList<SaveGameSlotViewModel> slotViewModels)
+    {
+        if (slotViewModels.Count == 0)
+        {
+            return;
+        }
+
+        Slots = slotViewModels
+            .Select(slot => new CheatSlotChoice(
+                System.Convert.ToInt32(slot.SlotNumber, System.Globalization.CultureInfo.InvariantCulture),
+                slot.HasSave ? $"Slot {slot.SlotNumber+1} \u00b7 saved" : $"Slot {slot.SlotNumber+1} \u00b7 empty"))
+            .ToArray();
+        if (SelectedSlot is null || SelectedSlot.Number >= Slots.Count)
+        {
+            SelectedSlot = Slots[0];
+        }
+        else
+        {
+            SelectedSlot = Slots.FirstOrDefault(s => s.Number == SelectedSlot.Number) ?? Slots[0];
+        }
+    }
+
+    public CheatViewModel(ISaveGameCheatService service, IniCheatService iniCheat, Func<string, string, Task<SaveGameOperationResult>>? restoreCheckpoint = null)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(iniCheat);
@@ -125,7 +147,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            SetStatus(result.Message, result.Succeeded ? "#B4D941" : "#D92316");
+            SetStatus(result.Message, result.Succeeded ? "#B4D941" : "#E04D42");
         }
         NotifyState();
     }
@@ -135,7 +157,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task RestoreLastCheckpointAsync()
     {
-        if (_lastCheckpointId is null || _lastCheckpointSlot is null || _restoreCheckpoint is null)
+        if (!CanRestoreLastCheckpoint || _lastCheckpointId is null || _lastCheckpointSlot is null || _restoreCheckpoint is null)
         {
             return;
         }
@@ -144,12 +166,19 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         NotifyState();
         try
         {
-            await _restoreCheckpoint(_lastCheckpointSlot, _lastCheckpointId);
-            SetStatus("Cheat checkpoint restored. Start Ancestors to continue.", "#B4D941");
+            SaveGameOperationResult result = await _restoreCheckpoint(_lastCheckpointSlot, _lastCheckpointId);
+            if (result.Succeeded)
+            {
+                SetStatus("Cheat checkpoint restored. Start Ancestors to continue.", "#B4D941");
+            }
+            else
+            {
+                SetStatus(result.Message, "#E04D42");
+            }
         }
         catch (Exception exception) when (IsExpectedRestoreException(exception))
         {
-            SetStatus($"Could not restore: {exception.Message}", "#D92316");
+            SetStatus($"Could not restore: {exception.Message}", "#E04D42");
         }
         finally
         {
@@ -157,9 +186,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CanRestoreLastCheckpoint));
             NotifyState();
         }
-    }
-
-    private static bool IsExpectedRestoreException(Exception exception) =>
+    }    private static bool IsExpectedRestoreException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or
             ArgumentException or NotSupportedException or InvalidDataException;
 
@@ -180,7 +207,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             exception is IOException or UnauthorizedAccessException or InvalidOperationException or
                 ArgumentException or NotSupportedException)
         {
-            SetStatus($"Could not update free camera: {exception.Message}", "#D92316");
+            SetStatus($"Could not update free camera: {exception.Message}", "#E04D42");
             RevertFreeCameraToggle(value);
         }
     }
@@ -251,7 +278,11 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void NotifyState() => OnPropertyChanged(nameof(CanApply));
+    private void NotifyState()
+    {
+        OnPropertyChanged(nameof(CanApply));
+        OnPropertyChanged(nameof(CanRestoreLastCheckpoint));
+    }
 
     public void Dispose()
     {

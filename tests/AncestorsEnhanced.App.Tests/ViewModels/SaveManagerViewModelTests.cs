@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.Editing;
+using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.App.ViewModels;
@@ -118,6 +118,37 @@ public sealed class SaveManagerViewModelTests
         await viewModel.RunLoad("3", "cp-1");
 
         Assert.Equal(3, watchdog.SuppressedSlot);
+    }
+
+    [Fact]
+    public void EmptySaveDirectoryReportsNoSlotsWithStatusAccent()
+    {
+        var manager = new FakeSaveGameManager(
+            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots()));
+        var viewModel = new SaveManagerViewModel(
+            manager,
+            "user-data",
+            watchdog: null);
+
+        Assert.True(viewModel.HasNoSlots);
+        Assert.False(viewModel.HasSlots);
+        Assert.Equal("#7A877A", viewModel.StatusAccent);
+        Assert.Contains("No save games", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FailedOperationSetsErrorAccent()
+    {
+        var manager = new FailingSaveGameManager();
+        var viewModel = new SaveManagerViewModel(
+            manager,
+            "user-data",
+            watchdog: null);
+
+        SaveGameOperationResult result = await viewModel.RunLoad("0", "missing");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("#E04D42", viewModel.StatusAccent);
     }
 
     private static string TempUserData() =>
@@ -281,4 +312,18 @@ public sealed class SaveManagerViewModelTests
         public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
             new(true, "Loaded.");
     }
-}
+
+    private sealed class FailingSaveGameManager : ISaveGameManager
+    {
+        public SaveGamesSnapshot Inspect() =>
+            new(DateTimeOffset.UnixEpoch, "user-data", []);
+
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual") =>
+            new(false, "failed");
+
+        public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
+            new(false, "failed");
+
+        public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+            new(false, "failed");
+    }}

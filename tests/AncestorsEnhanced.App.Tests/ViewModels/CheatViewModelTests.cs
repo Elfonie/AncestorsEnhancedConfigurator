@@ -50,7 +50,7 @@ public sealed class CheatViewModelTests
         await viewModel.MaxNeedsCommand.ExecuteAsync(null);
 
         Assert.False(service.LastResult.Succeeded);
-        Assert.Equal("#D92316", viewModel.StatusAccent);
+        Assert.Equal("#E04D42", viewModel.StatusAccent);
     }
 
     private static readonly string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aec-cheatvm-"+System.Guid.NewGuid().ToString("N"));
@@ -111,7 +111,7 @@ public sealed class CheatViewModelTests
         var viewModel = new CheatViewModel(
             service,
             new IniCheatService(tmp),
-            (slot, id) => { restored.Add((slot, id)); return Task.CompletedTask; });
+            (slot, id) => { restored.Add((slot, id)); return Task.FromResult(new SaveGameOperationResult(true, "Loaded.")); });
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
         Assert.True(viewModel.CanRestoreLastCheckpoint);
@@ -120,6 +120,23 @@ public sealed class CheatViewModelTests
         var pair = Assert.Single(restored);
         Assert.Equal("0", pair.Slot);
         Assert.Equal("cp-1", pair.Id);
+    }
+
+
+
+    [Fact]
+    public async Task RestoreFailureDoesNotClaimSuccess()
+    {
+        var viewModel = new CheatViewModel(
+            new FakeCheatService(),
+            new IniCheatService(tmp),
+            (slot, id) => Task.FromResult(new SaveGameOperationResult(false, "Close Ancestors before restoring.")));
+        await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
+
+        await viewModel.RestoreLastCheckpointCommand.ExecuteAsync(null);
+
+        Assert.Contains("Close Ancestors", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("#E04D42", viewModel.StatusAccent);
     }
 
 

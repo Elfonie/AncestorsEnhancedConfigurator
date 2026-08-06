@@ -27,13 +27,28 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainViewModel.IsReviewingChanges) &&
             DataContext is MainViewModel { IsReviewingChanges: true })
         {
+            _restoreFocus = FocusManager?.GetFocusedElement() ?? _restoreFocus;
             Dispatcher.UIThread.Post(() =>
             {
                 if (ReviewOverlay is { IsVisible: true })
                 {
-                    ReviewOverlay.Focus(NavigationMethod.Pointer);
+                    ReviewOverlay.Focus(NavigationMethod.Tab);
+                    var cancel = this.FindControl<Button>("ReviewCancelButton");
+                    if (cancel is not null)
+                    {
+                        cancel.Focus(NavigationMethod.Tab);
+                    }
                 }
             });
         }
+        else if (e.PropertyName == nameof(MainViewModel.IsReviewingChanges) &&
+                 DataContext is MainViewModel { IsReviewingChanges: false } &&
+                 _restoreFocus is InputElement focusTarget)
+        {
+            Dispatcher.UIThread.Post(() => focusTarget.Focus(NavigationMethod.Tab));
+            _restoreFocus = null;
+        }
     }
+
+    private IInputElement? _restoreFocus;
 }

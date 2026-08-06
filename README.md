@@ -23,7 +23,7 @@ Release packages are **self-contained** — you do **not** need .NET or any fram
 * **Graphics** — Simple and advanced controls with review-before-write, exact backups and undo.
 * **Save manager** — keep and load old save states per slot (5 slots, up to 50 checkpoints each).
 * **Auto-backup** — automatically saves a checkpoint whenever the game saves.
-* **Cheats** — Max Neuronal Energy, Max Needs, Heal Clan. Each is saved as a new checkpoint, your live save is never touched.
+* **Cheats** — Max Neuronal Energy, Max Needs, Heal Current Ape. Each is saved as a new checkpoint, your live save is never touched.
 * **System.sav controls** — resolution, brightness, frame-rate limit and six quality categories.
 * **Startup & camera** — skip startup videos and enable a free camera (F10 in-game).
 
@@ -31,7 +31,7 @@ Release packages are **self-contained** — you do **not** need .NET or any fram
 
 * **Max Neuronal Energy** — sets your neuronal energy to maximum, filling every neuronal energy source.
 * **Max Needs** — fills the current ape's needs (stamina, energy and regimen).
-* **Heal Clan** — restores health, stamina and energy for the current ape and your clan.
+* **Heal Current Ape** — restores health, stamina and energy for your currently controlled ape.
 
 ## Troubleshooting helpers
 

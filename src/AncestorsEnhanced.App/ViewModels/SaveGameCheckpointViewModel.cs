@@ -41,13 +41,21 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     public partial bool IsRestoreConfirmVisible { get; set; }
 
     [RelayCommand]
-    private void OpenDeleteConfirm() => IsDeleteConfirmVisible = true;
+    private void OpenDeleteConfirm()
+    {
+        IsDeleteConfirmVisible = true;
+        IsRestoreConfirmVisible = false;
+    }
 
     [RelayCommand]
     private void CancelDeleteConfirm() => IsDeleteConfirmVisible = false;
 
     [RelayCommand]
-    private void OpenRestoreConfirm() => IsRestoreConfirmVisible = true;
+    private void OpenRestoreConfirm()
+    {
+        IsRestoreConfirmVisible = true;
+        IsDeleteConfirmVisible = false;
+    }
 
     [RelayCommand]
     private void CancelRestoreConfirm() => IsRestoreConfirmVisible = false;

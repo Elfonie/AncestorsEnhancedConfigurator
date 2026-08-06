@@ -170,10 +170,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         FeatureGroups.Count == 0;
 
     public int CustomOverrideCount =>
-        _allFeatureGroups
-            .SelectMany(g => g.Settings)
-            .Count(s => s.State == AncestorsEnhanced.Core.Settings.ReadableSettingState.Modified);
+        _editors.Values.Count(editor => editor.HasActiveOverride);
 
+    public bool HasGamePreset => _snapshot?.IsGameDetected == true;
     public string GamePresetName
     {
         get
@@ -219,7 +218,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         if (HasPendingChanges)
         {
-            ShowMessage("Apply or discard the pending changes before refreshing.", "#D92316");
+            ShowMessage("Apply or discard the pending changes before refreshing.", "#E04D42");
             return;
         }
 
@@ -337,7 +336,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
-            ShowMessage(exception.Message, "#D92316");
+            ShowMessage(exception.Message, "#E04D42");
         }
     }
 
@@ -369,7 +368,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
-            ShowMessage($"No changes were kept: {exception.Message}", "#D92316");
+            ShowMessage($"No changes were kept: {exception.Message}", "#E04D42");
             return;
         }
         finally
@@ -381,7 +380,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             await RefreshFromDiskAsync();
         }
 
-        ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#D92316");
+        ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#E04D42");
     }
 
     [RelayCommand]
@@ -408,7 +407,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             await RefreshFromDiskAsync();
         }
 
-        ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#D92316");
+        ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#E04D42");
     }
 
     partial void OnIsAdvancedModeChanged(bool value)
@@ -590,12 +589,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             Cheat?.Dispose();
             Cheat = CreateCheat(snapshot.UserDataDirectory);
             Cheat?.Start();
+            if (Cheat is not null && SaveManager is not null)
+            {
+                Cheat.UpdateSlotAvailability(SaveManager.Slots);
+            }
             return true;
         }
         catch (Exception exception)
         {
             _snapshot = null;
-            SetDetection("Scan failed", "#D92316", "#D92316");
+            SetDetection("Scan failed", "#E04D42", "#E04D42");
             InstallationPath = "Not available";
             InstallationDetails = "The previous result was cleared";
             UserDataPath = "Not available";
@@ -607,7 +610,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             PakFiles = [];
             Notices = [new NoticeRowViewModel("Error", exception.Message)];
             CanRevertLast = false;
-            ShowMessage($"Scan failed: {exception.Message}", "#D92316");
+            ShowMessage($"Scan failed: {exception.Message}", "#E04D42");
             LogDetection("failed: "+exception.Message);
             return false;
         }
@@ -635,7 +638,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
-            ShowMessage($"Could not load save games: {exception.Message}", "#D92316");
+            ShowMessage($"Could not load save games: {exception.Message}", "#E04D42");
             return null;
         }
     }
@@ -658,10 +661,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             {
                 if (SaveManager is null)
                 {
-                    throw new InvalidOperationException("Save manager is not available; reload first.");
+                    return new SaveGameOperationResult(false, "Save manager is not available; reload first.");
                 }
 
-                await SaveManager.RunLoad(slot, checkpointId);
+                return await SaveManager.RunLoad(slot, checkpointId);
             });
     }    private void RebuildEditors()
     {
@@ -794,7 +797,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         UpdatePendingChanges();
         if (HasPendingChanges)
         {
-            ShowMessage("Review the pending values, then apply or discard them.", "#D92316");
+            ShowMessage("Review the pending values, then apply or discard them.", "#E04D42");
         }
     }
 

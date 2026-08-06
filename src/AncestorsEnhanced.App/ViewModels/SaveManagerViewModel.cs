@@ -133,7 +133,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         catch (Exception exception) when (IsExpectedException(exception))
         {
             StatusMessage = $"Could not reload save games: {exception.Message}";
-            StatusAccent = "#D92316";
+            StatusAccent = "#E04D42";
         }
         finally
         {
@@ -142,7 +142,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private async Task RunOperation(Func<SaveGameOperationResult> operation)
+    private async Task<SaveGameOperationResult> RunOperation(Func<SaveGameOperationResult> operation)
     {
         IsBusy = true;
         StatusMessage = "Working...";
@@ -170,16 +170,17 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             catch (Exception exception) when (IsExpectedException(exception))
             {
                 StatusMessage = $"{result.Message} (checkpoints could not be refreshed: {exception.Message})";
-                StatusAccent = "#D92316";
+                StatusAccent = "#E04D42";
             }
         }
         else
         {
             StatusMessage = result.Message;
-            StatusAccent = "#D92316";
+            StatusAccent = "#E04D42";
         }
 
         NotifyState();
+        return result;
     }
 
     public async Task RunCreate(string slotNumber)
@@ -192,11 +193,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         await RunOperation(() => _manager.CreateCheckpoint(slotNumber));
     }
 
-    public async Task RunLoad(string slotNumber, string checkpointId)
+    public async Task<SaveGameOperationResult> RunLoad(string slotNumber, string checkpointId)
     {
         if (IsBusy)
         {
-            return;
+            return new SaveGameOperationResult(false, "Another save operation is already running.");
         }
 
         if (_watchdog is not null && int.TryParse(slotNumber, out int slot))
@@ -204,7 +205,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             _watchdog.SuppressSlot(slot, TimeSpan.FromSeconds(5));
         }
 
-        await RunOperation(() => _manager.LoadCheckpoint(slotNumber, checkpointId));
+        return await RunOperation(() => _manager.LoadCheckpoint(slotNumber, checkpointId));
     }
 
     public async Task RunDelete(string slotNumber, string checkpointId)
@@ -339,7 +340,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             catch (Exception exception) when (IsExpectedException(exception))
             {
                 StatusMessage = $"Could not refresh after auto-backup: {exception.Message}";
-                StatusAccent = "#D92316";
+                StatusAccent = "#E04D42";
             }
         }
 
