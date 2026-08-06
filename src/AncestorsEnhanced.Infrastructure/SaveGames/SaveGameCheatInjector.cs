@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;
@@ -75,33 +75,41 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
         else if (IsFloatArray(node, arrayTargets, work) && IsUnderAllowedPath(path, kind, isArray: true))
         {
             int count = BinaryPrimitives.ReadInt32LittleEndian(
-                work.AsSpan(node.ValueOffset, 4));
-            // The declared element count must never exceed the node's own payload.
-            int limit = (node.ValueLength - 4) / 4;
-            if (limit < 0)
+                work.AsSpan(node.ValueOffset, sizeof(int)));
+            if (count < 0 || count > (int.MaxValue - sizeof(int)) / sizeof(float))
             {
-                limit = 0;
+                // A negative or impossible element count would overflow the checked
+                // length computation below. Reject it before anything can clamp,
+                // partially patch or throw due to an unchecked multiplication.
+                goto ContinueNode;
             }
 
-            int capped = Math.Min(count, limit);
-            if (node.ValueOffset + 4 + capped * 4 <= work.Length)
+            int expectedLength = checked(sizeof(int) + count * sizeof(float));
+            if (expectedLength != node.ValueLength ||
+                node.ValueOffset < 0 ||
+                node.ValueOffset > work.Length - expectedLength)
             {
-                for (int element = 0; element < capped; element++)
-                {
-                    BinaryPrimitives.WriteInt32LittleEndian(
-                        work.AsSpan(node.ValueOffset + 4 + element * 4, 4),
-                        BitConverter.SingleToInt32Bits(value));
-                }
-
-                if (capped > 0)
-                {
-                    ranges.Add(new ByteRange(node.ValueOffset, 4 + capped * 4));
-                }
-
-                modified += capped;
+                goto ContinueNode;
             }
+
+            for (int element = 0; element < count; element++)
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(
+                    work.AsSpan(node.ValueOffset + sizeof(int) + element * sizeof(float), sizeof(float)),
+                    BitConverter.SingleToInt32Bits(value));
+            }
+
+            // The first four bytes are the element count, not a value: the reported
+            // range starts at the first float element and must never include the header.
+            if (count > 0)
+            {
+                ranges.Add(new ByteRange(node.ValueOffset + sizeof(int), count * sizeof(float)));
+            }
+
+            modified += count;
         }
 
+        ContinueNode:
         foreach (SaveGameSchemaNode child in node.Children)
         {
             modified += ApplyToTree(child, kind, value, scalarTargets, arrayTargets, work, path, ranges);

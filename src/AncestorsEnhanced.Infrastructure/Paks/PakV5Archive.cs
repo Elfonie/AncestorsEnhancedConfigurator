@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -198,9 +198,14 @@ internal static class PakV5Archive
         ArgumentOutOfRangeException.ThrowIfNegative(maxBytes);
         byte[] buffer = new byte[81920];
         long copied = 0;
-        int read;
-        while ((read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, maxBytes - copied))) > 0)
+        while (copied < maxBytes)
         {
+            int read = source.Read(buffer, 0, (int)Math.Min(buffer.Length, maxBytes - copied));
+            if (read == 0)
+            {
+                break;
+            }
+
             destination.Write(buffer, 0, read);
             copied += read;
         }
@@ -210,14 +215,11 @@ internal static class PakV5Archive
             throw new InvalidDataException("The decompressed PAK entry exceeded its declared size.");
         }
 
-        // Try to detect overlong zlib output that our bounded read stops before.
-        if (maxBytes > 0 && copied == maxBytes)
+        // Even when the budget was reached exactly, the source must be exhausted: an
+        // overlong zlib stream that a bounded read stops before is still detected.
+        if (source.ReadByte() >= 0)
         {
-            int extra = source.ReadByte();
-            if (extra >= 0)
-            {
-                throw new InvalidDataException("The decompressed PAK entry exceeded its declared size.");
-            }
+            throw new InvalidDataException("The decompressed PAK entry exceeded its declared size.");
         }
 
         return copied;
@@ -238,7 +240,10 @@ internal static class PakV5Archive
                 throw new InvalidDataException("A PAK compression block lies outside the entry area.");
             }
 
-            if (block.Start <= previousEnd)
+            // Ends are exclusive (block length is End - Start), so directly adjacent
+            // blocks (block.Start == previousEnd) are legal; only a real byte overlap
+            // is rejected.
+            if (block.Start < previousEnd)
             {
                 throw new InvalidDataException("PAK compression blocks must not overlap.");
             }
