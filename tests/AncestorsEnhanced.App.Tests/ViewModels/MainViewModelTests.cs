@@ -1,3 +1,4 @@
+using System.Globalization;
 using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
@@ -185,24 +186,66 @@ public sealed class MainViewModelTests
                     null),
             ],
         };
-        var viewModel = new MainViewModel(
-            new FixedInspector(snapshot),
-            new RecordingEditor());
-        await viewModel.InitializeAsync();
+        await AssertTexturesSummaryAsync("de-DE", "4× · 1,46 GB");
+    }
 
-        FeatureGroupRowViewModel simpleTextures = Assert.Single(
-            viewModel.FeatureGroups,
-            group => group.Id == "textures");
-        Assert.Equal("4×", simpleTextures.Summary);
-        Assert.Single(simpleTextures.Settings);
+    [Fact]
+    public async Task GroupSummaryFormatsBytesInvariantCulture()
+    {
+        await AssertTexturesSummaryAsync("en-US", "4× · 1.46 GB");
+    }
 
-        viewModel.ShowAdvancedCommand.Execute(null);
+    private static async Task AssertTexturesSummaryAsync(string cultureName, string expected)
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot() with
+        {
+            ConfigurationFiles =
+            [
+                new ConfigurationFileSnapshot(
+                    "Engine.ini",
+                    "Engine.ini",
+                    Exists: true,
+                    42,
+                    DateTimeOffset.UnixEpoch,
+                    [
+                        new IniSettingSnapshot("SystemSettings", "r.MaxAnisotropy", "4", 1),
+                        new IniSettingSnapshot("SystemSettings", "r.Streaming.PoolSize", "1500", 2),
+                    ],
+                    null),
+            ],
+        };
 
-        FeatureGroupRowViewModel advancedTextures = Assert.Single(
-            viewModel.FeatureGroups,
-            group => group.Id == "textures");
-        Assert.Equal("4× · 1,46 GB", advancedTextures.Summary);
-        Assert.Equal(8, advancedTextures.Settings.Count);
+        CultureInfo originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo originalUiCulture = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(cultureName);
+
+            var viewModel = new MainViewModel(
+                new FixedInspector(snapshot),
+                new RecordingEditor());
+            await viewModel.InitializeAsync();
+
+            FeatureGroupRowViewModel simpleTextures = Assert.Single(
+                viewModel.FeatureGroups,
+                group => group.Id == "textures");
+            Assert.Equal("4×", simpleTextures.Summary);
+            Assert.Single(simpleTextures.Settings);
+
+            viewModel.ShowAdvancedCommand.Execute(null);
+
+            FeatureGroupRowViewModel advancedTextures = Assert.Single(
+                viewModel.FeatureGroups,
+                group => group.Id == "textures");
+            Assert.Equal(expected, advancedTextures.Summary);
+            Assert.Equal(8, advancedTextures.Settings.Count);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+            CultureInfo.CurrentUICulture = originalUiCulture;
+        }
     }
 
     [Fact]

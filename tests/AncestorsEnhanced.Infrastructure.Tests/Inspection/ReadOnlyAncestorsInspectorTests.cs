@@ -71,6 +71,44 @@ public sealed class ReadOnlyAncestorsInspectorTests
         Assert.False(snapshot.IsGameDetected);
         Assert.Contains(snapshot.Notices, notice => notice.Code == "steam.manifest-invalid");
     }
+    [Theory]
+    [InlineData("../outside/file")]
+    [InlineData("..\\outside\\file")]
+    [InlineData("folder/../../outside/file")]
+    [InlineData("folder\\..\\..\\outside\\file")]
+    [InlineData("/absolute/unix/path")]
+    [InlineData("C:\\absolute\\windows\\path")]
+    [InlineData("C:/absolute/windows/path")]
+    [InlineData("\\\\server\\share\\file")]
+    [InlineData("//server/share/file")]
+    [InlineData("Ancestors/outside")]
+    [InlineData("Ancestors\\outside")]
+    public void InspectRejectsManifestDirectoryTraversalHostIndependent(string installName)
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        string localAppData = temporaryDirectory.CreateDirectory("LocalAppData");
+        string steamApps = Directory.CreateDirectory(Path.Combine(steamRoot, "steamapps")).FullName;
+        string escaped = installName.Replace("\\", "\\\\", StringComparison.Ordinal);
+        string manifest = "\"AppState\"\n"
+            + "{\n"
+            + "  \"appid\" \"536270\"\n"
+            + "  \"installdir\" \"" + escaped + "\"\n"
+            + "  \"buildid\" \"5495393\"\n"
+            + "}\n";
+        File.WriteAllText(
+            Path.Combine(steamApps, "appmanifest_536270.acf"),
+            manifest);
+
+        ReadOnlyAncestorsInspector inspector = new(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment(steamRoot, localAppData));
+
+        GameInspectionSnapshot snapshot = inspector.Inspect();
+
+        Assert.False(snapshot.IsGameDetected);
+        Assert.Contains(snapshot.Notices, notice => notice.Code == "steam.manifest-invalid");
+    }
 
     [Fact]
     public void InspectFindsEpicManifest()

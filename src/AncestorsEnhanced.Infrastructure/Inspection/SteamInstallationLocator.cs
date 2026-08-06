@@ -177,7 +177,9 @@ internal sealed class SteamInstallationLocator(
     private static bool IsSafeSingleDirectoryName(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&
         value is not "." and not ".." &&
-        value.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) < 0 &&
+        // Beide Trennzeichen gelten als Manifestsyntax, unabhaengig vom Host-Separator.
+        // So werden Windows-Pfade (mit backslash) auch auf Linux abgewiesen.
+        value.IndexOfAny(['/', '\\']) < 0 &&
         value.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 
     private static StringComparer PathComparer => OperatingSystem.IsWindows()

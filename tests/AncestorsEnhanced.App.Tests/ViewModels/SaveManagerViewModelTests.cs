@@ -265,9 +265,10 @@ public sealed class SaveManagerViewModelTests
         int before = inspectCount.InspectCount;
 
         watchdog.RaiseCheckpoint("0");
-        await Task.Delay(50);
-
-        Assert.True(inspectCount.InspectCount > before);
+        await WaitUntilAsync(
+            () => inspectCount.InspectCount > before,
+            TimeSpan.FromSeconds(5),
+            "The watchdog event did not trigger a save-list refresh.");
     }
 
     private sealed class FakeWatchdog : ISaveGameWatchdog
@@ -326,4 +327,19 @@ public sealed class SaveManagerViewModelTests
 
         public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
             new(false, "failed");
-    }}
+    }
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout, string failureMessage)
+    {
+        DateTime deadline = DateTime.UtcNow + timeout;
+
+        while (!condition())
+        {
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new TimeoutException(failureMessage);
+            }
+
+            await Task.Delay(25);
+        }
+    }
+}
