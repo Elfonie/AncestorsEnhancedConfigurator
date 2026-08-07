@@ -7,4 +7,5 @@ public sealed record SettingsChangePlan(
     string UserDataDirectory,
     IReadOnlyList<SettingChangePreview> Changes,
     IReadOnlyList<ConfigurationFileChangePlan> Files,
-    string? InstallDirectory = null);
+    string? InstallDirectory = null,
+    string? ContentSignature = null);

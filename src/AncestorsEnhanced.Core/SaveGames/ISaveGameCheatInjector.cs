@@ -31,7 +31,7 @@ public sealed class CheatInjectionResult
 /// <summary>A byte range inside the decompressed save payload.</summary>
 public readonly record struct ByteRange(int Offset, int Length)
 {
-    public int EndExclusive => Offset + Length;
+    public long EndExclusive => (long)Offset + Length;
 }
 
 /// <summary>Applies safe, schema-verified value injections to a decompressed lineage save.</summary>

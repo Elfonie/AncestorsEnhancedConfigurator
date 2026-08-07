@@ -91,6 +91,16 @@ internal static class VignettePakEditor
             throw new InvalidOperationException(state.Status);
         }
 
+        // Never rewrite the legacy patch file in place: writing a new hash into the
+        // known legacy path would make the tool unable to recognise it on the next
+        // inspection, locking the user out (F068). Fail-safe for 0.9 instead.
+        if (!string.IsNullOrWhiteSpace(state.ActivePatchPath) &&
+            string.Equals(Path.GetFileName(state.ActivePatchPath), LegacyPatchName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "A legacy vignette patch is active. It will not be rewritten in place; remove it manually or reset to a managed patch.");
+        }
+
         decimal? requested = value is null
             ? null
             : decimal.Parse(value, NumberStyles.Number, CultureInfo.InvariantCulture);

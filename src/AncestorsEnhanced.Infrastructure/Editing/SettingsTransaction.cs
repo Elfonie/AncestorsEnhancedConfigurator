@@ -67,47 +67,64 @@ internal sealed class SettingsTransaction(
             }
 
             string operationDirectory = SettingsBackupStore.Prepare(plan);
-            List<ConfigurationFileChangePlan> applied = [];
-            try
+            SettingsOperationResult? appliedResult = MutationCoordinator.Run(() =>
             {
-                foreach (ConfigurationFileChangePlan file in plan.Files)
+                List<ConfigurationFileChangePlan> applied = [];
+                try
                 {
-                    if (file.ResultExists)
+                    foreach (ConfigurationFileChangePlan file in plan.Files)
                     {
-                        WriteBytesAtomically(file.FullPath, file.UpdatedContent);
-                    }
-                    else
-                    {
-                        File.Delete(file.FullPath);
+                        if (file.ResultExists)
+                        {
+                            // CAS immediately before the write: the current file must
+                            // still match the bytes the plan was built from, closing
+                            // the multi-file TOCTOU between the up-front check and
+                            // each individual write.
+                            CompareAndReplace(
+                                file.FullPath,
+                                file.UpdatedContent,
+                                file.OriginalSha256,
+                                file.Existed);
+                        }
+                        else
+                        {
+                            CompareAndDelete(file.FullPath, file.OriginalSha256);
+                        }
+
+                        applied.Add(file);
+                        bool valid = file.ResultExists
+                            ? File.Exists(file.FullPath) && string.Equals(
+                                Sha256(File.ReadAllBytes(file.FullPath)),
+                                Sha256(file.UpdatedContent),
+                                StringComparison.Ordinal)
+                            : !File.Exists(file.FullPath);
+                        if (!valid)
+                        {
+                            throw new IOException($"Validation failed after writing {file.FileName}.");
+                        }
                     }
 
-                    applied.Add(file);
-                    bool valid = file.ResultExists
-                        ? File.Exists(file.FullPath) && string.Equals(
-                            Sha256(File.ReadAllBytes(file.FullPath)),
-                            Sha256(file.UpdatedContent),
-                            StringComparison.Ordinal)
-                        : !File.Exists(file.FullPath);
-                    if (!valid)
+                    SettingsBackupStore.MarkApplied(operationDirectory, plan.CreatedAtUtc);
+                }
+                catch
+                {
+                    List<string> rollbackFailures = RestoreFilesBestEffort(applied);
+                    if (rollbackFailures.Count > 0)
                     {
-                        throw new IOException($"Validation failed after writing {file.FileName}.");
+                        return SettingsOperationResult.PartialRollbackRequired(
+                            "Some files could not be restored automatically. Restore them manually from the backup folder:\n" +
+                            string.Join(System.Environment.NewLine, rollbackFailures),
+                            SettingsBackupStore.GetManifestPath(operationDirectory));
                     }
+
+                    throw;
                 }
 
-                SettingsBackupStore.MarkApplied(operationDirectory, plan.CreatedAtUtc);
-            }
-            catch
+                return null;
+            });
+            if (appliedResult is not null)
             {
-                List<string> rollbackFailures = RestoreFilesBestEffort(applied);
-                if (rollbackFailures.Count > 0)
-                {
-                    return SettingsOperationResult.PartialRollbackRequired(
-                        "Some files could not be restored automatically. Restore them manually from the backup folder:\n" +
-                        string.Join(System.Environment.NewLine, rollbackFailures),
-                        SettingsBackupStore.GetManifestPath(operationDirectory));
-                }
-
-                throw;
+                return appliedResult;
             }
 
             return SettingsOperationResult.Applied(
@@ -179,31 +196,48 @@ internal sealed class SettingsTransaction(
                         file.Target);
                     byte[] current = File.Exists(targetPath) ? File.ReadAllBytes(targetPath) : [];
                     restored.Add((file, current));
-                    if (file.Existed)
-                    {
-                        byte[] original = File.ReadAllBytes(
-                            Path.Combine(operation.Directory, file.BackupFileName!));
-                        if (!string.Equals(Sha256(original), file.OriginalSha256, StringComparison.Ordinal))
-                        {
-                            throw new IOException($"The backup for {file.FileName} failed validation.");
-                        }
 
-                        WriteBytesAtomically(targetPath, original);
-                        if (!string.Equals(
-                                Sha256(File.ReadAllBytes(targetPath)),
-                                file.OriginalSha256,
-                                StringComparison.Ordinal))
+                    // CAS immediately before the restore: the live file must still match
+                    // the state this tool produced when it applied the change (the
+                    // Result state). If anyone modified it since, abort without
+                    // overwriting those new changes (F067/F127).
+                    byte[]? original = file.Existed ? ReadOriginal(operation, file) : null;
+                    if (file.ResultExists)
+                    {
+                        if (file.Existed)
                         {
-                            throw new IOException($"Validation failed after restoring {file.FileName}.");
+                            CompareAndReplace(
+                                targetPath,
+                                original!,
+                                file.ResultSha256,
+                                expectedExists: true);
+                        }
+                        else
+                        {
+                            CompareAndDelete(targetPath, file.ResultSha256);
                         }
                     }
                     else
                     {
-                        File.Delete(targetPath);
-                        if (File.Exists(targetPath))
+                        if (file.Existed)
                         {
-                            throw new IOException($"Validation failed after removing {file.FileName}.");
+                            // The live file is absent (Result deleted it), but the
+                            // original existed: write the original back.
+                            CompareAndReplace(
+                                targetPath,
+                                original!,
+                                expectedSha256: null,
+                                expectedExists: false);
                         }
+                    }
+
+                    if (file.Existed &&
+                        !string.Equals(
+                            Sha256(File.ReadAllBytes(targetPath)),
+                            file.OriginalSha256,
+                            StringComparison.Ordinal))
+                    {
+                        throw new IOException($"Validation failed after restoring {file.FileName}.");
                     }
                 }
             }
@@ -315,6 +349,23 @@ internal sealed class SettingsTransaction(
 
         byte[] current = file.Existed ? File.ReadAllBytes(file.FullPath) : [];
         return string.Equals(Sha256(current), file.OriginalSha256, StringComparison.Ordinal);
+    }
+
+    private static byte[] ReadOriginal(StoredSettingsOperation operation, ManifestFile file)
+    {
+        if (file.BackupFileName is null)
+        {
+            throw new IOException($"The backup for {file.FileName} is missing.");
+        }
+
+        byte[] original = File.ReadAllBytes(
+            Path.Combine(operation.Directory, file.BackupFileName));
+        if (!string.Equals(Sha256(original), file.OriginalSha256, StringComparison.Ordinal))
+        {
+            throw new IOException($"The backup for {file.FileName} failed validation.");
+        }
+
+        return original;
     }
 
     private static string Fingerprint(SettingsChangePlan plan) =>

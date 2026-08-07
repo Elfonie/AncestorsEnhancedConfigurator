@@ -82,7 +82,10 @@ internal sealed class SteamInstallationLocator(
                 string? path = entry.Child?.GetString("path");
                 if (!string.IsNullOrWhiteSpace(path))
                 {
-                    libraries.Add(Path.GetFullPath(path));
+                    // Never resolve a relative library path against the process working
+                    // directory; resolve it against the Steam root instead (F115).
+                    libraries.Add(Path.GetFullPath(
+                        Path.IsPathRooted(path) ? path : Path.Combine(steamRoot, path)));
                 }
             }
         }

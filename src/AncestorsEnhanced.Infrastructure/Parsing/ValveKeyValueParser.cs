@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 
 namespace AncestorsEnhanced.Infrastructure.Parsing;
 
@@ -53,7 +53,7 @@ internal static class ValveKeyValueParser
                 result.Add(new ValveKeyValueEntry(
                     key,
                     null,
-                    ParseObject(reader, requiresClosingBrace: true)));
+                    ParseObject(reader, requiresClosingBrace: true, depth: depth + 1)));
                 continue;
             }
 

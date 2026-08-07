@@ -1,5 +1,6 @@
-﻿using System.Globalization;
+using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.SystemSave;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
@@ -55,7 +56,11 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     {
         int slot = ParseSlot(slotNumber);
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
+        return MutationCoordinator.Run(() => ExecuteCreateCheckpoint(slot, origin));
+    }
 
+    private SaveGameOperationResult ExecuteCreateCheckpoint(int slot, string origin)
+    {
         try
         {
             string slotPath = SaveGamePaths.GetSlotPath(_userDataDirectory, slot);
@@ -91,7 +96,6 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             return Failure($"No checkpoint was created: {exception.Message}");
         }
     }
-
     public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId)
     {
         int slot = ParseSlot(slotNumber);
@@ -102,12 +106,19 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             return Failure("Close Ancestors before loading a save checkpoint.");
         }
 
+        return MutationCoordinator.Run(() => ExecuteLoadCheckpoint(slot, checkpointId));
+    }
+
+    private SaveGameOperationResult ExecuteLoadCheckpoint(int slot, string checkpointId)
+    {
         try
         {
             SaveGamePaths.ValidateCheckpointId(checkpointId);
             string slotPath = SaveGamePaths.GetSlotPath(_userDataDirectory, slot);
             byte[] checkpoint = SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpointId);
 
+            // Everything before WriteBytesAtomically is part of the "not committed"
+            // phase: if any of it fails, the live save is still intact.
             if (File.Exists(slotPath))
             {
                 byte[] current = File.ReadAllBytes(slotPath);
@@ -117,11 +128,26 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 }
             }
 
+            // The atomic replace is the commit point. After it, the save has already
+            // been changed, so a later failure must be reported as committed-with-warning
+            // and never as "Nothing was loaded".
             WriteBytesAtomically(slotPath, checkpoint);
-            File.SetLastWriteTimeUtc(slotPath, _utcNow().UtcDateTime);
+            try
+            {
+                File.SetLastWriteTimeUtc(slotPath, _utcNow().UtcDateTime);
+            }
+            catch (Exception warning) when (IsExpectedException(warning))
+            {
+                return new SaveGameOperationResult(
+                    true,
+                    $"The save was loaded, but its timestamp could not be updated: {warning.Message}",
+                    CommitState: SaveOperationCommitState.CommittedWithWarning);
+            }
+
             return new SaveGameOperationResult(
                 true,
-                $"Loaded checkpoint for slot {slot}. Start Ancestors to continue.");
+                $"Loaded checkpoint for slot {slot}. Start Ancestors to continue.",
+                CommitState: SaveOperationCommitState.Committed);
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {
@@ -134,7 +160,11 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         int slot = ParseSlot(slotNumber);
         ArgumentNullException.ThrowIfNull(checkpointId);
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
+        return MutationCoordinator.Run(() => ExecuteDeleteCheckpoint(slot, checkpointId));
+    }
 
+    private SaveGameOperationResult ExecuteDeleteCheckpoint(int slot, string checkpointId)
+    {
         try
         {
             SaveGamePaths.ValidateCheckpointId(checkpointId);

@@ -32,8 +32,9 @@ public sealed class IniCheatService
             InputFileName);
 
         bool fileExisted = File.Exists(path);
+        byte[] readBytes = fileExisted ? File.ReadAllBytes(path) : [];
         EncodedTextFile file = fileExisted
-            ? EncodedTextFile.Decode(File.ReadAllBytes(path))
+            ? EncodedTextFile.Decode(readBytes)
             : new EncodedTextFile(string.Empty, new UTF8Encoding(false), []);
 
         bool owned = LoadOwnership();
@@ -59,13 +60,24 @@ public sealed class IniCheatService
             return;
         }
 
-        if (fileExisted)
+        MutationCoordinator.Run(() =>
         {
-            BackupInputIni(path);
-        }
+            if (fileExisted)
+            {
+                BackupInputIni(path);
+            }
 
-        WriteBytesAtomically(path, file.Encode(updated));
-        SaveOwnership(owned);
+            // CAS immediately before the write: the live file must still match the
+            // bytes that were read at the start of this operation, so a free-camera
+            // toggle can never overwrite changes made by the game or another tool in
+            // between (F074).
+            ConfigurationFileOperations.CompareAndReplace(
+                path,
+                file.Encode(updated),
+                fileExisted ? ConfigurationFileOperations.Sha256(readBytes) : null,
+                fileExisted);
+            SaveOwnership(owned);
+        });
     }
 
     /// <summary>

@@ -581,6 +581,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CustomOverrideCount));
             OnPropertyChanged(nameof(GamePresetName));
             RebuildEditors();
+            UpdatePendingChanges();
             ApplyViewMode();
             LoadTechnicalDetails(snapshot);
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
@@ -610,6 +611,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             PakFiles = [];
             Notices = [new NoticeRowViewModel("Error", exception.Message)];
             CanRevertLast = false;
+            // Clear the whole internal editor state and writer services so no stale
+            // writable editor remains active after a failed scan (F004/F077).
+            foreach (SettingEditorViewModel editor in _editors.Values)
+            {
+                editor.Changed -= OnEditorChanged;
+            }
+            _editors.Clear();
+            _allFeatureGroups = [];
+            PendingChanges = [];
+            SaveManager?.Dispose();
+            SaveManager = null;
+            Cheat?.Dispose();
+            Cheat = null;
             ShowMessage($"Scan failed: {exception.Message}", "#E04D42");
             LogDetection("failed: "+exception.Message);
             return false;

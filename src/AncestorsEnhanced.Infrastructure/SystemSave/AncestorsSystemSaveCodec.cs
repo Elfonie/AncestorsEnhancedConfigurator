@@ -7,6 +7,9 @@ namespace AncestorsEnhanced.Infrastructure.SystemSave;
 
 internal static class AncestorsSystemSaveCodec
 {
+    /// <summary>Upper bound for a re-encoded System.sav (256 KiB).</summary>
+    private const int MaximumOutputSizeBytes = 256 * 1024;
+
     public static SystemGraphicsSettingsSnapshot Read(byte[] file)
     {
         byte[] data = SnappyBlockCodec.Decode(file);
@@ -38,12 +41,18 @@ internal static class AncestorsSystemSaveCodec
             throw new InvalidDataException("System.sav contains an unsupported frame-rate limit.");
         }
 
+        float brightnessValue = UnrealTaggedProperties.ReadFloatValue(data, brightness);
+        if (!float.IsFinite(brightnessValue))
+        {
+            throw new InvalidDataException("System.sav contains an invalid brightness value.");
+        }
+
         return new SystemGraphicsSettingsSnapshot(
             fullscreenWidth,
             fullscreenHeight,
             windowedWidth,
             windowedHeight,
-            UnrealTaggedProperties.ReadFloatValue(data, brightness),
+            brightnessValue,
             overallQuality,
             ReadQuality(data, layout.ScalabilityProperties, "ViewDistance", overallQuality),
             ReadQuality(data, layout.ScalabilityProperties, "PostProcessing", overallQuality),
@@ -118,6 +127,13 @@ internal static class AncestorsSystemSaveCodec
         }
 
         byte[] encoded = SnappyBlockCodec.EncodeLiteral(data);
+        if (encoded.Length > MaximumOutputSizeBytes)
+        {
+            // A recompressed System.sav that grows past the supported bound would be a
+            // disproportionate regression (F097); abort instead of writing it.
+            throw new InvalidOperationException("The updated System.sav exceeds the supported size and was not written.");
+        }
+
         _ = Read(encoded);
         return encoded;
     }
@@ -212,6 +228,14 @@ internal static class AncestorsSystemSaveCodec
             return data;
         }
 
+        // If the property exists under a different type, adding a new BoolProperty
+        // would create a duplicate entry and corrupt the save. Treat it as an error.
+        if (layout.GraphicsProperties.Any(existing => string.Equals(
+                existing.Name, propertyName, StringComparison.Ordinal) && !existing.IsTerminator))
+        {
+            throw new InvalidDataException($"System.sav contains {propertyName} with an unsupported type.");
+        }
+
         byte[] encoded = UnrealTaggedProperties.EncodeBool(propertyName, value);
         int start = layout.GraphicsProperties.Single(candidate => candidate.IsTerminator).Start;
         return ReplaceAndResize(data, start, 0, encoded, layout.Options, layout.Graphics);
@@ -269,7 +293,11 @@ internal static class AncestorsSystemSaveCodec
     private static GameGraphicsQuality ParseQuality(string value)
     {
         string name = value[(value.LastIndexOf(':') + 1)..];
-        return Enum.TryParse(name, ignoreCase: true, out GameGraphicsQuality quality)
+        // Only the explicitly defined member names are accepted. A numeric value like
+        // "3" (or any other undefined member) would otherwise pass Enum.TryParse and
+        // surface as an out-of-range quality.
+        return Enum.TryParse(name, ignoreCase: true, out GameGraphicsQuality quality) &&
+               Enum.IsDefined(quality)
             ? quality
             : throw new InvalidDataException($"System.sav contains an unsupported quality value {value}.");
     }
@@ -290,6 +318,7 @@ internal static class AncestorsSystemSaveCodec
     private static float ParseBrightness(string value)
     {
         if (!float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float brightness) ||
+            !float.IsFinite(brightness) ||
             brightness is < 0.5f or > 1.5f)
         {
             throw new InvalidOperationException("The brightness value is outside the supported range.");

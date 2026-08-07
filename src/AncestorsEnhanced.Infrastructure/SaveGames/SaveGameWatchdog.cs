@@ -3,12 +3,20 @@ using AncestorsEnhanced.Core.SaveGames;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
+/// <summary>
+/// Watches the savegames directory and creates checkpoints when a slot save changes.
+/// Guarantees at most one queued backup per slot and waits for in-flight backup tasks
+/// when stopped/disposed, so stopping never races a running create (F002). Changes that
+/// arrive while a backup is already queued or in its cooldown are marked dirty and
+/// backed up once afterwards instead of being discarded (I-1).
+/// </summary>
 public sealed class SaveGameWatchdog : ISaveGameWatchdog
 {
     private readonly SafeSaveGameManager _manager;
     private readonly string _userDataDirectory;
     private readonly Lock _gate = new();
-    private readonly Dictionary<int, CancellationTokenSource> _debounces = new();
+    private readonly Dictionary<int, Task> _running = new();
+    private readonly Dictionary<int, bool> _pending = new();
     private readonly Dictionary<int, DateTimeOffset> _lastBackupTimes = new();
     private readonly Dictionary<int, DateTimeOffset> _suppressedUntil = new();
     private TimeSpan _cooldown = TimeSpan.FromMinutes(5);
@@ -56,42 +64,71 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             }
 
             _stopped = false;
-            var watcher = new FileSystemWatcher(
-                SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory))
+            string saveDirectory = SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory);
+            if (!Directory.Exists(saveDirectory))
+            {
+                Directory.CreateDirectory(saveDirectory);
+            }
+
+            var watcher = new FileSystemWatcher(saveDirectory)
             {
                 Filter = "Savegame*.sav",
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size |
                              NotifyFilters.FileName | NotifyFilters.CreationTime,
-                EnableRaisingEvents = true,
             };
+            // Register handlers BEFORE enabling events so no change event can be lost
+            // between construction and the first raise.
             watcher.Changed += OnChanged;
             watcher.Created += OnChanged;
             watcher.Renamed += OnRenamed;
             watcher.Error += OnWatcherError;
+            watcher.EnableRaisingEvents = true;
             _watcher = watcher;
         }
     }
 
     public void StopWatch()
     {
+        Dictionary<int, Task> snapshot;
         lock (_gate)
         {
-            if (_watcher is null)
+            if (_watcher is not null)
             {
-                return;
+                _watcher.EnableRaisingEvents = false;
+                _watcher.Changed -= OnChanged;
+                _watcher.Created -= OnChanged;
+                _watcher.Renamed -= OnRenamed;
+                _watcher.Error -= OnWatcherError;
+                _watcher.Dispose();
+                _watcher = null;
             }
 
-            _watcher.EnableRaisingEvents = false;
-            _watcher.Changed -= OnChanged;
-            _watcher.Created -= OnChanged;
-            _watcher.Renamed -= OnRenamed;
-            _watcher.Error -= OnWatcherError;
-            _watcher.Dispose();
-            _watcher = null;
             _stopped = true;
+            _pending.Clear();
+            _lastBackupTimes.Clear();
+            _suppressedUntil.Clear();
+            snapshot = new Dictionary<int, Task>(_running);
         }
 
-        CancelAllDebounces();
+        // Wait for in-flight backup tasks so a stop never races a running create (F002).
+        Task[] tasks = snapshot.Values.ToArray();
+        if (tasks.Length > 0)
+        {
+            try
+            {
+                Task.WaitAll(tasks, TimeSpan.FromSeconds(10));
+            }
+            catch (AggregateException)
+            {
+                // The backing tasks swallow expected exceptions themselves; a leftover
+                // exception on an unobserved task is harmless here.
+            }
+        }
+
+        lock (_gate)
+        {
+            _running.Clear();
+        }
     }
 
     public void SuppressSlot(int slotNumber, TimeSpan duration)
@@ -99,6 +136,35 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         lock (_gate)
         {
             _suppressedUntil[slotNumber] = DateTimeOffset.UtcNow + duration;
+        }
+    }
+
+    /// <summary>
+    /// Blocks until no backup task is currently running (used by tests and restore
+    /// flows that need a quiescent watchdog). Never throws for task failures.
+    /// </summary>
+    public void WaitForIdle()
+    {
+        while (true)
+        {
+            Task? task;
+            lock (_gate)
+            {
+                task = _running.Count == 0 ? null : _running.Values.First();
+            }
+
+            if (task is null)
+            {
+                return;
+            }
+
+            try
+            {
+                task.Wait(TimeSpan.FromSeconds(10));
+            }
+            catch (AggregateException)
+            {
+            }
         }
     }
 
@@ -136,8 +202,6 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
-                // A watcher that cannot be restarted is still reported as an error;
-                // the UI keeps the failed state visible.
             }
         }
     }
@@ -156,51 +220,65 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
                 return;
             }
 
-            if (_debounces.TryGetValue(slot, out CancellationTokenSource? existing))
+            if (_running.ContainsKey(slot))
             {
-                // Nicht hier disposen: der Task, der dieses Token besitzt,
-                // disposet es nach seinem Abschluss selbst (finally).
-                existing.Cancel();
+                // A backup for this slot is already queued/running. Remember the change
+                // and let the running task pick it up once, instead of spawning a second
+                // parallel job (guarantee: at most one queued backup per slot).
+                _pending[slot] = true;
+                return;
             }
 
-            var source = new CancellationTokenSource();
-            _debounces[slot] = source;
-            _ = Task.Run(() => DebouncedCheckpointAsync(slot, source, source.Token));
+            Task task = BackupSlotAsync(slot);
+            _running[slot] = task;
         }
     }
 
-    private async Task DebouncedCheckpointAsync(int slot, CancellationTokenSource source, CancellationToken token)
+    private async Task BackupSlotAsync(int slot)
     {
         try
         {
-            await Task.Delay(500, token);
-            lock (_gate)
+            await Task.Delay(500).ConfigureAwait(false);
+
+            // Process changes that arrived while this job was running. Each iteration
+            // handles one pending change; loop until the slot is quiescent.
+            while (true)
             {
-                if (_stopped)
+                lock (_gate)
                 {
-                    return;
+                    if (_stopped)
+                    {
+                        return;
+                    }
                 }
-            }
 
-            if (IsSuppressed(slot))
-            {
-                return;
-            }
+                if (!IsSuppressed(slot) && CanBackup(slot))
+                {
+                    SaveGameOperationResult result = _manager.CreateCheckpoint(
+                        slot.ToString(CultureInfo.InvariantCulture),
+                        "AutoBackup");
+                    if (result.Succeeded && result.CreatedCheckpointId is not null)
+                    {
+                        RecordBackupTime(slot);
+                        CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
+                    }
+                }
 
-            if (!CanBackup(slot))
-            {
-                return;
-            }
+                lock (_gate)
+                {
+                    if (_stopped || !_pending.TryGetValue(slot, out bool dirty) || !dirty)
+                    {
+                        _pending.Remove(slot);
+                        break;
+                    }
 
-            SaveGameOperationResult result = _manager.CreateCheckpoint(slot.ToString(CultureInfo.InvariantCulture), "AutoBackup");
-            if (result.Succeeded && result.CreatedCheckpointId is not null)
-            {
-                RecordBackupTime(slot);
-                CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
+                    _pending.Remove(slot);
+                }
+
+                // A change arrived while the first backup was being written; schedule one
+                // more pass with a fresh debounce so in-progress writes can settle.
+                await Task.Delay(500).ConfigureAwait(false);
             }
-        }
-        catch (OperationCanceledException)
-        {
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or InvalidOperationException or
@@ -216,15 +294,8 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         {
             lock (_gate)
             {
-                if (_debounces.TryGetValue(slot, out CancellationTokenSource? current) &&
-                    ReferenceEquals(current, source))
-                {
-                    _debounces.Remove(slot);
-                }
+                _running.Remove(slot);
             }
-
-            // Diese Source gehört diesem Task und ist jetzt verbraucht.
-            source.Dispose();
         }
     }
 
@@ -265,23 +336,6 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         lock (_gate)
         {
             _lastBackupTimes[slot] = DateTimeOffset.UtcNow;
-        }
-    }
-
-    private void CancelAllDebounces()
-    {
-        Dictionary<int, CancellationTokenSource> current;
-        lock (_gate)
-        {
-            current = new Dictionary<int, CancellationTokenSource>(_debounces);
-            _debounces.Clear();
-            _lastBackupTimes.Clear();
-            _suppressedUntil.Clear();
-        }
-
-        foreach (CancellationTokenSource source in current.Values)
-        {
-            source.Cancel();
         }
     }
 

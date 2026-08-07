@@ -162,9 +162,20 @@ internal static class UnrealTaggedProperties
     public static bool ReadBoolValue(byte[] data, TaggedProperty property)
     {
         RequireLength(property, 0);
-        return property.BooleanValueOffset is int offset
-            ? data[offset] != 0
-            : throw new InvalidDataException($"Property {property.Name} has no Boolean value.");
+        if (property.BooleanValueOffset is not int offset)
+        {
+            throw new InvalidDataException($"Property {property.Name} has no Boolean value.");
+        }
+
+        byte value = data[offset];
+        // Only 0 and 1 are valid stored booleans. Any other byte is a structural
+        // error rather than truthy data.
+        if (value is not (0 or 1))
+        {
+            throw new InvalidDataException($"Property {property.Name} has an invalid Boolean value.");
+        }
+
+        return value == 1;
     }
 
     public static byte[] EncodeEnum(string name, string value)

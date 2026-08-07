@@ -27,7 +27,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             .ToArray();
 
     [ObservableProperty]
-    public partial CheatSlotChoice SelectedSlot { get; set; } = null!;
+    public partial CheatSlotChoice? SelectedSlot { get; set; }
 
     [ObservableProperty]
     public partial bool IsBusy { get; set; }
@@ -49,8 +49,12 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     public void UpdateSlotAvailability(IReadOnlyList<SaveGameSlotViewModel> slotViewModels)
     {
+        // An empty slot list must clear any previously shown cheat slots, never
+        // keep stale entries that no longer correspond to a real save (F136).
         if (slotViewModels.Count == 0)
         {
+            Slots = [];
+            SelectedSlot = null;
             return;
         }
 
@@ -256,8 +260,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     private async Task PollGameRunningLoopAsync(CancellationToken token)
     {
-        // Rotiert vollständig losgelöst vom UI-Thread; der UI-Thread wird nur bei
-        // einer Statusänderung benachrichtigt.
+        // Rotiert vollstÃ¤ndig losgelÃ¶st vom UI-Thread; der UI-Thread wird nur bei
+        // einer StatusÃ¤nderung benachrichtigt.
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));

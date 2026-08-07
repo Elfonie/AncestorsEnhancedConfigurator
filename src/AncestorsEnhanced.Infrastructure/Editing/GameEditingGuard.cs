@@ -29,10 +29,16 @@ internal static class GameEditingGuard
 
     public static void ValidatePlan(SettingsChangePlan plan)
     {
-        if (!string.Equals(
-                plan.BuildId,
-                AncestorsGameProfile.SupportedBuildId,
-                StringComparison.Ordinal) ||
+        // The plan may be identified either by its recognised build ID or by its
+        // recognised content signature, but never by a stale/wrong claim (F061, F064).
+        // If both are present they must not contradict each other.
+        bool buildOk = !string.IsNullOrWhiteSpace(plan.BuildId) &&
+            string.Equals(plan.BuildId, AncestorsGameProfile.SupportedBuildId, StringComparison.Ordinal);
+        bool contentOk = string.Equals(
+            plan.ContentSignature,
+            AncestorsGameProfile.SupportedContentSignature,
+            StringComparison.Ordinal);
+        if (((buildOk || contentOk) == false) ||
             plan.Files.Count == 0 ||
             string.IsNullOrWhiteSpace(plan.UserDataDirectory))
         {

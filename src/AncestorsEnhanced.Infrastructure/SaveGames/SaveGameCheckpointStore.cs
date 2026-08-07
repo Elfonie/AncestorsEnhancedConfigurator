@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using AncestorsEnhanced.Core.SaveGames;
@@ -17,6 +17,11 @@ internal sealed class SaveGameCheckpointStore(
 
     public string Create(string userDataDirectory, int slotNumber, byte[] content, string origin = "Manual")
     {
+        if (maxCheckpointsPerSlot < 1)
+        {
+            throw new InvalidOperationException("The retention limit must be at least one checkpoint per slot.");
+        }
+
         ArgumentNullException.ThrowIfNull(content);
         if (content.Length == 0)
         {

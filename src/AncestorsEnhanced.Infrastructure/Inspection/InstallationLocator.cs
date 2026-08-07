@@ -30,7 +30,20 @@ internal sealed class InstallationLocator
         installations.AddRange(_gog.Find());
         installations.AddRange(_heroic.Find(notices));
 
-        if (installations.Count == 0)
+        // Deduplicate identical installations reported by more than one store locator
+        // (e.g. the same Epic install also listed through Heroic) before choosing one
+        // (F148). Later, duplicate stores win over the earlier one on the same path.
+        List<GameInstallationSnapshot> unique = [];
+        var seen = new HashSet<string>(PathComparer);
+        foreach (GameInstallationSnapshot candidate in installations)
+        {
+            if (seen.Add(candidate.InstallDirectory))
+            {
+                unique.Add(candidate);
+            }
+        }
+
+        if (unique.Count == 0)
         {
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
@@ -39,15 +52,19 @@ internal sealed class InstallationLocator
             return null;
         }
 
-        if (installations.Count > 1)
+        if (unique.Count > 1)
         {
-            GameInstallationSnapshot selected = installations[0];
+            GameInstallationSnapshot selected = unique[0];
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "game.multiple-installations",
                 $"Multiple Ancestors installations were detected. Using {selected.Store} at {selected.InstallDirectory}."));
         }
 
-        return installations[0];
+        return unique[0];
     }
+
+    private static StringComparer PathComparer => OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
 }

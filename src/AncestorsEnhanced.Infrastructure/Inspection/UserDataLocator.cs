@@ -25,7 +25,11 @@ internal sealed class UserDataLocator(
                 "users");
             if (fileSystem.DirectoryExists(users))
             {
+                // Prefer the deterministic first folder order and only accept a user
+                // whose Ancestors Saved directory actually exists; never guess between
+                // several wine users (F113).
                 string? protonData = Directory.EnumerateDirectories(users)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                     .Select(path => Path.Combine(path, "AppData", "Local", "Ancestors", "Saved"))
                     .FirstOrDefault(fileSystem.DirectoryExists);
                 if (protonData is not null)

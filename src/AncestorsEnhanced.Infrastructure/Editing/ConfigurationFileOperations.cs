@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using AncestorsEnhanced.Core.Editing;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
@@ -192,6 +192,61 @@ internal static class ConfigurationFileOperations
         {
             File.Delete(temporaryPath);
         }
+    }
+
+    /// <summary>
+    /// Compare-and-swap write: replaces <paramref name="path"/> only if its current
+    /// on-disk state still matches the expected state that a plan/preview was built
+    /// from. For a file that existed, <paramref name="expectedSha256"/> must equal the
+    /// hash of the current bytes; for a file that did not exist, the path must still be
+    /// absent. On any mismatch the write is aborted and the target is left untouched,
+    /// closing the lost-update / data-TOCTOU window (F066, F067, F074).
+    /// </summary>
+    public static void CompareAndReplace(
+        string path,
+        byte[] content,
+        string? expectedSha256,
+        bool expectedExists)
+    {
+        bool currentExists = File.Exists(path);
+        if (currentExists != expectedExists)
+        {
+            throw new IOException(
+                $"The target file changed after the preview (expected {(expectedExists ? "present" : "absent")}). Refresh and try again.");
+        }
+
+        if (expectedExists)
+        {
+            string currentSha = Sha256(File.ReadAllBytes(path));
+            if (!string.Equals(currentSha, expectedSha256, StringComparison.Ordinal))
+            {
+                throw new IOException(
+                    "The target file changed after the preview. Refresh and try again.");
+            }
+        }
+
+        WriteBytesAtomically(path, content);
+    }
+
+    /// <summary>
+    /// Compare-and-swap delete: removes <paramref name="path"/> only if its current
+    /// bytes still match <paramref name="expectedSha256"/>. On any mismatch the target
+    /// is left untouched so a plan can never delete bytes it did not see (F066/F067).
+    /// </summary>
+    public static void CompareAndDelete(string path, string expectedSha256)
+    {
+        if (!File.Exists(path))
+        {
+            throw new IOException("The target file no longer exists. Refresh and try again.");
+        }
+
+        string currentSha = Sha256(File.ReadAllBytes(path));
+        if (!string.Equals(currentSha, expectedSha256, StringComparison.Ordinal))
+        {
+            throw new IOException("The target file changed after the preview. Refresh and try again.");
+        }
+
+        File.Delete(path);
     }
 
     public static string Sha256(byte[] content) =>

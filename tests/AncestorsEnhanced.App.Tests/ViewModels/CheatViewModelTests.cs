@@ -14,7 +14,7 @@ public sealed class CheatViewModelTests
 
         Assert.Equal(5, viewModel.Slots.Count);
         Assert.Equal("Slot 1", viewModel.Slots[0].Label);
-        Assert.Equal(0, viewModel.SelectedSlot.Number);
+        Assert.Equal(0, viewModel.SelectedSlot!.Number);
         Assert.True(viewModel.CanApply);
     }
 

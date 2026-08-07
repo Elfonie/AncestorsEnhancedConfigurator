@@ -96,10 +96,16 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                 return new CheatApplyResult(false, "The modified save failed field verification.");
             }
 
+            if (!IsDiffConfinedToRanges(decompressed, modified, injected.ModifiedRanges))
+            {
+                return new CheatApplyResult(false, "The modified save changed bytes outside the reported ranges.");
+            }
+
             var store = new SaveGameCheckpointStore(
                 () => DateTimeOffset.UtcNow,
                 maxCheckpointsPerSlot: 50);
-            string checkpointId = store.Create(_userDataDirectory, slot, recompressed, $"Cheat:{kind}");
+            string checkpointId = AncestorsEnhanced.Infrastructure.Editing.MutationCoordinator.Run(
+                () => store.Create(_userDataDirectory, slot, recompressed, $"Cheat:{kind}"));
 
             return new CheatApplyResult(
                 true,
@@ -117,6 +123,49 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
     private static bool IsRangeInsidePayload(byte[] payload, ByteRange range) =>
         range.Offset >= 0 && range.Length > 0 && range.EndExclusive <= payload.Length;
+
+    /// <summary>
+    /// Verifies that the difference between the original and the modified save is
+    /// confined to the reported modified ranges: no byte outside any reported range
+    /// may have changed, and every reported range must be bounded by the payload. This
+    /// proves exactly which bytes the cheat altered (F025).
+    /// </summary>
+    private static bool IsDiffConfinedToRanges(
+        byte[] original,
+        byte[] modified,
+        IReadOnlyList<ByteRange> ranges)
+    {
+        if (original.Length != modified.Length || ranges.Count == 0)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < original.Length; index++)
+        {
+            if (original[index] == modified[index])
+            {
+                continue;
+            }
+
+            bool insideAnyRange = false;
+            foreach (ByteRange range in ranges)
+            {
+                if (range.Offset >= 0 && range.Length > 0 &&
+                    (long)range.Offset <= index && index < range.EndExclusive)
+                {
+                    insideAnyRange = true;
+                    break;
+                }
+            }
+
+            if (!insideAnyRange)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Every reported patched range must resolve to a schema node of the exact expected
@@ -144,8 +193,10 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
         foreach (ByteRange range in ranges)
         {
-            SaveGameSchemaNode? match = candidates.FirstOrDefault(node =>
-                range.Offset >= node.ValueOffset && range.Offset < node.ValueOffset + node.ValueLength);
+            SaveGameSchemaNode? match = candidates.FirstOrDefault(node => {
+                long nodeEnd = (long)node.ValueOffset + node.ValueLength;
+                return range.Offset >= node.ValueOffset && range.EndExclusive <= nodeEnd;
+            });
             if (match is null)
             {
                 return false;
@@ -170,12 +221,17 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
     private static bool VerifyValueAt(ByteRange range, float expected, byte[] payload)
     {
-        if (range.EndExclusive > payload.Length)
+        if (range.Offset < 0 || range.Length < 0 || range.EndExclusive > payload.Length)
         {
             return false;
         }
 
-        for (int offset = range.Offset; offset < range.EndExclusive; offset += 4)
+        if ((range.EndExclusive - range.Offset) % 4 != 0)
+        {
+            return false;
+        }
+
+        for (int offset = range.Offset; offset + 4 <= range.EndExclusive; offset += 4)
         {
             float actual = BitConverter.Int32BitsToSingle(
                 System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(

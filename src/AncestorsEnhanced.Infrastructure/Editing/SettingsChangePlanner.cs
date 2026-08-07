@@ -71,14 +71,18 @@ internal sealed class SettingsChangePlanner(
 
         DateTimeOffset createdAt = _utcNow();
         string operationId = $"{createdAt:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}"[..32];
+        GameInstallationSnapshot installation = snapshot.Installation!;
         return new SettingsChangePlan(
             operationId,
             createdAt,
-            AncestorsGameProfile.SupportedBuildId,
+            // Record the identity that was actually recognised, never a hard-coded
+            // supported claim (F064).
+            installation.BuildId ?? AncestorsGameProfile.SupportedBuildId,
             userDataDirectory,
             previews,
             filePlans,
-            snapshot.Installation!.InstallDirectory);
+            installation.InstallDirectory,
+            installation.ContentSignature);
     }
 
     private static SettingChangeRequest[] ExpandCompositeRequests(
