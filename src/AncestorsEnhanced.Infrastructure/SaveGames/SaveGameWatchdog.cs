@@ -114,9 +114,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         Task[] tasks = snapshot.Values.ToArray();
         if (tasks.Length > 0)
         {
+            // Wait completely for in-flight backup tasks so a stop never races a
+            // running create (F002). The tasks exit quickly once _stopped is set.
             try
             {
-                Task.WaitAll(tasks, TimeSpan.FromSeconds(10));
+                Task.WaitAll(tasks);
             }
             catch (AggregateException)
             {

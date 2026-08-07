@@ -184,19 +184,22 @@ internal sealed class SettingsTransaction(
                 return Failure("There is no unchanged configurator operation that can be restored safely.");
             }
 
+            // The restore target is always reconstructed from the *current* snapshot,
+            // never from the persisted absolute paths in the manifest (F013).
+            string userDataDirectory = snapshot.UserDataDirectory ?? operation.Manifest.UserDataDirectory;
+            string? installDirectory = snapshot.Installation?.InstallDirectory ?? operation.Manifest.InstallDirectory;
             List<(ManifestFile File, byte[] Current)> restored = [];
             try
             {
                 foreach (ManifestFile file in operation.Manifest.Files)
                 {
                     string targetPath = GetTargetPath(
-                        operation.Manifest.UserDataDirectory,
-                        operation.Manifest.InstallDirectory,
+                        userDataDirectory,
+                        installDirectory,
                         file.FileName,
                         file.Target);
                     byte[] current = File.Exists(targetPath) ? File.ReadAllBytes(targetPath) : [];
                     restored.Add((file, current));
-
                     // CAS immediately before the restore: the live file must still match
                     // the state this tool produced when it applied the change (the
                     // Result state). If anyone modified it since, abort without
@@ -243,7 +246,7 @@ internal sealed class SettingsTransaction(
             }
             catch
             {
-                List<string> restoreFailures = RestoreCurrentFilesBestEffort(operation, restored);
+                List<string> restoreFailures = RestoreCurrentFilesBestEffort(userDataDirectory, installDirectory, restored);
                 if (restoreFailures.Count > 0)
                 {
                     return SettingsOperationResult.PartialRollbackRequired(
@@ -297,7 +300,8 @@ internal sealed class SettingsTransaction(
     }
 
     private static List<string> RestoreCurrentFilesBestEffort(
-        StoredSettingsOperation operation,
+        string userDataDirectory,
+        string? installDirectory,
         IEnumerable<(ManifestFile File, byte[] Current)> restored)
     {
         var failures = new List<string>();
@@ -306,13 +310,12 @@ internal sealed class SettingsTransaction(
             try
             {
                 string targetPath = GetTargetPath(
-                    operation.Manifest.UserDataDirectory,
-                    operation.Manifest.InstallDirectory,
+                    userDataDirectory,
+                    installDirectory,
                     file.FileName,
                     file.Target);
                 if (file.ResultExists)
                 {
-                    WriteBytesAtomically(targetPath, current);
                     bool valid = File.Exists(targetPath) && string.Equals(
                         Sha256(File.ReadAllBytes(targetPath)),
                         Sha256(current),

@@ -249,6 +249,84 @@ internal static class ConfigurationFileOperations
         File.Delete(path);
     }
 
+    /// <summary>
+    /// Reads a file as one stable version. <paramref name="maxSizeBytes"/> (when &gt; 0)
+    /// bounds the accepted size; a larger file is rejected. If the length or last-write
+    /// time changes while the file is being read, the read is retried a bounded number
+    /// of times and then aborted rather than returning a torn/inconsistent version (F016).
+    /// </summary>
+    public static byte[] ReadStableBounded(string path, long maxSizeBytes = 0)
+    {
+        const int maxStableAttempts = 4;
+        for (int attempt = 0; attempt < maxStableAttempts; attempt++)
+        {
+            long lengthBefore;
+            DateTime lastWriteBefore;
+            try
+            {
+                var info = new FileInfo(path);
+                lengthBefore = info.Exists ? info.Length : -1;
+                lastWriteBefore = info.Exists ? info.LastWriteTimeUtc : DateTime.MinValue;
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                throw;
+            }
+
+            if (lengthBefore < 0)
+            {
+                throw new FileNotFoundException("The target file does not exist.", path);
+            }
+
+            if (maxSizeBytes > 0 && lengthBefore > maxSizeBytes)
+            {
+                throw new IOException("The target file is unexpectedly large.");
+            }
+
+            byte[] content;
+            try
+            {
+                using var stream = new FileStream(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite);
+                using var memory = new MemoryStream();
+                stream.CopyTo(memory);
+                content = memory.ToArray();
+            }
+            catch (IOException) when (attempt < maxStableAttempts - 1)
+            {
+                Thread.Sleep(150);
+                continue;
+            }
+
+            try
+            {
+                var after = new FileInfo(path);
+                if (after.Exists &&
+                    after.Length == lengthBefore &&
+                    after.LastWriteTimeUtc == lastWriteBefore)
+                {
+                    return content;
+                }
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                // Missing/raced metadata is treated as instability; retry below.
+            }
+
+            if (attempt < maxStableAttempts - 1)
+            {
+                Thread.Sleep(150);
+            }
+        }
+
+        throw new IOException("The save file is being written and could not be read as a stable version.");
+    }
+
     public static string Sha256(byte[] content) =>
         Convert.ToHexString(SHA256.HashData(content));
 

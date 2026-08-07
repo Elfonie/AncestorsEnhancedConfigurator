@@ -106,11 +106,12 @@ internal static class SettingsBackupStore
                         file.FileName,
                         file.Target);
                     string? expectedBackup = file.Existed ? $"{file.FileName}.before" : null;
+                    bool backupOk = !file.Existed || IsNormalFile(Path.Combine(directory, expectedBackup!));
                     return string.Equals(
                         file.BackupFileName,
                         expectedBackup,
                         StringComparison.OrdinalIgnoreCase) &&
-                        (!file.Existed || IsNormalFile(Path.Combine(directory, expectedBackup!)));
+                        backupOk;
                 });
             }
             catch (Exception exception) when (IsExpectedStoreException(exception))
@@ -147,7 +148,14 @@ internal static class SettingsBackupStore
                 continue;
             }
 
-            return unchanged ? new StoredSettingsOperation(directory, manifest) : null;
+            // A valid but externally-modified newest candidate must not stop the search:
+            // keep looking for an older, still-unchanged operation (F019).
+            if (!unchanged)
+            {
+                continue;
+            }
+
+            return new StoredSettingsOperation(directory, manifest);
         }
 
         return null;

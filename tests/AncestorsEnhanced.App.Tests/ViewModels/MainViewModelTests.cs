@@ -151,7 +151,7 @@ public sealed class MainViewModelTests
 
         viewModel.SearchText = "r.Shadow.MaxResolution";
 
-        await Task.Delay(400);
+        await WaitForAsync(() => viewModel.FeatureGroups.Count == 1);
 
         FeatureGroupRowViewModel result = Assert.Single(viewModel.FeatureGroups);
         FeatureSettingRowViewModel setting = Assert.Single(result.Settings);
@@ -160,7 +160,7 @@ public sealed class MainViewModelTests
 
         viewModel.SearchText = "setting-that-does-not-exist";
 
-        await Task.Delay(400);
+        await WaitForAsync(() => viewModel.FeatureGroups.Count == 0);
 
         Assert.Empty(viewModel.FeatureGroups);
         Assert.True(viewModel.HasNoSearchResults);
@@ -296,6 +296,20 @@ public sealed class MainViewModelTests
             null,
             [],
             []);
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+        while (!condition())
+        {
+            if (DateTimeOffset.UtcNow > deadline)
+            {
+                throw new TimeoutException("The debounced search did not settle in time.");
+            }
+
+            await Task.Delay(25);
+        }
+    }
 
     private sealed class FixedInspector(GameInspectionSnapshot snapshot) : IReadOnlyGameInspector
     {

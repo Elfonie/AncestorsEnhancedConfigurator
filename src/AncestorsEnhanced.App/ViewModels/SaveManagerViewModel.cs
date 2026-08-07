@@ -151,39 +151,53 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         StatusMessage = "Working...";
         StatusAccent = "#FF5A00";
         NotifyState();
-        SaveGameOperationResult result;
         try
         {
-            result = await Task.Run(operation);
+            SaveGameOperationResult result;
+            try
+            {
+                result = await Task.Run(operation);
+            }
+            catch (Exception exception) when (IsExpectedException(exception))
+            {
+                StatusMessage = $"Operation failed: {exception.Message}";
+                StatusAccent = "#E04D42";
+                NotifyState();
+                return new SaveGameOperationResult(false, $"Operation failed: {exception.Message}");
+            }
+
+            if (result.Succeeded)
+            {
+                try
+                {
+                    // The post-operation refresh must complete while the UI is still
+                    // marked busy, so the operation is only released once the view
+                    // reflects the new disk state (F006).
+                    SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
+                    Refresh(snapshot);
+                    StatusMessage = result.Message;
+                    StatusAccent = "#B4D941";
+                }
+                catch (Exception exception) when (IsExpectedException(exception))
+                {
+                    StatusMessage = $"{result.Message} (checkpoints could not be refreshed: {exception.Message})";
+                    StatusAccent = "#E04D42";
+                }
+            }
+            else
+            {
+                StatusMessage = result.Message;
+                StatusAccent = "#E04D42";
+            }
+
+            NotifyState();
+            return result;
         }
         finally
         {
             IsBusy = false;
+            NotifyState();
         }
-
-        if (result.Succeeded)
-        {
-            try
-            {
-                SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
-                Refresh(snapshot);
-                StatusMessage = result.Message;
-                StatusAccent = "#B4D941";
-            }
-            catch (Exception exception) when (IsExpectedException(exception))
-            {
-                StatusMessage = $"{result.Message} (checkpoints could not be refreshed: {exception.Message})";
-                StatusAccent = "#E04D42";
-            }
-        }
-        else
-        {
-            StatusMessage = result.Message;
-            StatusAccent = "#E04D42";
-        }
-
-        NotifyState();
-        return result;
     }
 
     public async Task RunCreate(string slotNumber)

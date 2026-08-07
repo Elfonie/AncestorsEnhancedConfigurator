@@ -39,10 +39,10 @@ public static class EditableSettingsCatalog
             ["r.MaxAnisotropy"] = Choice(
                 "16",
                 ("0", "Game default"),
-                ("2", "2×"),
-                ("4", "4×"),
-                ("8", "8×"),
-                ("16", "16×")),
+                ("2", "2Ã—"),
+                ("4", "4Ã—"),
+                ("8", "8Ã—"),
+                ("16", "16Ã—")),
             ["r.Streaming.PoolSize"] = Number(4096, 256, 16384, 256),
             ["r.Streaming.MipBias"] = Number(0, -4, 16, 0.25m),
             ["r.Streaming.Boost"] = Number(1, 0.1m, 4, 0.1m),
@@ -284,14 +284,26 @@ public static class EditableSettingsCatalog
             return false;
         }
 
-        return string.Equals(
-                   installation.BuildId,
-                   AncestorsScalabilityPresetCatalog.SupportedBuildId,
-                   StringComparison.Ordinal) ||
-               string.Equals(
-                   installation.ContentSignature,
-                   AncestorsScalabilityPresetCatalog.SupportedContentSignature,
-                   StringComparison.Ordinal);
+        // The supported build ID and the content signature are independent evidence.
+        // If both are present they must both match, so contradictory evidence is
+        // fail-closed (F061). If only one source is available, that alone is enough.
+        bool buildPending = !string.IsNullOrWhiteSpace(installation.BuildId);
+        bool contentPending = !string.IsNullOrWhiteSpace(installation.ContentSignature);
+        bool buildOk = string.Equals(
+            installation.BuildId,
+            AncestorsScalabilityPresetCatalog.SupportedBuildId,
+            StringComparison.Ordinal);
+        bool contentOk = string.Equals(
+            installation.ContentSignature,
+            AncestorsScalabilityPresetCatalog.SupportedContentSignature,
+            StringComparison.Ordinal);
+
+        if (buildPending && contentPending)
+        {
+            return buildOk && contentOk;
+        }
+
+        return buildOk || contentOk;
     }
 
     public static string? GetCurrentSystemValue(GameInspectionSnapshot snapshot, string key)
@@ -423,7 +435,7 @@ public static class EditableSettingsCatalog
         [.. SystemGraphicsOptionCatalog.Resolutions
             .Select(value => new SettingChoice(
                 value,
-                value.Replace("x", " × ", StringComparison.Ordinal)))];
+                value.Replace("x", " Ã— ", StringComparison.Ordinal)))];
 
     private static string Invariant(decimal value) =>
         value.ToString(System.Globalization.CultureInfo.InvariantCulture);

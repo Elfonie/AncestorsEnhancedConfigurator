@@ -283,31 +283,8 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
         }
     }
 
-    private static byte[] ReadSaveWithRetries(string slotPath)
-    {
-        const int maxAttempts = 3;
-        for (int attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            try
-            {
-                using var stream = new FileStream(
-                    slotPath,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite);
-                using var memory = new MemoryStream();
-                stream.CopyTo(memory);
-                return memory.ToArray();
-            }
-            catch (IOException) when (attempt < maxAttempts)
-            {
-                System.Threading.Thread.Sleep(150);
-            }
-        }
-
-        throw new IOException("The save file is locked by the game and could not be read.");
-    }
-
+    private static byte[] ReadSaveWithRetries(string slotPath) =>
+        AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.ReadStableBounded(slotPath);
     private static bool IsExpectedException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or
             ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException;

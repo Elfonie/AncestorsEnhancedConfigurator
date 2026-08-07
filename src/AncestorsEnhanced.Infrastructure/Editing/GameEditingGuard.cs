@@ -16,6 +16,22 @@ internal static class GameEditingGuard
             throw new InvalidOperationException("Editing requires a supported Ancestors installation.");
         }
 
+        // For Proton (Linux) installs the user-data path must live inside the concrete
+        // Steam library that owns this installation, rather than matching any compatible
+        // prefix anywhere on disk (F014).
+        if (snapshot.Installation is { CompatibilityLayer: CompatibilityLayerKind.Proton } proton &&
+            !string.IsNullOrWhiteSpace(proton.LibraryRoot) &&
+            !string.IsNullOrWhiteSpace(snapshot.UserDataDirectory))
+        {
+            string libraryRoot = Path.GetFullPath(proton.LibraryRoot);
+            string userData = Path.GetFullPath(snapshot.UserDataDirectory);
+            string? rootOfUserData = GetLibraryRootOfUserData(userData);
+            if (!string.Equals(rootOfUserData, libraryRoot, PathComparison))
+            {
+                throw new InvalidOperationException("The Proton user-data directory does not belong to the detected installation.");
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(snapshot.UserDataDirectory))
         {
             throw new InvalidOperationException("The Ancestors user-data directory was not detected.");
@@ -29,16 +45,21 @@ internal static class GameEditingGuard
 
     public static void ValidatePlan(SettingsChangePlan plan)
     {
-        // The plan may be identified either by its recognised build ID or by its
-        // recognised content signature, but never by a stale/wrong claim (F061, F064).
-        // If both are present they must not contradict each other.
-        bool buildOk = !string.IsNullOrWhiteSpace(plan.BuildId) &&
-            string.Equals(plan.BuildId, AncestorsGameProfile.SupportedBuildId, StringComparison.Ordinal);
+        // The plan may be identified by its recognised build ID or its recognised
+        // content signature, but never by a stale/wrong claim. When both forms of
+        // evidence are present they must both match, so contradictory evidence is
+        // fail-closed (F061/F063/F064).
+        bool buildPending = !string.IsNullOrWhiteSpace(plan.BuildId);
+        bool contentPending = !string.IsNullOrWhiteSpace(plan.ContentSignature);
+        bool buildOk = string.Equals(plan.BuildId, AncestorsGameProfile.SupportedBuildId, StringComparison.Ordinal);
         bool contentOk = string.Equals(
             plan.ContentSignature,
             AncestorsGameProfile.SupportedContentSignature,
             StringComparison.Ordinal);
-        if (((buildOk || contentOk) == false) ||
+        bool identityOk = buildPending && contentPending
+            ? buildOk && contentOk
+            : buildOk || contentOk;
+        if (!identityOk ||
             plan.Files.Count == 0 ||
             string.IsNullOrWhiteSpace(plan.UserDataDirectory))
         {
@@ -104,5 +125,22 @@ internal static class GameEditingGuard
                normalized.EndsWith(
                    "/AppData/Local/Ancestors/Saved",
                    StringComparison.Ordinal);
+    }
+    /// <summary>
+    /// Extracts the Steam library root that owns a Proton user-data path, or null when
+    /// the path is not a Proton path. A Proton path always contains
+    /// "steamapps/compatdata/<appid>/pfx/...".
+    /// </summary>
+    private static string? GetLibraryRootOfUserData(string userDataDirectory)
+    {
+        string normalized = userDataDirectory.Replace('\\', '/');
+        string marker = $"/steamapps/compatdata/{AncestorsGameProfile.SteamAppId}/pfx/";
+        int index = normalized.IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        return normalized[..index];
     }
 }

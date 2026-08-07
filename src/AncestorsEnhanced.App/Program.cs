@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -36,11 +36,16 @@ sealed class Program
     }
 
     public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
+    {
+        AppBuilder app = AppBuilder.Configure<App>()
             .UsePlatformDetect()
-            .WithInterFont()
-            .LogToTrace();
-
+            .WithInterFont();
+#if DEBUG
+        // Trace logging is a debug-only aid; it must not be enabled in release builds (F156).
+        app = app.LogToTrace();
+#endif
+        return app;
+    }
     private static string StartupLine()
     {
         string version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
