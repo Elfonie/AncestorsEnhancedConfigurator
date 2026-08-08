@@ -18,6 +18,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly Func<VerifiedGameContext, ISaveGameManager> _saveManagerFactory;
     private readonly GameContextVerifier _gameContextVerifier;
     private VerifiedGameContext? _verifiedGameContext;
+    private bool _saveGamesRefreshFailed;
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
         new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
@@ -207,7 +208,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         if (await RefreshFromDiskAsync())
         {
-            ShowMessage("Configuration loaded. No files were changed.", "#7A877A");
+            ShowMessage(
+                _saveGamesRefreshFailed
+                    ? "Configuration loaded, but save games could not be refreshed."
+                    : "Configuration loaded. No files were changed.",
+                _saveGamesRefreshFailed ? "#D6BC84" : "#7A877A");
         }
     }
 
@@ -227,7 +232,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         if (await RefreshFromDiskAsync())
         {
-            ShowMessage("Configuration reloaded from disk.", "#B4D941");
+            ShowMessage(
+                _saveGamesRefreshFailed
+                    ? "Configuration reloaded, but save games could not be refreshed."
+                    : "Configuration reloaded from disk.",
+                _saveGamesRefreshFailed ? "#D6BC84" : "#B4D941");
         }
     }
 
@@ -569,6 +578,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
             bool canKeepChildState = _verifiedGameContext?.Matches(snapshot) == true &&
                 SaveManager is not null && Cheat is not null;
+            _saveGamesRefreshFailed = false;
             _snapshot = snapshot;
             _verifiedGameContext = VerifyGameContext(snapshot);
             if (snapshot.HasErrors)
@@ -602,7 +612,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
             if (canKeepChildState)
             {
-                await SaveManager!.RefreshSilentlyAsync();
+                _saveGamesRefreshFailed = !await SaveManager!.RefreshSilentlyAsync();
             }
             else
             {
@@ -612,11 +622,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 Cheat?.Dispose();
                 Cheat = CreateCheat();
                 Cheat?.Start();
+                _saveGamesRefreshFailed = _verifiedGameContext is not null && SaveManager is null;
             }
             if (Cheat is not null && SaveManager is not null)
             {
                 SaveManager.IsGameRunning = Cheat.IsGameRunning;
                 Cheat.UpdateSlotAvailability(SaveManager.Slots);
+                Cheat.RefreshFreeCameraState();
             }
             return true;
         }
@@ -624,6 +636,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             _snapshot = null;
             _verifiedGameContext = null;
+            _saveGamesRefreshFailed = false;
             SetDetection("Scan failed", "#E04D42", "#E04D42");
             InstallationPath = "Not available";
             InstallationDetails = "The previous result was cleared";

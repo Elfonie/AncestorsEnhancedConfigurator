@@ -93,6 +93,30 @@ public sealed class CheatViewModelTests
         }
     }
 
+    [Fact]
+    public void RefreshFreeCameraStateReadsExternalInputIniChangesWithoutWriting()
+    {
+        string tmp = Path.Combine(Path.GetTempPath(), "aec-freecam-refresh-" + Guid.NewGuid().ToString("N"));
+        CheatViewModel? viewModel = null;
+        try
+        {
+            viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
+            viewModel.IsFreeCamEnabled = true;
+            string inputPath = Path.Combine(tmp, "Config", "WindowsNoEditor", "Input.ini");
+            File.WriteAllText(inputPath, "[/Script/Engine.InputSettings]\nConsoleKeys=F10\n");
+
+            viewModel.RefreshFreeCameraState();
+
+            Assert.False(viewModel.IsFreeCamEnabled);
+            Assert.DoesNotContain("AncestorsEnhanced", File.ReadAllText(inputPath), StringComparison.Ordinal);
+        }
+        finally
+        {
+            viewModel?.Dispose();
+            if (Directory.Exists(tmp)) Directory.Delete(tmp, recursive: true);
+        }
+    }
+
 
     [Fact]
     public void FreeCameraFailureRevertsWithoutRecursing()

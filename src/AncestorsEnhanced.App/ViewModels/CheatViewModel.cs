@@ -105,18 +105,35 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
 
         _started = true;
+        RefreshFreeCameraState();
+
+        _pollTask = Task.Run(() => PollGameRunningLoopAsync(_gameCheckCts.Token));
+    }
+
+    /// <summary>Reads the current Input.ini state without writing it back.</summary>
+    public void RefreshFreeCameraState()
+    {
+        bool enabled;
         try
         {
-            IsFreeCamEnabled = _iniCheat.IsFreeCameraEnabled();
+            enabled = _iniCheat.IsFreeCameraEnabled();
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or InvalidOperationException or
                 ArgumentException or NotSupportedException)
         {
-            IsFreeCamEnabled = false;
+            enabled = false;
         }
 
-        _pollTask = Task.Run(() => PollGameRunningLoopAsync(_gameCheckCts.Token));
+        _suppressFreeCamChanged = true;
+        try
+        {
+            IsFreeCamEnabled = enabled;
+        }
+        finally
+        {
+            _suppressFreeCamChanged = false;
+        }
     }
 
     private void SetStatus(string message, string accent)
