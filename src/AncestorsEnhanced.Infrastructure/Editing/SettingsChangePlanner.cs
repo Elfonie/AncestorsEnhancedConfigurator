@@ -82,6 +82,7 @@ internal sealed class SettingsChangePlanner(
             previews,
             filePlans,
             installation.InstallDirectory,
+            VerifiedGameContext.TryCreateFromSnapshot(snapshot)?.ContextFingerprint,
             installation.ContentSignature);
     }
 
@@ -188,16 +189,21 @@ internal sealed class SettingsChangePlanner(
             throw new InvalidOperationException("System.sav was not found and cannot be created safely.");
         }
 
-        byte[] original = File.ReadAllBytes(fullPath);
+        byte[] original = ReadStableBounded(fullPath, MaximumSystemSaveSizeBytes);
         if (original.Length > MaximumSystemSaveSizeBytes)
         {
             throw new InvalidOperationException("System.sav is unexpectedly large and will not be changed.");
         }
 
+        // The preview must reflect the bytes we are actually going to change,
+        // never a stale value captured in the earlier scan (F065): decode the
+        // freshly-read System.sav once and derive "before" from it.
+        SystemGraphicsSettingsSnapshot currentGraphics = AncestorsSystemSaveCodec.Read(original);
+
         var changes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (SettingChangeRequest change in systemRequests)
         {
-            string before = EditableSettingsCatalog.GetCurrentSystemValue(snapshot, change.Key)
+            string before = EditableSettingsCatalog.GetSystemValue(currentGraphics, change.Key)
                 ?? throw new InvalidOperationException("The current System.sav graphics settings could not be read.");
             string after = change.Value!;
             if (!string.Equals(before, after, StringComparison.Ordinal))

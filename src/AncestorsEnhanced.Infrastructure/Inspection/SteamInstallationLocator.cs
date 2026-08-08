@@ -154,7 +154,7 @@ internal sealed class SteamInstallationLocator(
                     "game.executable-missing",
                     "The Steam manifest exists, but the expected Ancestors executable is missing."));
             }
-
+            (string? Signature, bool Failed) signature = GameInstallationFactory.ReadContentSignature(installDirectory);
             return new GameInstallationSnapshot(
                 StoreKind.Steam,
                 environment.Host,
@@ -165,7 +165,8 @@ internal sealed class SteamInstallationLocator(
                 installDirectory,
                 appState?.GetString("buildid"),
                 executableExists,
-                GameInstallationFactory.ReadContentSignature(installDirectory));
+                signature.Signature,
+                signature.Failed);
         }
         catch (Exception exception) when (InspectionErrors.IsExpected(exception))
         {

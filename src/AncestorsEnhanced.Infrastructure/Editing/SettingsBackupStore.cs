@@ -107,7 +107,13 @@ internal static class SettingsBackupStore
                         file.FileName,
                         file.Target);
                     string? expectedBackup = file.Existed ? $"{file.FileName}.before" : null;
-                    bool backupOk = !file.Existed || IsNormalFile(Path.Combine(directory, expectedBackup!));
+                    string backupPath = Path.Combine(directory, expectedBackup ?? string.Empty);
+                    // F127: a candidate is only eligible when its backup content still matches
+                    // the recorded OriginalSha256. A tampered backup is not detected mid-restore;
+                    // it makes this candidate ineligible and an older valid one is considered.
+                    bool backupOk = !file.Existed ||
+                        (IsNormalFile(backupPath) &&
+                         string.Equals(Sha256(File.ReadAllBytes(backupPath)), file.OriginalSha256, StringComparison.Ordinal));
                     return string.Equals(
                         file.BackupFileName,
                         expectedBackup,

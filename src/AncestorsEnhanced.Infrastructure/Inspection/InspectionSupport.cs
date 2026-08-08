@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Paks;
@@ -33,6 +33,7 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
             return null;
         }
 
+        (string? Signature, bool Failed) signature = ReadContentSignature(fullInstall);
         return new GameInstallationSnapshot(
             store,
             HostKind.Windows,
@@ -41,7 +42,8 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
             fullInstall,
             buildId,
             true,
-            ReadContentSignature(fullInstall));
+            signature.Signature,
+            signature.Failed);
     }
 
     public static string GetExecutablePath(string installDirectory) => Path.Combine(
@@ -64,6 +66,7 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
             return null;
         }
 
+        (string? Signature, bool Failed) signature = ReadContentSignature(fullInstall);
         return new GameInstallationSnapshot(
             store,
             HostKind.Linux,
@@ -72,10 +75,11 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
             fullInstall,
             buildId,
             true,
-            ReadContentSignature(fullInstall));
+            signature.Signature,
+            signature.Failed);
     }
 
-    public static string? ReadContentSignature(string installDirectory)
+    public static (string? Signature, bool Failed) ReadContentSignature(string installDirectory)
     {
         try
         {
@@ -83,11 +87,13 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
             string main = PakV5Archive.ReadIndexIdentity(
                 Path.Combine(paks, "Ancestors-WindowsNoEditor.pak"));
             string level = PakV5Archive.ReadIndexIdentity(Path.Combine(paks, "VL01E01.pak"));
-            return $"{main}:{level[(level.IndexOf(':') + 1)..]}";
+            return ($"{main}:{level[(level.IndexOf(':') + 1)..]}", false);
         }
         catch (Exception exception) when (InspectionErrors.IsExpected(exception))
         {
-            return null;
+            // A read failure is not the same as "this evidence does not exist on this
+            // platform"; it must fail closed (F061/F149).
+            return (null, true);
         }
     }
 }

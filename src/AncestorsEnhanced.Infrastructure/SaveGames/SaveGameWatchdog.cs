@@ -23,10 +23,10 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
     private bool _stopped;
     private FileSystemWatcher? _watcher;
 
-    public SaveGameWatchdog(string userDataDirectory)
+    public SaveGameWatchdog(string userDataDirectory, Func<bool>? revalidate = null)
     {
         _userDataDirectory = userDataDirectory;
-        _manager = new SafeSaveGameManager(userDataDirectory);
+        _manager = new SafeSaveGameManager(userDataDirectory, null, revalidate);
     }
 
     public event EventHandler<string>? CheckpointCreated;

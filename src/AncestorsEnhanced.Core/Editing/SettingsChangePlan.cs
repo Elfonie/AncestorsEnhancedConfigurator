@@ -8,4 +8,5 @@ public sealed record SettingsChangePlan(
     IReadOnlyList<SettingChangePreview> Changes,
     IReadOnlyList<ConfigurationFileChangePlan> Files,
     string? InstallDirectory = null,
+    string? ContextFingerprint = null,
     string? ContentSignature = null);

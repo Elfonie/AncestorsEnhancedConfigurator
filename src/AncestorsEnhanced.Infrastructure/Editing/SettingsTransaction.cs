@@ -11,11 +11,15 @@ namespace AncestorsEnhanced.Infrastructure.Editing;
 internal sealed class SettingsTransaction(
     Func<DateTimeOffset> utcNow,
     Func<bool> isGameRunning,
-    Func<string, bool> isExpectedUserDataDirectory)
+    Func<string, bool> isExpectedUserDataDirectory,
+    Func<SettingsChangePlan, bool>? revalidateContext = null,
+    Func<GameInspectionSnapshot, bool>? revalidateSnapshot = null)
 {
     private readonly Func<DateTimeOffset> _utcNow = utcNow;
     private readonly Func<bool> _isGameRunning = isGameRunning;
     private readonly Func<string, bool> _isExpectedUserDataDirectory = isExpectedUserDataDirectory;
+    private readonly Func<SettingsChangePlan, bool> _revalidateContext = revalidateContext ?? (_ => true);
+    private readonly Func<GameInspectionSnapshot, bool> _revalidateSnapshot = revalidateSnapshot ?? (_ => true);
     private readonly Lock _planLock = new();
     private SettingsChangePlan? _issuedPlan;
     private string? _issuedPlanFingerprint;
@@ -64,6 +68,13 @@ internal sealed class SettingsTransaction(
                 {
                     return Failure($"{file.FileName} changed after the preview. Refresh and try again.");
                 }
+            }
+
+            // Revalidate the live game context immediately before the first write.
+            // Nothing has been written yet; a drift aborts without a write (F061/F063/F078).
+            if (!_revalidateContext(plan))
+            {
+                return Failure("The game context changed since this change was previewed. Refresh and try again.");
             }
 
             string operationDirectory = SettingsBackupStore.Prepare(plan);
@@ -155,6 +166,10 @@ internal sealed class SettingsTransaction(
         try
         {
             GameEditingGuard.ValidateSnapshot(snapshot, _isExpectedUserDataDirectory);
+            if (!_revalidateSnapshot(snapshot))
+            {
+                return false;
+            }
             return SettingsBackupStore.FindLast(
                 snapshot,
                 AncestorsGameProfile.SupportedBuildId) is not null;
@@ -176,6 +191,10 @@ internal sealed class SettingsTransaction(
         try
         {
             GameEditingGuard.ValidateSnapshot(snapshot, _isExpectedUserDataDirectory);
+            if (!_revalidateSnapshot(snapshot))
+            {
+                return Failure("The game context changed; the backup cannot be restored safely. Refresh and try again.");
+            }
             StoredSettingsOperation? operation = SettingsBackupStore.FindLast(
                 snapshot,
                 AncestorsGameProfile.SupportedBuildId);
@@ -188,6 +207,10 @@ internal sealed class SettingsTransaction(
             // never from the persisted absolute paths in the manifest (F013).
             string userDataDirectory = snapshot.UserDataDirectory ?? operation.Manifest.UserDataDirectory;
             string? installDirectory = snapshot.Installation?.InstallDirectory ?? operation.Manifest.InstallDirectory;
+            // The whole restore mutation runs inside the single global mutation gate so it
+            // can never race another configurator write (F001).
+            return MutationCoordinator.Run(() =>
+            {
             List<(ManifestFile File, byte[] Current)> restored = [];
             try
             {
@@ -270,6 +293,7 @@ internal sealed class SettingsTransaction(
 
             return SettingsOperationResult.RolledBack(
                 "The last configurator change was restored from its backup.");
+            });
         }
         catch (Exception exception) when (IsExpectedWriteException(exception))
         {

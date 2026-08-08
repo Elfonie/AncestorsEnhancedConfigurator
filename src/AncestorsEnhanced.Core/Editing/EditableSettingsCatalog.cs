@@ -248,20 +248,7 @@ public static class EditableSettingsCatalog
             return null;
         }
 
-        return key switch
-        {
-            SystemSaveSettingKeys.FullscreenResolution =>
-                $"{graphics.FullscreenWidth}x{graphics.FullscreenHeight}",
-            SystemSaveSettingKeys.Brightness => graphics.Brightness.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            SystemSaveSettingKeys.FrameRateLimit => graphics.FrameRateLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            SystemSaveSettingKeys.ViewDistanceQuality => graphics.ViewDistanceQuality.ToString(),
-            SystemSaveSettingKeys.PostProcessingQuality => graphics.PostProcessingQuality.ToString(),
-            SystemSaveSettingKeys.ShadowQuality => graphics.ShadowQuality.ToString(),
-            SystemSaveSettingKeys.TextureQuality => graphics.TextureQuality.ToString(),
-            SystemSaveSettingKeys.VisualEffectsQuality => graphics.VisualEffectsQuality.ToString(),
-            SystemSaveSettingKeys.FoliageQuality => graphics.FoliageQuality.ToString(),
-            _ => null,
-        };
+        return graphics is null ? null : GetSystemValue(graphics, key);
     }
 
     public static bool IsVerifiedEditingTarget(GameInspectionSnapshot snapshot)
@@ -286,24 +273,12 @@ public static class EditableSettingsCatalog
 
         // The supported build ID and the content signature are independent evidence.
         // If both are present they must both match, so contradictory evidence is
-        // fail-closed (F061). If only one source is available, that alone is enough.
-        bool buildPending = !string.IsNullOrWhiteSpace(installation.BuildId);
-        bool contentPending = !string.IsNullOrWhiteSpace(installation.ContentSignature);
-        bool buildOk = string.Equals(
+        // fail-closed (F061). A content-signature READ ERROR fails closed too (F063):
+        // it is never equivalent to "this platform has no signature".
+        return GameIdentity.IsSupported(
             installation.BuildId,
-            AncestorsScalabilityPresetCatalog.SupportedBuildId,
-            StringComparison.Ordinal);
-        bool contentOk = string.Equals(
             installation.ContentSignature,
-            AncestorsScalabilityPresetCatalog.SupportedContentSignature,
-            StringComparison.Ordinal);
-
-        if (buildPending && contentPending)
-        {
-            return buildOk && contentOk;
-        }
-
-        return buildOk || contentOk;
+            installation.ContentSignatureReadFailed);
     }
 
     public static string? GetCurrentSystemValue(GameInspectionSnapshot snapshot, string key)
@@ -314,7 +289,12 @@ public static class EditableSettingsCatalog
             return null;
         }
 
-        return key switch
+        return graphics is null ? null : GetSystemValue(graphics, key);
+    }
+
+    /// <summary>Maps a recognised System.sav setting key to its current string value.</summary>
+    public static string? GetSystemValue(SystemGraphicsSettingsSnapshot graphics, string key) =>
+        key switch
         {
             SystemSaveSettingKeys.FullscreenResolution =>
                 $"{graphics.FullscreenWidth}x{graphics.FullscreenHeight}",
@@ -331,7 +311,6 @@ public static class EditableSettingsCatalog
             SystemSaveSettingKeys.FoliageQuality => graphics.FoliageQuality.ToString(),
             _ => null,
         };
-    }
 
     private static bool IsValidValue(SettingEditSnapshot editor, string value) =>
         editor.Kind switch

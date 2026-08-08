@@ -1,4 +1,4 @@
-using AncestorsEnhanced.Core.SaveGames;
+﻿using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
@@ -14,15 +14,18 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 {
     private readonly ISaveGameCheatInjector _injector;
     private readonly string _userDataDirectory;
+    private readonly Func<bool>? _revalidate;
 
     public SaveGameCheatService(
         ISaveGameCheatInjector injector,
-        string userDataDirectory)
+        string userDataDirectory,
+        Func<bool>? revalidate = null)
     {
         ArgumentNullException.ThrowIfNull(injector);
         ArgumentNullException.ThrowIfNull(userDataDirectory);
         _injector = injector;
         _userDataDirectory = userDataDirectory;
+        _revalidate = revalidate;
     }
 
     public CheatApplyResult Apply(CheatKind kind, string slotNumber)
@@ -101,6 +104,11 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                 return new CheatApplyResult(false, "The modified save changed bytes outside the reported ranges.");
             }
 
+            if (_revalidate is not null && !_revalidate())
+            {
+                return new CheatApplyResult(false, "The game context changed; the cheat cannot be applied safely. Refresh and try again.");
+            }
+
             var store = new SaveGameCheckpointStore(
                 () => DateTimeOffset.UtcNow,
                 maxCheckpointsPerSlot: 50);
@@ -150,8 +158,8 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
             bool insideAnyRange = false;
             foreach (ByteRange range in ranges)
             {
-                if (range.Offset >= 0 && range.Length > 0 &&
-                    (long)range.Offset <= index && index < range.EndExclusive)
+                long nodeEnd = range.EndExclusive;
+                if (index >= range.Offset && index < nodeEnd)
                 {
                     insideAnyRange = true;
                     break;
@@ -168,8 +176,9 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
     }
 
     /// <summary>
-    /// Every reported patched range must resolve to a schema node of the exact expected
-    /// name and type whose stored float value(s) equal the injected target value.
+    /// Every reported patched range must resolve to exactly one authorised
+    /// <see cref="CheatTargetSpec"/> (matched by its full schema path and type) whose
+    /// stored float value(s) equal the injected target value (F027).
     /// </summary>
     private static bool VerifyPatchedFields(
         SaveGameSchemaNode root,
@@ -182,41 +191,63 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
             return false;
         }
 
-        (HashSet<string> Names, bool IsArray, float Target) expected = ExpectedTargetFor(kind);
-        List<SaveGameSchemaNode> candidates = EnumerateSchemaNodes(root)
-            .Where(node => !node.IsTerminator && expected.Names.Contains(node.Name))
-            .ToList();
-        if (candidates.Count == 0)
+        IReadOnlyList<CheatTargetSpec> targets = SaveGameCheatTargets.CheatTargetsFor(kind);
+        if (targets.Count == 0)
+        {
+            return false;
+        }
+
+        var resolved = new List<(CheatTargetSpec Spec, SaveGameSchemaNode Node)>();
+        CollectTargetNodes(root, targets, [], resolved);
+        if (resolved.Count == 0)
         {
             return false;
         }
 
         foreach (ByteRange range in ranges)
         {
-            SaveGameSchemaNode? match = candidates.FirstOrDefault(node => {
-                long nodeEnd = (long)node.ValueOffset + node.ValueLength;
-                return range.Offset >= node.ValueOffset && range.EndExclusive <= nodeEnd;
+            bool found = resolved.Any(entry =>
+            {
+                long nodeEnd = (long)entry.Node.ValueOffset + entry.Node.ValueLength;
+                return range.Offset >= entry.Node.ValueOffset &&
+                    range.EndExclusive <= nodeEnd &&
+                    VerifyValueAt(range, entry.Spec.TargetValue, payload);
             });
-            if (match is null)
-            {
-                return false;
-            }
-
-            bool isArray = string.Equals(match.Type, "ArrayProperty", StringComparison.Ordinal) &&
-                string.Equals(match.ElementType, "FloatProperty", StringComparison.Ordinal);
-            bool isScalar = string.Equals(match.Type, "FloatProperty", StringComparison.Ordinal);
-            if (isArray != expected.IsArray || (!isArray && !isScalar))
-            {
-                return false;
-            }
-
-            if (!VerifyValueAt(range, expected.Target, payload))
+            if (!found)
             {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private static void CollectTargetNodes(
+        SaveGameSchemaNode node,
+        IReadOnlyList<CheatTargetSpec> targets,
+        List<string> path,
+        List<(CheatTargetSpec Spec, SaveGameSchemaNode Node)> resolved)
+    {
+        path.Add(node.Name);
+        if (!node.IsTerminator)
+        {
+            string nodePath = string.Join("/", path);
+            foreach (CheatTargetSpec spec in targets)
+            {
+                if (string.Equals(nodePath, spec.SchemaPath, StringComparison.Ordinal) &&
+                    spec.Matches(node))
+                {
+                    resolved.Add((spec, node));
+                }
+            }
+        }
+
+        foreach (SaveGameSchemaNode child in node.Children)
+        {
+            CollectTargetNodes(child, targets, path, resolved);
+        }
+
+        path.RemoveAt(path.Count - 1);
     }
 
     private static bool VerifyValueAt(ByteRange range, float expected, byte[] payload)
@@ -245,31 +276,6 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
         return true;
     }
 
-    private static (HashSet<string> Names, bool IsArray, float Target) ExpectedTargetFor(CheatKind kind) =>
-        kind switch
-        {
-            CheatKind.MaxNeuronalEnergy => (new HashSet<string>(StringComparer.Ordinal) { "NeuronalEnergySources" }, true, 999_999.0f),
-            CheatKind.MaxNeeds => (new HashSet<string>(StringComparer.Ordinal) { "RegimenStamina", "Energy", "Stamina" }, false, 1_000.0f),
-            CheatKind.HealClan => (new HashSet<string>(StringComparer.Ordinal) { "Health", "Energy", "Stamina" }, false, 1.0f),
-            CheatKind.ForceMutations => (new HashSet<string>(StringComparer.Ordinal) { "ForceMutations" }, false, 1.0f),
-            _ => (new HashSet<string>(StringComparer.Ordinal), false, 0.0f),
-        };
-
-    private static IEnumerable<SaveGameSchemaNode> EnumerateSchemaNodes(SaveGameSchemaNode root)
-    {
-        var stack = new Stack<SaveGameSchemaNode>();
-        stack.Push(root);
-        while (stack.Count > 0)
-        {
-            SaveGameSchemaNode node = stack.Pop();
-            yield return node;
-            foreach (SaveGameSchemaNode child in node.Children)
-            {
-                stack.Push(child);
-            }
-        }
-    }
-
     private static bool IsAncestorsRunning()
     {
         try
@@ -285,6 +291,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
     private static byte[] ReadSaveWithRetries(string slotPath) =>
         AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.ReadStableBounded(slotPath, 64L * 1024 * 1024);
+
     private static bool IsExpectedException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or
             ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException;

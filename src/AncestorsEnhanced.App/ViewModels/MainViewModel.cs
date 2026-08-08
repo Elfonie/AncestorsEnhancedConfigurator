@@ -16,6 +16,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
     private readonly Func<string?, ISaveGameManager> _saveManagerFactory;
+    private readonly GameContextVerifier _gameContextVerifier;
+    private VerifiedGameContext? _verifiedGameContext;
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
         new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
@@ -114,8 +116,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(settingsEditor);
         _inspector = inspector;
+        _gameContextVerifier = new GameContextVerifier(inspector);
         _settingsEditor = settingsEditor;
-        _saveManagerFactory = saveManagerFactory ?? (d => string.IsNullOrWhiteSpace(d) ? throw new InvalidOperationException("The user-data directory is required.") : new SafeSaveGameManager(d));
+        _saveManagerFactory = saveManagerFactory ?? (d => string.IsNullOrWhiteSpace(d) ? throw new InvalidOperationException("The user-data directory is required.") : new SafeSaveGameManager(d, null, IsCurrentContextVerified));
 
         ProductName = "Ancestors Enhanced Configurator";
         string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.8.0";
@@ -556,6 +559,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
             _snapshot = snapshot;
+            _verifiedGameContext = VerifyGameContext(snapshot);
             if (snapshot.HasErrors)
             {
                 SetDetection("Ancestors detected with problems", "#D6BC84", "#D6BC84");
@@ -634,6 +638,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private static VerifiedGameContext? VerifyGameContext(GameInspectionSnapshot snapshot) =>
+        VerifiedGameContext.TryCreateFromSnapshot(snapshot);
+
+    private bool IsCurrentContextVerified() =>
+        _verifiedGameContext is not null && _gameContextVerifier.Verify(_verifiedGameContext);
+
     private async Task<SaveManagerViewModel?> CreateSaveManagerAsync(string? userDataDirectory)
     {
         if (string.IsNullOrWhiteSpace(userDataDirectory))
@@ -645,7 +655,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             ISaveGameManager manager = _saveManagerFactory(userDataDirectory);
             SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
-            var watchdog = new SaveGameWatchdog(userDataDirectory);
+            var watchdog = new SaveGameWatchdog(userDataDirectory, IsCurrentContextVerified);
             var viewModel = new SaveManagerViewModel(manager, userDataDirectory, watchdog);
             viewModel.Refresh(snapshot);
             return viewModel;
@@ -666,8 +676,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         var injector = new SaveGameCheatInjector();
-        var service = new SaveGameCheatService(injector, userDataDirectory);
-        var iniCheat = new IniCheatService(userDataDirectory);
+        var service = new SaveGameCheatService(injector, userDataDirectory, IsCurrentContextVerified);
+        var iniCheat = new IniCheatService(userDataDirectory, IsCurrentContextVerified);
         return new CheatViewModel(
             service,
             iniCheat,
@@ -902,8 +912,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         string layer = installation.CompatibilityLayer == CompatibilityLayerKind.Proton
             ? "  Proton"
             : string.Empty;
-        return $"{store}  {installation.Host}{layer}  " +
-               $"Build {installation.BuildId ?? "content verified"}";
+        string identity = installation.BuildId is not null
+            ? "Build " + installation.BuildId
+            : installation.ContentSignature is not null
+                ? "Content signature verified"
+                : "Build unknown";
+        return $"{store}  {installation.Host}{layer}  {identity}";
     }
 
     public void Dispose()

@@ -12,15 +12,18 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     private readonly Func<bool> _isGameRunning;
     private readonly SaveGameCheckpointStore _store;
     private readonly string _userDataDirectory;
+    private readonly Func<bool>? _revalidate;
 
     public SafeSaveGameManager(
         string userDataDirectory,
-        SaveGameManagerOptions? options = null)
+        SaveGameManagerOptions? options = null,
+        Func<bool>? revalidate = null)
         : this(
             userDataDirectory,
             () => DateTimeOffset.UtcNow,
             IsAncestorsRunning,
-            options ?? new SaveGameManagerOptions())
+            options ?? new SaveGameManagerOptions(),
+            revalidate)
     {
     }
 
@@ -28,12 +31,14 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         string userDataDirectory,
         Func<DateTimeOffset> utcNow,
         Func<bool> isGameRunning,
-        SaveGameManagerOptions options)
+        SaveGameManagerOptions options,
+        Func<bool>? revalidate = null)
     {
         _userDataDirectory = userDataDirectory;
         _utcNow = utcNow;
         _isGameRunning = isGameRunning;
         _store = new SaveGameCheckpointStore(utcNow, options.MaxCheckpointsPerSlot);
+        _revalidate = revalidate;
     }
 
     public SaveGamesSnapshot Inspect()
@@ -56,6 +61,11 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     {
         int slot = ParseSlot(slotNumber);
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
+        if (_revalidate is not null && !_revalidate())
+        {
+            return Failure("The game context changed; the checkpoint cannot be created safely. Refresh and try again.");
+        }
+
         return MutationCoordinator.Run(() => ExecuteCreateCheckpoint(slot, origin));
     }
 
@@ -104,6 +114,11 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         if (_isGameRunning())
         {
             return Failure("Close Ancestors before loading a save checkpoint.");
+        }
+
+        if (_revalidate is not null && !_revalidate())
+        {
+            return Failure("The game context changed; the checkpoint cannot be loaded safely. Refresh and try again.");
         }
 
         return MutationCoordinator.Run(() => ExecuteLoadCheckpoint(slot, checkpointId));
@@ -160,6 +175,11 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         int slot = ParseSlot(slotNumber);
         ArgumentNullException.ThrowIfNull(checkpointId);
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
+        if (_revalidate is not null && !_revalidate())
+        {
+            return Failure("The game context changed; the checkpoint cannot be deleted safely. Refresh and try again.");
+        }
+
         return MutationCoordinator.Run(() => ExecuteDeleteCheckpoint(slot, checkpointId));
     }
 

@@ -1,27 +1,36 @@
 using System.Text;
 using AncestorsEnhanced.Core.Editing;
+using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
 
 /// <summary>
-/// Applies lightweight INI-based tweaks (free camera, developer console) to the
-/// user configuration. These are not savegame changes and never touch the save files.
-/// The free-camera toggle owns exactly one ConsoleKeys=F10 entry: existing console
-/// keys (Tilde, Backslash, custom keybinds) are always preserved.
+/// Applies lightweight INI-based tweaks (free camera, developer console) to the user
+/// configuration. These are not savegame changes and never touch the save files.
+/// The free-camera toggle owns exactly one <c>ConsoleKeys=F10</c> entry, and that
+/// ownership is proven by the input file itself: the tool writes a unique marker line
+/// directly above the entry it added, so the INI, not a side JSON file, records which
+/// entry belongs to the tool (F012/F075). Existing user console keys are preserved.
 /// </summary>
 public sealed class IniCheatService
 {
     private const string InputFileName = "Input.ini";
     private const string InputSettingsSection = "/Script/Engine.InputSettings";
     private const string OwnedKey = "F10";
-    private const string OwnershipFileName = "AncestorsEnhanced_FreeCamera.json";
+    private const string OwnedEntryLine = "ConsoleKeys=F10";
+    private const string OwnershipMarker = "; AncestorsEnhanced:FreeCamera:F10";
+    // Legacy side-file ownership is never used to authorise a change; it is only
+    // cleaned up so it cannot cause confusion (F012/F075).
+    private const string LegacyOwnershipFileName = "AncestorsEnhanced_FreeCamera.json";
 
     private readonly string _userDataDirectory;
+    private readonly Func<bool>? _revalidate;
 
-    public IniCheatService(string userDataDirectory)
+    public IniCheatService(string userDataDirectory, Func<bool>? revalidate = null)
     {
         ArgumentNullException.ThrowIfNull(userDataDirectory);
         _userDataDirectory = userDataDirectory;
+        _revalidate = revalidate;
     }
 
     /// <summary>Enables or disables the UE4 debug free camera bound to F10.</summary>
@@ -37,17 +46,9 @@ public sealed class IniCheatService
             ? EncodedTextFile.Decode(readBytes)
             : new EncodedTextFile(string.Empty, new UTF8Encoding(false), []);
 
-        bool owned = LoadOwnership();
-        string updated;
-        if (enabled)
-        {
-            updated = EnableFreeCamera(file.Text, ref owned);
-        }
-        else
-        {
-            updated = owned ? DisableFreeCamera(file.Text) : file.Text;
-            owned = false;
-        }
+        string updated = enabled
+            ? EnableFreeCamera(file.Text)
+            : DisableFreeCamera(file.Text);
 
         if (string.Equals(updated, file.Text, StringComparison.Ordinal))
         {
@@ -58,6 +59,11 @@ public sealed class IniCheatService
         if (!fileExisted && string.IsNullOrWhiteSpace(updated))
         {
             return;
+        }
+
+        if (_revalidate is not null && !_revalidate())
+        {
+            throw new InvalidOperationException("The game context changed; the free camera cannot be toggled safely. Refresh and try again.");
         }
 
         MutationCoordinator.Run(() =>
@@ -71,26 +77,33 @@ public sealed class IniCheatService
             // bytes that were read at the start of this operation, so a free-camera
             // toggle can never overwrite changes made by the game or another tool in
             // between (F074).
-            ConfigurationFileOperations.CompareAndReplace(
+            CompareAndReplace(
                 path,
                 file.Encode(updated),
-                fileExisted ? ConfigurationFileOperations.Sha256(readBytes) : null,
+                fileExisted ? Sha256(readBytes) : null,
                 fileExisted);
-            SaveOwnership(owned);
+            RemoveLegacyOwnershipFile();
+
+            // F147: read the file back and confirm the desired semantic state
+            // actually landed. A CAS-accepted write that does not produce the
+            // expected ownership state must surface as an error, not pass silently.
+            if (File.Exists(path))
+            {
+                string readback = EncodedTextFile.Decode(File.ReadAllBytes(path)).Text;
+                if (HasOwnedPair(readback) != enabled)
+                {
+                    throw new IOException("The free-camera write did not verify; the Input.ini state is unexpected.");
+                }
+            }
         });
     }
 
     /// <summary>
-    /// True when this tool previously added ConsoleKeys=F10 and the owned entry
-    /// still exists in Input.ini. Never guessed from the INI alone.
+    /// True only when the tool-owned marker + ConsoleKeys entry pair is present in
+    /// Input.ini. Never guessed from the INI alone (the pair must be intact).
     /// </summary>
     public bool IsFreeCameraEnabled()
     {
-        if (!LoadOwnership())
-        {
-            return false;
-        }
-
         string path = GetTargetPath(
             GetConfigurationDirectory(_userDataDirectory),
             InputFileName);
@@ -100,32 +113,88 @@ public sealed class IniCheatService
         }
 
         EncodedTextFile file = EncodedTextFile.Decode(File.ReadAllBytes(path));
-        return ContainsExactKey(file.Text, OwnedKey);
+        return HasOwnedPair(file.Text);
     }
 
-    private static string EnableFreeCamera(string text, ref bool owned)
+    private static string EnableFreeCamera(string text)
     {
-        // Keep every existing console key; only add F10 when no exact F10 entry exists.
-        if (ContainsExactKey(text, OwnedKey))
+        if (HasOwnedPair(text))
         {
-            // F10 already present (owned by the user or previously by us): adding
-            // another entry would be a duplicate, so nothing changes.
-            owned = false;
             return text;
         }
 
-        string updated = AddConsoleKeyEntry(text, OwnedKey);
-        owned = !string.Equals(updated, text, StringComparison.Ordinal);
-        return updated;
+        // A foreign (user) F10 entry without our marker must not be claimed and no
+        // extra entry may be added (F012).
+        if (HasAnyF10(text))
+        {
+            return text;
+        }
+
+        return InsertOwnedPair(text);
     }
 
+    private static string DisableFreeCamera(string text) =>
+        RemoveOwnedPair(text);
+
     /// <summary>
-    /// Inserts a fresh "ConsoleKeys=&lt;key&gt;" line inside the Input settings section,
-    /// leaving every existing ConsoleKeys line untouched. Comments, blank lines and
-    /// indentation outside the inserted line are preserved and the encoding/newline
-    /// style of the file is kept.
+    /// True when the marker line is immediately followed by the exact tool entry
+    /// <c>ConsoleKeys=F10</c> inside the Input settings section.
     /// </summary>
-    private static string AddConsoleKeyEntry(string text, string key)
+    private static bool HasOwnedPair(string text)
+    {
+        string[] lines = NormalizeLines(text);
+        string currentSection = string.Empty;
+        for (int index = 0; index < lines.Length; index++)
+        {
+            string line = lines[index].Trim();
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                currentSection = line[1..^1].Trim();
+                continue;
+            }
+
+            if (!string.Equals(currentSection, InputSettingsSection, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (string.Equals(line, OwnershipMarker, StringComparison.Ordinal) &&
+                index + 1 < lines.Length &&
+                string.Equals(lines[index + 1].Trim(), OwnedEntryLine, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasAnyF10(string text)
+    {
+        string currentSection = string.Empty;
+        foreach (string sourceLine in NormalizeLines(text))
+        {
+            string line = sourceLine.Trim();
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                currentSection = line[1..^1].Trim();
+                continue;
+            }
+
+            if (string.Equals(currentSection, InputSettingsSection, StringComparison.OrdinalIgnoreCase) &&
+                TryReadKeyValue(line, out string? parsedKey, out string? parsedValue) &&
+                string.Equals(parsedKey, "ConsoleKeys", StringComparison.OrdinalIgnoreCase) &&
+                ContainsToken(parsedValue, OwnedKey))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Inserts the marker + owned entry as one pair inside the Input settings section.</summary>
+    private static string InsertOwnedPair(string text)
     {
         string newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         bool hasFinalNewline = text.EndsWith('\n') || text.EndsWith('\r');
@@ -136,7 +205,6 @@ public sealed class IniCheatService
             lines = lines[..^1];
         }
 
-        string insertion = $"ConsoleKeys={key}";
         int sectionStart = -1;
         int sectionEnd = -1;
         for (int index = 0; index < lines.Length; index++)
@@ -166,9 +234,10 @@ public sealed class IniCheatService
         }
 
         List<string> result = [.. lines];
+        string[] pair = [OwnershipMarker, OwnedEntryLine];
         if (sectionStart >= 0)
         {
-            result.Insert(sectionEnd, insertion);
+            result.InsertRange(sectionEnd, pair);
         }
         else
         {
@@ -178,109 +247,50 @@ public sealed class IniCheatService
             }
 
             result.Add($"[{InputSettingsSection}]");
-            result.Add(insertion);
+            result.AddRange(pair);
         }
 
         string joined = string.Join(newline, result);
         return hasFinalNewline ? joined + newline : joined;
     }
 
-    private static string DisableFreeCamera(string text) =>
-        RemoveExactKey(text, OwnedKey);
-
-    private static bool ContainsExactKey(string text, string key)
-    {
-        string currentSection = string.Empty;
-        foreach (string sourceLine in NormalizeLines(text))
-        {
-            string line = sourceLine.Trim();
-            if (line.StartsWith('[') && line.EndsWith(']'))
-            {
-                currentSection = line[1..^1].Trim();
-                continue;
-            }
-
-            if (string.Equals(currentSection, InputSettingsSection, StringComparison.OrdinalIgnoreCase) &&
-                TryReadKeyValue(line, out string? parsedKey, out string? parsedValue) &&
-                string.Equals(parsedKey, "ConsoleKeys", StringComparison.OrdinalIgnoreCase) &&
-                ContainsToken(parsedValue, key))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     /// <summary>
-    /// Removes only entries whose value exactly matches the owned key. Values that
-    /// combine several keys (e.g. ConsoleKeys=Tilde,F10) keep every other token.
-    /// Comments, blank lines, indentation and unaffected entries are preserved.
+    /// Removes the intact paid pair (marker immediately followed by the exact tool
+    /// entry). If the marker is missing, damaged or the adjacent entry has been
+    /// changed, nothing is removed — ownership is lost rather than deleting user data.
     /// </summary>
-    private static string RemoveExactKey(string text, string key)
+    private static string RemoveOwnedPair(string text)
     {
         string newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         bool hasFinalNewline = text.EndsWith('\n') || text.EndsWith('\r');
         string[] lines = NormalizeLines(text);
         string currentSection = string.Empty;
         var kept = new List<string>(lines.Length);
-        bool removedAny = false;
-        bool handled = false;
+        bool removed = false;
 
-
-        foreach (string sourceLine in lines)
+        for (int index = 0; index < lines.Length; index++)
         {
-            string line = sourceLine.Trim();
+            string line = lines[index].Trim();
             if (line.StartsWith('[') && line.EndsWith(']'))
             {
                 currentSection = line[1..^1].Trim();
-                kept.Add(sourceLine);
+                kept.Add(lines[index]);
                 continue;
             }
 
-            string? ownedValue = null;
-            bool isConsoleKeyEntry = false;
-            if (string.Equals(currentSection, InputSettingsSection, StringComparison.OrdinalIgnoreCase) &&
-                TryReadKeyValue(line, out string? parsedKey, out string? parsedValue) &&
-                string.Equals(parsedKey, "ConsoleKeys", StringComparison.OrdinalIgnoreCase))
+            if (!removed &&
+                string.Equals(currentSection, InputSettingsSection, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(line, OwnershipMarker, StringComparison.Ordinal) &&
+                index + 1 < lines.Length &&
+                string.Equals(lines[index + 1].Trim(), OwnedEntryLine, StringComparison.Ordinal))
             {
-                isConsoleKeyEntry = true;
-                ownedValue = parsedValue;
-            }
-
-            if (!isConsoleKeyEntry || !ContainsToken(ownedValue, key))
-            {
-                kept.Add(sourceLine);
+                // Skip marker + the exact owned entry.
+                removed = true;
+                index++;
                 continue;
             }
 
-            // Only the first (tool-owned) matching entry is edited; later
-            // matching entries are preserved unchanged (F075).
-            if (handled)
-            {
-                kept.Add(sourceLine);
-                continue;
-            }
-            handled = true;
-
-            string[] tokens = ownedValue!.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries)
-                .Select(token => token.Trim())
-                .Where(token => token.Length > 0 && !string.Equals(token, key, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            if (tokens.Length == 0)
-            {
-                removedAny = true;
-                continue;
-            }
-
-            string indentation = sourceLine[..(sourceLine.Length - sourceLine.TrimStart().Length)];
-            kept.Add($"{indentation}ConsoleKeys={string.Join(',', tokens)}");
-            removedAny = true;
-        }
-
-        if (!removedAny)
-        {
-            return text;
+            kept.Add(lines[index]);
         }
 
         string result = string.Join(newline, kept);
@@ -326,52 +336,20 @@ public sealed class IniCheatService
         return key.Length > 0;
     }
 
-    private bool LoadOwnership()
+    private void RemoveLegacyOwnershipFile()
     {
-        string path = OwnershipPath();
-        if (!File.Exists(path))
-        {
-            return false;
-        }
-
+        string path = Path.Combine(_userDataDirectory, LegacyOwnershipFileName);
         try
         {
-            OwnershipState? state = System.Text.Json.JsonSerializer.Deserialize<OwnershipState>(
-                File.ReadAllBytes(path));
-            return state?.FreeCameraF10Owned == true;
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
-        catch (System.Text.Json.JsonException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return false;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
         }
     }
-
-    private void SaveOwnership(bool owned)
-    {
-        string path = OwnershipPath();
-        string? directory = Path.GetDirectoryName(path);
-        if (string.IsNullOrWhiteSpace(directory))
-        {
-            return;
-        }
-
-        Directory.CreateDirectory(directory);
-        WriteBytesAtomically(
-            path,
-            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
-                new OwnershipState { FreeCameraF10Owned = owned }));
-    }
-
-    private string OwnershipPath() =>
-        Path.Combine(_userDataDirectory, OwnershipFileName);
 
     private void BackupInputIni(string path)
     {
@@ -394,9 +372,4 @@ public sealed class IniCheatService
 
     private static void WriteBytesAtomically(string path, byte[] content) =>
         ConfigurationFileOperations.WriteBytesAtomically(path, content);
-
-    private sealed class OwnershipState
-    {
-        public bool FreeCameraF10Owned { get; set; }
-    }
 }

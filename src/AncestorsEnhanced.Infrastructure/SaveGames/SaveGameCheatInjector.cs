@@ -1,4 +1,4 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;
@@ -7,10 +7,11 @@ namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
 /// <summary>
 /// Applies safe, schema-verified value injections to a decompressed lineage save.
-/// Only known object roots are patched: the active character's vitality/health and
-/// the neuronal energy array. Equally named fields owned by other objects are left
-/// untouched. Nothing is resized, so the tagged-property layout stays valid and the
-/// modified bytes re-encode cleanly.
+/// Targets are structural <see cref="CheatTargetSpec"/>s resolved by their exact schema
+/// path (F027), so equally named fields owned by other objects are never touched.
+/// Nothing is resized, so the tagged-property layout stays valid and the modified bytes
+/// re-encode cleanly. The number of matched nodes must equal the authorised count,
+/// otherwise the injection fails closed.
 /// </summary>
 public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
 {
@@ -22,18 +23,33 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
         ArgumentNullException.ThrowIfNull(decompressedSave);
         modifiedSave = null;
 
-        byte[] work = [.. decompressedSave];
-        SaveGameSchemaNode root = SaveGameSchemaAnalyzer.Parse(work);
-        float value = ValueFor(kind);
-        var scalarTargets = ScalarTargetsFor(kind);
-        var arrayTargets = ArrayTargetsFor(kind);
-        if (scalarTargets.Count == 0 && arrayTargets.Count == 0)
+        IReadOnlyList<CheatTargetSpec> targets = SaveGameCheatTargets.CheatTargetsFor(kind);
+        if (targets.Count == 0)
         {
             return new CheatInjectionResult(false, "The cheat has no supported fields.");
         }
 
+        byte[] work = [.. decompressedSave];
+        SaveGameSchemaNode root = SaveGameSchemaAnalyzer.Parse(work);
+
         var ranges = new List<ByteRange>();
-        int modified = ApplyToTree(root, kind, value, scalarTargets, arrayTargets, work, [], ranges);
+        var actual = new Dictionary<CheatTargetSpec, int>();
+        int modified = ApplyToTree(root, targets, work, [], ranges, actual);
+
+        // Each target must not match more nodes than it is authorised to (F027):
+        // exceeding the cap is evidence of an accidental double assignment. A target
+        // that is simply absent (unverified real-world path) is left untouched, and
+        // the modified==0 check below then fails closed.
+        foreach (CheatTargetSpec spec in targets)
+        {
+            int count = actual.TryGetValue(spec, out int found) ? found : 0;
+            if (count > spec.ExpectedMatchCount)
+            {
+                return new CheatInjectionResult(
+                    false,
+                    $"The target matched {count} node(s), but at most {spec.ExpectedMatchCount} were expected.");
+            }
+        }
 
         if (modified == 0)
         {
@@ -52,36 +68,59 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
 
     private static int ApplyToTree(
         SaveGameSchemaNode node,
-        CheatKind kind,
-        float value,
-        HashSet<string> scalarTargets,
-        HashSet<string> arrayTargets,
+        IReadOnlyList<CheatTargetSpec> targets,
         byte[] work,
         List<string> path,
-        List<ByteRange> ranges)
+        List<ByteRange> ranges,
+        Dictionary<CheatTargetSpec, int> actual)
     {
         int modified = 0;
         path.Add(node.Name);
-        if (!node.IsTerminator &&
-            IsScalar(node, scalarTargets, work) &&
-            IsUnderAllowedPath(path, kind, isArray: false))
+        if (!node.IsTerminator)
         {
-            BinaryPrimitives.WriteInt32LittleEndian(
-                work.AsSpan(node.ValueOffset, 4),
-                BitConverter.SingleToInt32Bits(value));
-            ranges.Add(new ByteRange(node.ValueOffset, 4));
-            modified++;
+            string nodePath = string.Join("/", path);
+            foreach (CheatTargetSpec spec in targets)
+            {
+                if (string.Equals(nodePath, spec.SchemaPath, StringComparison.Ordinal) &&
+                    spec.Matches(node))
+                {
+                    int patched = PatchNode(node, spec, work, ranges);
+                    if (patched > 0)
+                    {
+                        modified += patched;
+                        actual[spec] = actual.TryGetValue(spec, out int count) ? count + 1 : 1;
+                    }
+                }
+            }
         }
-        else if (IsFloatArray(node, arrayTargets, work) && IsUnderAllowedPath(path, kind, isArray: true))
+
+        foreach (SaveGameSchemaNode child in node.Children)
+        {
+            modified += ApplyToTree(child, targets, work, path, ranges, actual);
+        }
+
+        path.RemoveAt(path.Count - 1);
+        return modified;
+    }
+
+    /// <summary>
+    /// Patches a scalar FloatProperty or a FloatProperty array in place. Returns the number
+    /// of patched float values (0 when the target is malformed), and reports the patched
+    /// ranges for later verification.
+    /// </summary>
+    private static int PatchNode(
+        SaveGameSchemaNode node,
+        CheatTargetSpec spec,
+        byte[] work,
+        List<ByteRange> ranges)
+    {
+        if (spec.IsArray)
         {
             int count = BinaryPrimitives.ReadInt32LittleEndian(
                 work.AsSpan(node.ValueOffset, sizeof(int)));
             if (count < 0 || count > (int.MaxValue - sizeof(int)) / sizeof(float))
             {
-                // A negative or impossible element count would overflow the checked
-                // length computation below. Reject it before anything can clamp,
-                // partially patch or throw due to an unchecked multiplication.
-                goto ContinueNode;
+                return 0;
             }
 
             int expectedLength = checked(sizeof(int) + count * sizeof(float));
@@ -89,148 +128,33 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
                 node.ValueOffset < 0 ||
                 node.ValueOffset > work.Length - expectedLength)
             {
-                goto ContinueNode;
+                return 0;
             }
 
             for (int element = 0; element < count; element++)
             {
                 BinaryPrimitives.WriteInt32LittleEndian(
                     work.AsSpan(node.ValueOffset + sizeof(int) + element * sizeof(float), sizeof(float)),
-                    BitConverter.SingleToInt32Bits(value));
+                    BitConverter.SingleToInt32Bits(spec.TargetValue));
             }
 
-            // The first four bytes are the element count, not a value: the reported
-            // range starts at the first float element and must never include the header.
             if (count > 0)
             {
                 ranges.Add(new ByteRange(node.ValueOffset + sizeof(int), count * sizeof(float)));
             }
 
-            modified += count;
+            return count;
         }
 
-        ContinueNode:
-        foreach (SaveGameSchemaNode child in node.Children)
+        if (node.ValueLength != 4 || node.ValueOffset < 0 || node.ValueOffset > work.Length - 4)
         {
-            modified += ApplyToTree(child, kind, value, scalarTargets, arrayTargets, work, path, ranges);
+            return 0;
         }
 
-        path.RemoveAt(path.Count - 1);
-        return modified;
+        BinaryPrimitives.WriteInt32LittleEndian(
+            work.AsSpan(node.ValueOffset, 4),
+            BitConverter.SingleToInt32Bits(spec.TargetValue));
+        ranges.Add(new ByteRange(node.ValueOffset, 4));
+        return 1;
     }
-
-    private static bool IsUnderAllowedPath(
-        List<string> path,
-        CheatKind kind,
-        bool isArray)
-    {
-        string[] allowedRoots = AllowedRootsFor(kind, isArray);
-        if (allowedRoots.Length == 0)
-        {
-            return false;
-        }
-
-        foreach (string root in allowedRoots)
-        {
-            string[] segments = root.Split('/');
-            // The path starts with the synthetic "<save>" root; the allowed root must
-            // match the path prefix starting right after it.
-            if (path.Count < segments.Length + 1)
-            {
-                continue;
-            }
-
-            bool match = true;
-            for (int index = 0; index < segments.Length; index++)
-            {
-                if (!string.Equals(path[index + 1], segments[index], StringComparison.Ordinal))
-                {
-                    match = false;
-                    break;
-                }
-            }
-
-            if (match)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string[] AllowedRootsFor(CheatKind kind, bool isArray) => kind switch
-    {
-        CheatKind.MaxNeuronalEnergy when isArray =>
-            ["RPGData/NeuronalEnergySources"],
-        CheatKind.MaxNeeds =>
-            ["PlayerControllerData/CharacterData/VitalityData"],
-        CheatKind.HealClan =>
-            [
-                "PlayerControllerData/CharacterData/VitalityData",
-                "PlayerControllerData/CharacterData/HealthData",
-            ],
-        _ => [],
-    };
-
-    private static bool IsScalar(
-        SaveGameSchemaNode node,
-        HashSet<string> scalars,
-        byte[] work) =>
-        string.Equals(node.Type, "FloatProperty", StringComparison.Ordinal) &&
-        scalars.Contains(node.Name) &&
-        node.ValueLength == 4 &&
-        node.ValueOffset + 4 <= work.Length;
-
-    private static bool IsFloatArray(
-        SaveGameSchemaNode node,
-        HashSet<string> arrays,
-        byte[] work) =>
-        string.Equals(node.Type, "ArrayProperty", StringComparison.Ordinal) &&
-        string.Equals(node.ElementType, "FloatProperty", StringComparison.Ordinal) &&
-        arrays.Contains(node.Name) &&
-        node.ValueLength >= 4 &&
-        node.ValueOffset + 4 <= work.Length;
-
-    private static float ValueFor(CheatKind kind) => kind switch
-    {
-        CheatKind.MaxNeuronalEnergy => 999_999.0f,
-        CheatKind.MaxNeeds => 1_000.0f,
-        CheatKind.HealClan => 1.0f,
-        CheatKind.ForceMutations => 1.0f,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The cheat kind is unknown."),
-    };
-
-    private static HashSet<string> ScalarTargetsFor(CheatKind kind) => kind switch
-    {
-        // MaxNeuronalEnergy patches only the NeuronalEnergySources array, not the
-        // character's global Energy scalar.
-        CheatKind.MaxNeuronalEnergy => new HashSet<string>(StringComparer.Ordinal),
-        CheatKind.MaxNeeds => new HashSet<string>(StringComparer.Ordinal)
-        {
-            "RegimenStamina",
-            "Energy",
-            "Stamina",
-        },
-        CheatKind.HealClan => new HashSet<string>(StringComparer.Ordinal)
-        {
-            "Health",
-            "Energy",
-            "Stamina",
-        },
-        CheatKind.ForceMutations => [],
-        _ => [],
-    };
-
-    private static HashSet<string> ArrayTargetsFor(CheatKind kind) => kind switch
-    {
-        CheatKind.MaxNeuronalEnergy => new HashSet<string>(StringComparer.Ordinal)
-        {
-            "NeuronalEnergySources",
-        },
-        CheatKind.MaxNeeds => [],
-        CheatKind.HealClan => [],
-        CheatKind.ForceMutations => [],
-        _ => [],
-    };
 }

@@ -8,4 +8,5 @@ public sealed record GameInstallationSnapshot(
     string InstallDirectory,
     string? BuildId,
     bool ExecutableExists,
-    string? ContentSignature = null);
+    string? ContentSignature = null,
+    bool ContentSignatureReadFailed = false);

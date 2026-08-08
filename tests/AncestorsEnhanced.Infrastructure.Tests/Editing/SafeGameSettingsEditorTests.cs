@@ -199,7 +199,9 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         SettingsOperationResult result = editor.RevertLast(snapshot);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("failed validation", result.Message, StringComparison.Ordinal);
+        // F127: a tampered backup is detected up-front by FindLast, so the only (and
+        // now ineligible) operation cannot be restored and nothing is changed.
+        Assert.Contains("unchanged configurator operation", result.Message, StringComparison.Ordinal);
         Assert.Equal(appliedContent, File.ReadAllText(engineIni));
     }
 
