@@ -9,18 +9,18 @@ public sealed class IniCheatServiceTests
         Path.Combine(Path.GetTempPath(), "aec-inicheat-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void EnablingFreeCameraWritesConsoleKeysToInputIniAndBacksUp()
+    public void EnablingFreeCameraWritesDebugCameraBindingToInputIniAndBacksUp()
     {
         string dir = NewTempDir();
         string inputPath = Path.Combine(dir, "Config", "WindowsNoEditor", "Input.ini");
         Directory.CreateDirectory(Path.GetDirectoryName(inputPath)!);
-        File.WriteAllText(inputPath, "[/Script/Engine.InputSettings]\nJump=True\n");
+        File.WriteAllText(inputPath, "[/Script/Engine.PlayerInput]\nJump=True\n");
 
         var service = new IniCheatService(dir);
         service.SetFreeCamera(true);
 
         string content = File.ReadAllText(inputPath);
-        Assert.Contains("ConsoleKeys=F10", content, StringComparison.Ordinal);
+        Assert.Contains("+DebugExecBindings=(Key=F10,Command=\"ToggleDebugCamera\")", content, StringComparison.Ordinal);
         Assert.Contains("Jump=True", content, StringComparison.Ordinal);
 
         string backupRoot = Path.Combine(dir, "AncestorsEnhanced", "Backups");
@@ -47,55 +47,47 @@ public sealed class IniCheatServiceTests
     }
 
     [Fact]
-    public void TogglingOffRemovesOnlyToolOwnedConsoleKeys()
+    public void TogglingOffRemovesOnlyToolOwnedDebugCameraBinding()
     {
         string dir = NewTempDir();
         string inputPath = Path.Combine(dir, "Config", "WindowsNoEditor", "Input.ini");
         Directory.CreateDirectory(Path.GetDirectoryName(inputPath)!);
-        File.WriteAllText(inputPath, "[/Script/Engine.InputSettings]\nConsoleKeys=Tilde\n");
+        File.WriteAllText(inputPath, "[/Script/Engine.PlayerInput]\nDebugExecBindings=(Key=F11,Command=\"stat fps\")\n");
 
         var service = new IniCheatService(dir);
         service.SetFreeCamera(true);
-        Assert.Contains("ConsoleKeys=F10", File.ReadAllText(inputPath), StringComparison.Ordinal);
+        Assert.Contains("ToggleDebugCamera", File.ReadAllText(inputPath), StringComparison.Ordinal);
         service.SetFreeCamera(false);
 
         string content = File.ReadAllText(inputPath);
-        Assert.DoesNotContain("ConsoleKeys=F10", content, StringComparison.Ordinal);
-        Assert.Contains("ConsoleKeys=Tilde", content, StringComparison.Ordinal);
-        Assert.Contains("[/Script/Engine.InputSettings]", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToggleDebugCamera", content, StringComparison.Ordinal);
+        Assert.Contains("Key=F11", content, StringComparison.Ordinal);
+        Assert.Contains("[/Script/Engine.PlayerInput]", content, StringComparison.Ordinal);
 
         if (Directory.Exists(dir)) { Directory.Delete(dir, true); }
     }
 
     [Theory]
-    [InlineData("ConsoleKeys=Tilde")]
-    [InlineData("ConsoleKeys=Tilde\nConsoleKeys=F10")]
-    [InlineData("ConsoleKeys=Tilde\nConsoleKeys=Backslash")]
-    public void ExistingConsoleKeysArePreserved(string initial)
+    [InlineData("DebugExecBindings=(Key=F11,Command=\"stat fps\")")]
+    [InlineData("DebugExecBindings=(Key=F12,Command=\"stat unit\")")]
+    public void ExistingDebugBindingsArePreserved(string initial)
     {
         string dir = NewTempDir();
         string inputPath = Path.Combine(dir, "Config", "WindowsNoEditor", "Input.ini");
         Directory.CreateDirectory(Path.GetDirectoryName(inputPath)!);
-        File.WriteAllText(inputPath, "[/Script/Engine.InputSettings]\n" + initial + "\n");
+        File.WriteAllText(inputPath, "[/Script/Engine.PlayerInput]\n" + initial + "\n");
 
         var service = new IniCheatService(dir);
         service.SetFreeCamera(true);
 
         string content = File.ReadAllText(inputPath);
-        Assert.Contains("ConsoleKeys=Tilde", content, StringComparison.Ordinal);
-        Assert.DoesNotContain("ConsoleKeys=F10\nConsoleKeys=Tilde", content, StringComparison.Ordinal);
-        if (initial.Contains("Backslash"))
-        {
-            Assert.Contains("ConsoleKeys=Backslash", content, StringComparison.Ordinal);
-        }
+        Assert.Contains(initial, content, StringComparison.Ordinal);
+        Assert.Contains("ToggleDebugCamera", content, StringComparison.Ordinal);
 
         service.SetFreeCamera(false);
         content = File.ReadAllText(inputPath);
-        Assert.Contains("ConsoleKeys=Tilde", content, StringComparison.Ordinal);
-        if (initial.Contains("Backslash"))
-        {
-            Assert.Contains("ConsoleKeys=Backslash", content, StringComparison.Ordinal);
-        }
+        Assert.Contains(initial, content, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToggleDebugCamera", content, StringComparison.Ordinal);
 
         if (Directory.Exists(dir)) { Directory.Delete(dir, true); }
     }
@@ -106,7 +98,7 @@ public sealed class IniCheatServiceTests
         string dir = NewTempDir();
         string inputPath = Path.Combine(dir, "Config", "WindowsNoEditor", "Input.ini");
         Directory.CreateDirectory(Path.GetDirectoryName(inputPath)!);
-        File.WriteAllText(inputPath, "[/Script/Engine.InputSettings]\nConsoleKeys=F10\n");
+        File.WriteAllText(inputPath, "[/Script/Engine.PlayerInput]\n+DebugExecBindings=(Key=F10,Command=\"OtherCamera\")\n");
 
         var service = new IniCheatService(dir);
         // User already had F10: enabling then disabling must keep it.
@@ -114,7 +106,7 @@ public sealed class IniCheatServiceTests
         service.SetFreeCamera(false);
 
         string content = File.ReadAllText(inputPath);
-        Assert.Contains("ConsoleKeys=F10", content, StringComparison.Ordinal);
+        Assert.Contains("OtherCamera", content, StringComparison.Ordinal);
 
         if (Directory.Exists(dir)) { Directory.Delete(dir, true); }
     }
@@ -125,7 +117,7 @@ public sealed class IniCheatServiceTests
         string dir = NewTempDir();
         string inputPath = Path.Combine(dir, "Config", "WindowsNoEditor", "Input.ini");
         Directory.CreateDirectory(Path.GetDirectoryName(inputPath)!);
-        File.WriteAllText(inputPath, "[/Script/Engine.InputSettings]\nConsoleKeys=Tilde\n");
+        File.WriteAllText(inputPath, "[/Script/Engine.PlayerInput]\nDebugExecBindings=(Key=F11,Command=\"stat fps\")\n");
 
         var first = new IniCheatService(dir);
         first.SetFreeCamera(true);
@@ -139,10 +131,29 @@ public sealed class IniCheatServiceTests
         Assert.False(second.IsFreeCameraEnabled());
 
         string content = File.ReadAllText(inputPath);
-        Assert.Contains("ConsoleKeys=Tilde", content, StringComparison.Ordinal);
-        Assert.DoesNotContain("ConsoleKeys=F10", content, StringComparison.Ordinal);
+        Assert.Contains("Key=F11", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToggleDebugCamera", content, StringComparison.Ordinal);
 
         if (Directory.Exists(dir)) { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void EnablingFreeCameraMigratesThePreviousConsoleKeyMarker()
+    {
+        string dir = NewTempDir();
+        string inputPath = Path.Combine(dir, "Config", "WindowsNoEditor", "Input.ini");
+        Directory.CreateDirectory(Path.GetDirectoryName(inputPath)!);
+        File.WriteAllText(
+            inputPath,
+            "[/Script/Engine.InputSettings]\n; AncestorsEnhanced:FreeCamera:F10\nConsoleKeys=F10\n");
+
+        new IniCheatService(dir).SetFreeCamera(true);
+
+        string content = File.ReadAllText(inputPath);
+        Assert.Contains("ToggleDebugCamera", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConsoleKeys=F10", content, StringComparison.Ordinal);
+
+        Directory.Delete(dir, true);
     }
 }
 

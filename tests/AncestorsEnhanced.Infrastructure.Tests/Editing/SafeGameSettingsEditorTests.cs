@@ -52,6 +52,63 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     }
 
     [Fact]
+    public void RemoveToolChangesRestoresCapturedBaselineAndDeletesItsMarker()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        const string original = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        File.WriteAllText(engineIni, original);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        SettingsOperationResult applied = editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]));
+
+        Assert.True(applied.Succeeded, applied.Message);
+        Assert.True(editor.CanRemoveToolChanges(snapshot));
+        SettingsChangePlan removal = editor.CreateRemoveToolChangesPlan(snapshot);
+        Assert.True(removal.IsToolChangeRemoval);
+
+        SettingsOperationResult removed = editor.Apply(removal);
+
+        Assert.True(removed.Succeeded, removed.Message);
+        Assert.Equal(original, File.ReadAllText(engineIni));
+        Assert.False(editor.CanRemoveToolChanges(snapshot));
+    }
+
+    [Fact]
+    public void RemoveToolChangesIsUnavailableWithoutCapturedBaseline()
+    {
+        string userData = CreateUserData();
+        File.WriteAllText(EngineIniPath(userData), "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+
+        Assert.False(CreateEditor(gameRunning: false).CanRemoveToolChanges(CreateSnapshot(userData)));
+    }
+
+    [Fact]
+    public void RemoveToolChangesRefusesExternalEdits()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        SettingsOperationResult applied = editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]));
+        Assert.True(applied.Succeeded, applied.Message);
+        File.AppendAllText(engineIni, "; external edit\n");
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => editor.CreateRemoveToolChangesPlan(snapshot));
+
+        Assert.Contains("changed outside", error.Message, StringComparison.Ordinal);
+        Assert.Contains("external edit", File.ReadAllText(engineIni), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ApplyEditsSystemSaveAndRevertRestoresExactOriginal()
     {
         string userData = CreateUserData();

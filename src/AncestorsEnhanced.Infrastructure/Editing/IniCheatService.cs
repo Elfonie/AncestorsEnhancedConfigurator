@@ -6,7 +6,7 @@ using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperation
 namespace AncestorsEnhanced.Infrastructure.Editing;
 
 /// <summary>
-/// Applies lightweight INI-based tweaks (free camera, developer console) to the user
+/// Applies lightweight INI-based tweaks (developer-console key) to the user
 /// configuration. These are not savegame changes and never touch the save files.
 /// The free-camera toggle owns exactly one <c>ConsoleKeys=F10</c> entry, and that
 /// ownership is proven by the input file itself: the tool writes a unique marker line
@@ -16,9 +16,11 @@ namespace AncestorsEnhanced.Infrastructure.Editing;
 public sealed class IniCheatService
 {
     private const string InputFileName = "Input.ini";
-    private const string InputSettingsSection = "/Script/Engine.InputSettings";
+    private const string PlayerInputSection = "/Script/Engine.PlayerInput";
     private const string OwnedKey = "F10";
-    private const string OwnedEntryLine = "ConsoleKeys=F10";
+    private const string OwnedEntryLine = "+DebugExecBindings=(Key=F10,Command=\"ToggleDebugCamera\")";
+    private const string LegacyInputSettingsSection = "/Script/Engine.InputSettings";
+    private const string LegacyOwnedEntryLine = "ConsoleKeys=F10";
     private const string OwnershipMarker = "; AncestorsEnhanced:FreeCamera:F10";
     // Legacy side-file ownership is never used to authorise a change; it is only
     // cleaned up so it cannot cause confusion (F012/F075).
@@ -40,7 +42,7 @@ public sealed class IniCheatService
         _revalidate = revalidate;
     }
 
-    /// <summary>Enables or disables the UE4 debug free camera bound to F10.</summary>
+    /// <summary>Enables or disables the tool-owned UE4 console key bound to F10.</summary>
     public void SetFreeCamera(bool enabled)
     {
         string path = GetTargetPath(
@@ -131,13 +133,17 @@ public sealed class IniCheatService
             return text;
         }
 
-        // A foreign (user) F10 entry without our marker must not be claimed and no
-        // extra entry may be added (F012).
+        if (HasLegacyOwnedPair(text))
+        {
+            return InsertOwnedPair(RemoveOwnedPair(text));
+        }
+
+        // A foreign debug-camera binding without our marker must not be claimed or
+        // duplicated (F012).
         if (HasAnyF10(text))
         {
             return text;
         }
-
         return InsertOwnedPair(text);
     }
 
@@ -161,7 +167,7 @@ public sealed class IniCheatService
                 continue;
             }
 
-            if (!string.Equals(currentSection, InputSettingsSection, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(currentSection, PlayerInputSection, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -169,6 +175,31 @@ public sealed class IniCheatService
             if (string.Equals(line, OwnershipMarker, StringComparison.Ordinal) &&
                 index + 1 < lines.Length &&
                 string.Equals(lines[index + 1].Trim(), OwnedEntryLine, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasLegacyOwnedPair(string text)
+    {
+        string[] lines = NormalizeLines(text);
+        string currentSection = string.Empty;
+        for (int index = 0; index < lines.Length; index++)
+        {
+            string line = lines[index].Trim();
+            if (line.StartsWith('[') && line.EndsWith(']'))
+            {
+                currentSection = line[1..^1].Trim();
+                continue;
+            }
+
+            if (string.Equals(currentSection, LegacyInputSettingsSection, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(line, OwnershipMarker, StringComparison.Ordinal) &&
+                index + 1 < lines.Length &&
+                string.Equals(lines[index + 1].Trim(), LegacyOwnedEntryLine, StringComparison.Ordinal))
             {
                 return true;
             }
@@ -189,10 +220,9 @@ public sealed class IniCheatService
                 continue;
             }
 
-            if (string.Equals(currentSection, InputSettingsSection, StringComparison.OrdinalIgnoreCase) &&
-                TryReadKeyValue(line, out string? parsedKey, out string? parsedValue) &&
-                string.Equals(parsedKey, "ConsoleKeys", StringComparison.OrdinalIgnoreCase) &&
-                ContainsToken(parsedValue, OwnedKey))
+            if (string.Equals(currentSection, PlayerInputSection, StringComparison.OrdinalIgnoreCase) &&
+                line.Contains("DebugExecBindings", StringComparison.OrdinalIgnoreCase) &&
+                line.Contains("Key=" + OwnedKey, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -221,7 +251,7 @@ public sealed class IniCheatService
             if (line.StartsWith('[') && line.EndsWith(']'))
             {
                 string section = line[1..^1].Trim();
-                if (string.Equals(section, InputSettingsSection, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(section, PlayerInputSection, StringComparison.OrdinalIgnoreCase))
                 {
                     sectionStart = index;
                     sectionEnd = -1;
@@ -254,7 +284,7 @@ public sealed class IniCheatService
                 result.Add(string.Empty);
             }
 
-            result.Add($"[{InputSettingsSection}]");
+            result.Add($"[{PlayerInputSection}]");
             result.AddRange(pair);
         }
 
@@ -287,10 +317,12 @@ public sealed class IniCheatService
             }
 
             if (!removed &&
-                string.Equals(currentSection, InputSettingsSection, StringComparison.OrdinalIgnoreCase) &&
+                (string.Equals(currentSection, PlayerInputSection, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(currentSection, LegacyInputSettingsSection, StringComparison.OrdinalIgnoreCase)) &&
                 string.Equals(line, OwnershipMarker, StringComparison.Ordinal) &&
                 index + 1 < lines.Length &&
-                string.Equals(lines[index + 1].Trim(), OwnedEntryLine, StringComparison.Ordinal))
+                (string.Equals(lines[index + 1].Trim(), OwnedEntryLine, StringComparison.Ordinal) ||
+                 string.Equals(lines[index + 1].Trim(), LegacyOwnedEntryLine, StringComparison.Ordinal)))
             {
                 // Skip marker + the exact owned entry.
                 removed = true;
@@ -309,40 +341,6 @@ public sealed class IniCheatService
         text.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n')
             .Split('\n');
-
-    private static bool ContainsToken(string? value, string token)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-
-        return value.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(part => part.Trim())
-            .Any(part => string.Equals(part, token, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool TryReadKeyValue(string line, out string key, out string value)
-    {
-        if (line.Length == 0 || line.StartsWith(';') || line.StartsWith('#'))
-        {
-            key = string.Empty;
-            value = string.Empty;
-            return false;
-        }
-
-        int separator = line.IndexOf('=', StringComparison.Ordinal);
-        if (separator <= 0)
-        {
-            key = string.Empty;
-            value = string.Empty;
-            return false;
-        }
-
-        key = line[..separator].Trim();
-        value = line[(separator + 1)..].Trim();
-        return key.Length > 0;
-    }
 
     private void RemoveLegacyOwnershipFile()
     {

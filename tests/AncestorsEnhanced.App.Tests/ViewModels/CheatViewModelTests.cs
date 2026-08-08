@@ -83,8 +83,8 @@ public sealed class CheatViewModelTests
 
             string inputPath = System.IO.Path.Combine(tmp, "Config", "WindowsNoEditor", "Input.ini");
             Assert.True(System.IO.File.Exists(inputPath));
-            Assert.Contains("ConsoleKeys=F10", System.IO.File.ReadAllText(inputPath), StringComparison.Ordinal);
-            Assert.Contains("enabled", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ToggleDebugCamera", System.IO.File.ReadAllText(inputPath), StringComparison.Ordinal);
+            Assert.Contains("added to Input.ini", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -103,12 +103,13 @@ public sealed class CheatViewModelTests
             viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
             viewModel.IsFreeCamEnabled = true;
             string inputPath = Path.Combine(tmp, "Config", "WindowsNoEditor", "Input.ini");
-            File.WriteAllText(inputPath, "[/Script/Engine.InputSettings]\nConsoleKeys=F10\n");
+            File.WriteAllText(inputPath, "[/Script/Engine.PlayerInput]\n+DebugExecBindings=(Key=F10,Command=\"OtherCamera\")\n");
 
             viewModel.RefreshFreeCameraState();
 
             Assert.False(viewModel.IsFreeCamEnabled);
             Assert.DoesNotContain("AncestorsEnhanced", File.ReadAllText(inputPath), StringComparison.Ordinal);
+            Assert.Contains("no longer", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

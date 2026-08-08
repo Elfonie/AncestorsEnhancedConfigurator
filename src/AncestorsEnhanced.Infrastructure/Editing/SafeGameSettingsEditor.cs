@@ -66,6 +66,12 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
     public SettingsOperationResult RevertLast(GameInspectionSnapshot snapshot) =>
         _transaction.RevertLast(snapshot);
 
+    public bool CanRemoveToolChanges(GameInspectionSnapshot snapshot) =>
+        _transaction.CanRemoveToolChanges(snapshot);
+
+    public SettingsChangePlan CreateRemoveToolChangesPlan(GameInspectionSnapshot snapshot) =>
+        _transaction.IssueToolChangeRemoval(snapshot);
+
     private static bool Revalidate(GameContextVerifier verifier, SettingsChangePlan plan)
     {
         VerifiedGameContext? current = verifier.Revalidate();

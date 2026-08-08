@@ -649,10 +649,11 @@
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
               <StackPanel Spacing="2" VerticalAlignment="Center">
                 <TextBlock Text="UE4 Free Camera (F10)" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                <TextBlock Text="Flying camera for exploring the map. Applies to Input.ini immediately. Press F10 in-game to toggle it." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                <TextBlock Text="Adds an F10 ToggleDebugCamera binding to Input.ini. Close Ancestors first, then start it and press F10. This works only if Ancestors permits UE4 debug camera commands in its current build." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
               </StackPanel>
               <ToggleSwitch Grid.Column="1"
                             IsChecked="{Binding Cheat.IsFreeCamEnabled, Mode=TwoWay}"
+                            IsEnabled="{Binding Cheat.CanChangeFreeCamera}"
                             AutomationProperties.Name="Free camera"
                             VerticalAlignment="Center" />
             </Grid>
@@ -786,6 +787,10 @@
                   IsVisible="{Binding ShowGraphicsView}"
                   Padding="16,7"
                   Content="Undo" />
+          <Button Command="{Binding RemoveToolChangesCommand}"
+                  IsVisible="{Binding HasRemovableToolChanges}"
+                  IsEnabled="{Binding CanRemoveToolChanges}"
+                  Content="Remove tool changes" />
           <Button Command="{Binding DiscardChangesCommand}"
                   IsVisible="{Binding ShowPendingActions}"
                   Content="Discard" />
@@ -828,7 +833,7 @@
                      FontWeight="SemiBold"
                      Foreground="#DCEEFF" />
           <TextBlock Grid.Row="1"
-                     Text="Check the old and new values before anything is written"
+                     Text="{Binding ReviewDescription}"
                      Foreground="#8CA9BA" />
           <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <StackPanel>
@@ -858,7 +863,7 @@
           </ScrollViewer>
           <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,14,0,0">
             <Button x:Name="ReviewCancelButton" Command="{Binding CancelReviewCommand}" Content="Cancel" />
-            <Button Command="{Binding ConfirmApplyCommand}" Classes="PrimaryAction" Content="Confirm &amp; Apply" />
+            <Button Command="{Binding ConfirmApplyCommand}" Classes="PrimaryAction" Content="{Binding ConfirmReviewLabel}" />
           </StackPanel>
         </Grid>
         </Border>

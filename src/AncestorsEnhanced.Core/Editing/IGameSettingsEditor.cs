@@ -15,4 +15,9 @@ public interface IGameSettingsEditor
     bool CanRevertLast(GameInspectionSnapshot snapshot);
 
     SettingsOperationResult RevertLast(GameInspectionSnapshot snapshot);
+
+    bool CanRemoveToolChanges(GameInspectionSnapshot snapshot) => false;
+
+    SettingsChangePlan CreateRemoveToolChangesPlan(GameInspectionSnapshot snapshot) =>
+        throw new NotSupportedException("Removing tool changes is not available.");
 }

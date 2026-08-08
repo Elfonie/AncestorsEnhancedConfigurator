@@ -82,6 +82,7 @@ internal sealed class SettingsTransaction(
                 List<ConfigurationFileChangePlan> applied = [];
                 try
                 {
+                    ToolChangeBaselineStore.CaptureBeforeApply(plan);
                     foreach (ConfigurationFileChangePlan file in plan.Files)
                     {
                         if (file.ResultExists)
@@ -115,6 +116,7 @@ internal sealed class SettingsTransaction(
                     }
 
                     SettingsBackupStore.MarkApplied(operationDirectory, plan.CreatedAtUtc);
+                    ToolChangeBaselineStore.MarkApplied(plan);
                 }
                 catch
                 {
@@ -158,6 +160,30 @@ internal sealed class SettingsTransaction(
                 _issuedPlanFingerprint = null;
             }
         }
+    }
+
+    public bool CanRemoveToolChanges(GameInspectionSnapshot snapshot)
+    {
+        try
+        {
+            GameEditingGuard.ValidateSnapshot(snapshot, _isExpectedUserDataDirectory);
+            return _revalidateSnapshot(snapshot) && ToolChangeBaselineStore.CanCreateRemovalPlan(snapshot);
+        }
+        catch (Exception exception) when (IsExpectedWriteException(exception))
+        {
+            return false;
+        }
+    }
+
+    public SettingsChangePlan IssueToolChangeRemoval(GameInspectionSnapshot snapshot)
+    {
+        GameEditingGuard.ValidateSnapshot(snapshot, _isExpectedUserDataDirectory);
+        if (!_revalidateSnapshot(snapshot))
+        {
+            throw new InvalidOperationException("The game context changed. Refresh and try again.");
+        }
+
+        return Issue(ToolChangeBaselineStore.CreateRemovalPlan(snapshot, _utcNow()));
     }
 
     public bool CanRevertLast(GameInspectionSnapshot snapshot)

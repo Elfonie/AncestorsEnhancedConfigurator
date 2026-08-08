@@ -21,6 +21,9 @@ internal static class ConfigurationFileOperations
     public static string GetBackupRoot(string userDataDirectory) =>
         Path.GetFullPath(Path.Combine(userDataDirectory, BackupFolderName, "Backups"));
 
+    public static string GetToolChangesRoot(string userDataDirectory) =>
+        Path.GetFullPath(Path.Combine(userDataDirectory, BackupFolderName, "ToolChanges"));
+
     public static string GetPakDirectory(string installDirectory) =>
         Path.GetFullPath(Path.Combine(installDirectory, "Ancestors", "Content", "Paks"));
 

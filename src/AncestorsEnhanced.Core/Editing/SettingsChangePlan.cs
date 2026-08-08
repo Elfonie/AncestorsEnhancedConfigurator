@@ -9,4 +9,5 @@ public sealed record SettingsChangePlan(
     IReadOnlyList<ConfigurationFileChangePlan> Files,
     string? InstallDirectory = null,
     string? ContextFingerprint = null,
-    string? ContentSignature = null);
+    string? ContentSignature = null,
+    bool IsToolChangeRemoval = false);

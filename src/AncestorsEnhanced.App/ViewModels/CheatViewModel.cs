@@ -16,6 +16,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     private bool _started;
     private bool _disposed;
     private bool _suppressFreeCamChanged;
+    private bool _hasObservedFreeCameraState;
+    private bool _lastObservedFreeCameraState;
     private Task? _pollTask;
     private string? _lastCheckpointSlot;
     private string? _lastCheckpointId;
@@ -134,6 +136,20 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         {
             _suppressFreeCamChanged = false;
         }
+
+        if (_hasObservedFreeCameraState && _lastObservedFreeCameraState && !enabled)
+        {
+            SetStatus(
+                "The F10 free-camera binding is no longer in Input.ini. Ancestors or another tool replaced the file.",
+                "#D6BC84");
+        }
+        else if (!enabled)
+        {
+            SetStatus("The F10 free-camera binding is not configured in Input.ini.", "#7A877A");
+        }
+
+        _hasObservedFreeCameraState = true;
+        _lastObservedFreeCameraState = enabled;
     }
 
     private void SetStatus(string message, string accent)
@@ -144,6 +160,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     }
 
     public bool CanApply => !IsBusy && !IsGameRunning && SelectedSlot is not null;
+
+    public bool CanChangeFreeCamera => !IsBusy && !IsGameRunning;
 
     public string SteamCloudWarning { get; } =
         "Steam Cloud Tip: If Steam shows a Cloud Conflict on launch, select Upload to Steam Cloud (Local files) to keep the applied save or cheat checkpoint.";
@@ -251,11 +269,24 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        SetStatus("Updating free camera setting...", "#FF5A00");
+        if (!CanChangeFreeCamera)
+        {
+            SetStatus("Close Ancestors before changing the F10 free-camera binding.", "#D6BC84");
+            RevertFreeCameraToggle(value);
+            return;
+        }
+
+        SetStatus("Updating the F10 free-camera binding...", "#FF5A00");
         try
         {
             _iniCheat.SetFreeCamera(value);
-            SetStatus(value ? "Free camera (F10) enabled. Press F10 in-game to toggle." : "Free camera disabled.", "#B4D941");
+            _hasObservedFreeCameraState = true;
+            _lastObservedFreeCameraState = value;
+            SetStatus(
+                value
+                    ? "F10 was added to Input.ini. Start Ancestors, then press F10 to toggle the free camera."
+                    : "The tool-owned F10 free-camera binding was removed.",
+                "#B4D941");
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or InvalidOperationException or
@@ -337,6 +368,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     private void NotifyState()
     {
         OnPropertyChanged(nameof(CanApply));
+        OnPropertyChanged(nameof(CanChangeFreeCamera));
         OnPropertyChanged(nameof(CanRestoreLastCheckpoint));
     }
 

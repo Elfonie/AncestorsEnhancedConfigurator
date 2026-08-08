@@ -24,6 +24,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
     private GameInspectionSnapshot? _snapshot;
     private SettingsChangePlan? _reviewPlan;
+    private bool _reviewIsToolChangeRemoval;
 
     [ObservableProperty]
     public partial string DetectionStatus { get; set; } = "Not checked yet";
@@ -81,6 +82,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial bool CanRevertLast { get; set; }
+
+    [ObservableProperty]
+    public partial bool HasRemovableToolChanges { get; set; }
 
     [ObservableProperty]
     public partial bool IsBusy { get; set; }
@@ -148,6 +152,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool CanUndo => CanRevertLast && !HasPendingChanges && !IsReviewingChanges && !IsBusy;
 
+    public bool CanRemoveToolChanges =>
+        HasRemovableToolChanges && !HasPendingChanges && !IsReviewingChanges && !IsBusy;
+
     public bool ShowPendingActions => HasPendingChanges && !IsReviewingChanges;
 
     public bool ShowReviewActions => IsReviewingChanges;
@@ -186,9 +193,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public string ReviewSummary => ReviewChanges.Count == 1
+    public string ReviewSummary => _reviewIsToolChangeRemoval
+        ? ReviewChanges.Count == 1
+            ? "Remove tool changes from 1 file"
+            : $"Remove tool changes from {ReviewChanges.Count} files"
+        : ReviewChanges.Count == 1
         ? "Review 1 change before writing"
         : $"Review {ReviewChanges.Count} changes before writing";
+
+    public string ReviewDescription => _reviewIsToolChangeRemoval
+        ? "Only unchanged files managed by this tool will be returned to their captured original state"
+        : "Check the old and new values before anything is written";
+
+    public string ConfirmReviewLabel => _reviewIsToolChangeRemoval ? "Confirm removal" : "Confirm & Apply";
 
     public string PendingSummary => PendingChanges.Count switch
     {
@@ -343,6 +360,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 .Where(pair => pair.Value.HasChanges)
                 .Select(pair => pair.Value.CreateRequest(FindSettingName(pair.Key)))];
             _reviewPlan = _settingsEditor.CreatePlan(_snapshot, requests);
+            _reviewIsToolChangeRemoval = false;
             ReviewChanges = _reviewPlan.Changes
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
@@ -352,6 +370,37 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 .ToArray();
             IsReviewingChanges = true;
             ShowMessage("Check every value, then confirm the write.", "#FF5A00");
+        }
+        catch (Exception exception)
+        {
+            ShowMessage(exception.Message, "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveToolChanges()
+    {
+        if (_snapshot is null || !CanRemoveToolChanges)
+        {
+            return;
+        }
+
+        try
+        {
+            _reviewPlan = _settingsEditor.CreateRemoveToolChangesPlan(_snapshot);
+            _reviewIsToolChangeRemoval = true;
+            ReviewChanges = _reviewPlan.Changes
+                .Select(change => new ChangeReviewRowViewModel(
+                    change.DisplayName,
+                    $"{change.FileName} | {change.Key}",
+                    change.Before ?? "Game default",
+                    change.After ?? "Game default"))
+                .ToArray();
+            OnPropertyChanged(nameof(ReviewSummary));
+            OnPropertyChanged(nameof(ReviewDescription));
+            OnPropertyChanged(nameof(ConfirmReviewLabel));
+            IsReviewingChanges = true;
+            ShowMessage("Review the tool-managed files before removing those changes.", "#E04D42");
         }
         catch (Exception exception)
         {
@@ -375,11 +424,18 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        bool isToolChangeRemoval = plan.IsToolChangeRemoval;
         _reviewPlan = null;
+        _reviewIsToolChangeRemoval = false;
+        OnPropertyChanged(nameof(ReviewSummary));
+        OnPropertyChanged(nameof(ReviewDescription));
+        OnPropertyChanged(nameof(ConfirmReviewLabel));
         IsReviewingChanges = false;
         ReviewChanges = [];
         IsBusy = true;
-        ShowMessage("Applying the reviewed changes...", "#FF5A00");
+        ShowMessage(
+            isToolChangeRemoval ? "Removing verified tool changes..." : "Applying the reviewed changes...",
+            "#FF5A00");
         SettingsOperationResult result;
         try
         {
@@ -536,9 +592,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     partial void OnCanRevertLastChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
 
+    partial void OnHasRemovableToolChangesChanged(bool value) => OnPropertyChanged(nameof(CanRemoveToolChanges));
+
     partial void OnIsBusyChanged(bool value)
     {
         OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(IsAnyOperationRunning));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
@@ -547,6 +606,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnIsReviewingChangesChanged(bool value)
     {
         OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(ShowPendingActions));
         OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(ShowReviewActions));
@@ -610,6 +670,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ApplyViewMode();
             LoadTechnicalDetails(snapshot);
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
+            HasRemovableToolChanges = _settingsEditor.CanRemoveToolChanges(snapshot);
             if (canKeepChildState)
             {
                 _saveGamesRefreshFailed = !await SaveManager!.RefreshSilentlyAsync();
@@ -649,6 +710,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             PakFiles = [];
             Notices = [new NoticeRowViewModel("Error", exception.Message)];
             CanRevertLast = false;
+            HasRemovableToolChanges = false;
             // Clear the whole internal editor state and writer services so no stale
             // writable editor remains active after a failed scan (F004/F077).
             foreach (SettingEditorViewModel editor in _editors.Values)
@@ -870,6 +932,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(PendingSummary));
         OnPropertyChanged(nameof(PendingDetails));
         OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(ShowPendingActions));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
     }
@@ -882,8 +945,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             _reviewPlan = null;
         }
 
+        _reviewIsToolChangeRemoval = false;
         ReviewChanges = [];
         IsReviewingChanges = false;
+        OnPropertyChanged(nameof(ReviewSummary));
+        OnPropertyChanged(nameof(ReviewDescription));
+        OnPropertyChanged(nameof(ConfirmReviewLabel));
     }
 
     private string FindSettingName(string settingId) =>
