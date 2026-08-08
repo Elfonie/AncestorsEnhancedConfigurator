@@ -579,7 +579,7 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
                     "pakchunk99-WindowsNoEditor_P.pak",
                     blockerPath,
                     false,
-                    ConfigurationFileOperations.Sha256([4]),
+                    ConfigurationFileOperations.Sha256([]),
                     [4],
                     [5, 6],
                     SettingFileTarget.Pak,
@@ -591,6 +591,10 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         SettingsOperationResult result = editor.Apply(plan);
 
         Assert.False(result.Succeeded, result.Message);
+        // The apply must fail in the write/rollback phase, not in the pre-check;
+        // otherwise the deleted vignette file was never touched and the rollback
+        // path is not exercised (NEW-IMP-TEST-02).
+        Assert.DoesNotContain("changed after the preview", result.Message, StringComparison.Ordinal);
         Assert.True(File.Exists(vignettePath));
         Assert.Equal(original, File.ReadAllBytes(vignettePath));
     }

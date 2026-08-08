@@ -84,7 +84,8 @@ internal static class SettingsBackupStore
             OperationManifest? manifest = ReadManifest(directory);
             if (manifest is null ||
                 manifest.Version != 2 ||
-                !string.Equals(manifest.BuildId, supportedBuildId, StringComparison.Ordinal) ||
+                !(string.Equals(manifest.BuildId, supportedBuildId, StringComparison.Ordinal) ||
+                  string.Equals(manifest.ContentSignature, AncestorsEnhanced.Core.AncestorsGameProfile.SupportedContentSignature, StringComparison.Ordinal)) ||
                 !string.Equals(
                     Path.GetFullPath(manifest.UserDataDirectory),
                     Path.GetFullPath(snapshot.UserDataDirectory!),
@@ -223,7 +224,8 @@ internal static class SettingsBackupStore
                 Sha256(file.UpdatedContent),
                 file.Existed ? $"{file.FileName}.before" : null,
                 file.Target,
-                file.ResultExists)).ToArray());
+                file.ResultExists)).ToArray(),
+            plan.ContentSignature);
 
     private static OperationManifest? ReadManifest(string directory)
     {
@@ -262,7 +264,8 @@ internal sealed record OperationManifest(
     string UserDataDirectory,
     string? InstallDirectory,
     IReadOnlyList<SettingChangePreview> Changes,
-    IReadOnlyList<ManifestFile> Files);
+    IReadOnlyList<ManifestFile> Files,
+    string? ContentSignature = null);
 
 internal sealed record ManifestFile(
     string FileName,

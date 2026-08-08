@@ -77,7 +77,7 @@ internal sealed class SettingsChangePlanner(
             createdAt,
             // Record the identity that was actually recognised, never a hard-coded
             // supported claim (F064).
-            installation.BuildId ?? AncestorsGameProfile.SupportedBuildId,
+            installation.BuildId ?? string.Empty,
             userDataDirectory,
             previews,
             filePlans,
