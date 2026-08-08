@@ -36,7 +36,7 @@ public sealed class F027CheatTargetSpecTests
     [Fact]
     public void SamePropertyNameAtTwoPathsOnlyPatchesTheExactTarget()
     {
-        byte[] current = DecompressedSaveWithCurrentCharacter(("Health", 0.5f));
+        byte[] current = DecompressedSaveWithCurrentCharacter(("Energy", 0.5f), ("Stamina", 0.5f), ("Health", 0.5f));
         byte[] unrelated = DecompressedSaveWithRootHealth(0.5f);
         byte[] decompressed = Concat(current, unrelated).ToArray();
         var injector = new SaveGameCheatInjector();
@@ -48,8 +48,30 @@ public sealed class F027CheatTargetSpecTests
 
         Assert.True(result.Succeeded, result.Message);
         Assert.NotNull(modified);
-        Assert.Equal(1, result.ModifiedCount);
+        Assert.Equal(3, result.ModifiedCount);
         Assert.True(ArraysEqualExcept(decompressed, modified!, result.ModifiedRanges));
+    }
+
+    [Fact]
+    public void MaxNeedsRequiresEverySchemaTargetBeforePublishingBytes()
+    {
+        var injector = new SaveGameCheatInjector();
+        byte[] complete = DecompressedSaveWithCurrentCharacter(
+            ("RegimenStamina", 0.2f), ("Energy", 0.3f), ("Stamina", 0.4f));
+
+        CheatInjectionResult accepted = injector.TryInject(complete, CheatKind.MaxNeeds, out byte[]? modified);
+
+        Assert.True(accepted.Succeeded, accepted.Message);
+        Assert.NotNull(modified);
+        Assert.Equal(3, accepted.ModifiedCount);
+
+        byte[] incomplete = DecompressedSaveWithCurrentCharacter(
+            ("RegimenStamina", 0.2f), ("Energy", 0.3f));
+        CheatInjectionResult rejected = injector.TryInject(incomplete, CheatKind.MaxNeeds, out byte[]? partial);
+
+        Assert.False(rejected.Succeeded);
+        Assert.Null(partial);
+        Assert.Empty(rejected.ModifiedRanges);
     }
 
     [Fact]
@@ -72,7 +94,7 @@ public sealed class F027CheatTargetSpecTests
             out byte[]? modified);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("at most 1", result.Message, StringComparison.Ordinal);
+        Assert.Contains("exactly 1", result.Message, StringComparison.Ordinal);
         Assert.Null(modified);
     }
 
@@ -93,7 +115,7 @@ public sealed class F027CheatTargetSpecTests
             out byte[]? modified);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("no matching", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exactly 1", result.Message, StringComparison.Ordinal);
         Assert.Null(modified);
     }
 

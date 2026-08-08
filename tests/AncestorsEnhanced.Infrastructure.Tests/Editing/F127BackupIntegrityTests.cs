@@ -64,6 +64,33 @@ public sealed class F127BackupIntegrityTests : IDisposable
         Assert.Equal("[SystemSettings]\nr.ViewDistanceScale=1.2\n", File.ReadAllText(engineIni));
     }
 
+    [Fact]
+    public void ContextFingerprintFromAnotherInstallationMakesOperationIneligible()
+    {
+        string userData = CreateUserData();
+        File.WriteAllText(EngineIniPath(userData), "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        SafeGameSettingsEditor editor = CreateEditor();
+        GameInspectionSnapshot source = CreateSnapshot(userData);
+        SettingsOperationResult applied = editor.Apply(
+            editor.CreatePlan(source, [Change("a", "r.ViewDistanceScale", "1.2")]));
+        Assert.True(applied.Succeeded, applied.Message);
+
+        VerifiedGameContext otherInstallation = Assert.IsType<VerifiedGameContext>(
+            VerifiedGameContext.TryCreateFromSnapshot(source with
+            {
+                Installation = source.Installation! with { InstallDirectory = "other-install" },
+            }));
+
+        Assert.Null(SettingsBackupStore.FindLast(otherInstallation));
+    }
+
+    [Fact]
+    public void LinuxCaseDifferentPathsAreNotEqual()
+    {
+        Assert.False(SettingsBackupStore.PathEqualsForPlatform("Saved", "saved", isWindows: false));
+        Assert.True(SettingsBackupStore.PathEqualsForPlatform("Saved", "saved", isWindows: true));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_temporaryDirectory))

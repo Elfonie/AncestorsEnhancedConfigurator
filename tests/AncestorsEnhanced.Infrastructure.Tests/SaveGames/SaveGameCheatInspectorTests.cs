@@ -87,7 +87,7 @@ public sealed class SaveGameCheatInspectorTests
             out byte[]? modified);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("no matching", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exactly 1", result.Message, StringComparison.Ordinal);
         Assert.Null(modified);
     }
     [Fact]
@@ -157,7 +157,7 @@ public sealed class SaveGameCheatInspectorTests
     {
         // A Health field owned by an unrelated object (not under the active character)
         // must be left alone.
-        byte[] current = DecompressedSaveWithCurrentCharacter(("Health", 0.5f));
+        byte[] current = DecompressedSaveWithCurrentCharacter(("Energy", 0.5f), ("Stamina", 0.5f), ("Health", 0.5f));
         byte[] unrelated = DecompressedSaveWithRootHealth(0.5f);
         byte[] decompressed = current.Concat(unrelated).ToArray();
         var injector = new SaveGameCheatInjector();
@@ -169,7 +169,7 @@ public sealed class SaveGameCheatInspectorTests
 
         Assert.True(result.Succeeded, result.Message);
         Assert.NotNull(modified);
-        Assert.Equal(1, result.ModifiedCount);
+        Assert.Equal(3, result.ModifiedCount);
     }
 
 

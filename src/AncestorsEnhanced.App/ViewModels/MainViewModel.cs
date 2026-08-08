@@ -15,7 +15,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
-    private readonly Func<string?, ISaveGameManager> _saveManagerFactory;
+    private readonly Func<VerifiedGameContext, ISaveGameManager> _saveManagerFactory;
     private readonly GameContextVerifier _gameContextVerifier;
     private VerifiedGameContext? _verifiedGameContext;
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
@@ -111,14 +111,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public MainViewModel(
         IReadOnlyGameInspector inspector,
         IGameSettingsEditor settingsEditor,
-        Func<string?, ISaveGameManager>? saveManagerFactory = null)
+        Func<VerifiedGameContext, ISaveGameManager>? saveManagerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(settingsEditor);
         _inspector = inspector;
         _gameContextVerifier = new GameContextVerifier(inspector);
         _settingsEditor = settingsEditor;
-        _saveManagerFactory = saveManagerFactory ?? (d => string.IsNullOrWhiteSpace(d) ? throw new InvalidOperationException("The user-data directory is required.") : new SafeSaveGameManager(d, null, IsCurrentContextVerified));
+        _saveManagerFactory = saveManagerFactory ?? (context => new SafeSaveGameManager(context, _gameContextVerifier));
 
         ProductName = "Ancestors Enhanced Configurator";
         string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.8.0";
@@ -337,7 +337,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             IsReviewingChanges = true;
             ShowMessage("Check every value, then confirm the write.", "#FF5A00");
         }
-        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        catch (Exception exception)
         {
             ShowMessage(exception.Message, "#E04D42");
         }
@@ -378,9 +378,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             IsBusy = false;
         }
-        if (result.Succeeded)
+        if (result.Succeeded && !await RefreshFromDiskAsync())
         {
-            await RefreshFromDiskAsync();
+            ShowMessage($"Changes were applied, but the configuration could not be refreshed.", "#E04D42");
+            return;
         }
 
         ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#E04D42");
@@ -590,9 +591,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             LoadTechnicalDetails(snapshot);
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
             SaveManager?.Dispose();
-            SaveManager = await CreateSaveManagerAsync(snapshot.UserDataDirectory);
+            SaveManager = await CreateSaveManagerAsync();
+            SaveManager?.Activate();
             Cheat?.Dispose();
-            Cheat = CreateCheat(snapshot.UserDataDirectory);
+            Cheat = CreateCheat();
             Cheat?.Start();
             if (Cheat is not null && SaveManager is not null)
             {
@@ -603,6 +605,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         catch (Exception exception)
         {
             _snapshot = null;
+            _verifiedGameContext = null;
             SetDetection("Scan failed", "#E04D42", "#E04D42");
             InstallationPath = "Not available";
             InstallationDetails = "The previous result was cleared";
@@ -644,19 +647,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private bool IsCurrentContextVerified() =>
         _verifiedGameContext is not null && _gameContextVerifier.Verify(_verifiedGameContext);
 
-    private async Task<SaveManagerViewModel?> CreateSaveManagerAsync(string? userDataDirectory)
+    private async Task<SaveManagerViewModel?> CreateSaveManagerAsync()
     {
-        if (string.IsNullOrWhiteSpace(userDataDirectory))
+        if (_verifiedGameContext is not { } context)
         {
             return null;
         }
 
         try
         {
-            ISaveGameManager manager = _saveManagerFactory(userDataDirectory);
+            ISaveGameManager manager = _saveManagerFactory(context);
             SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
-            var watchdog = new SaveGameWatchdog(userDataDirectory, IsCurrentContextVerified);
-            var viewModel = new SaveManagerViewModel(manager, userDataDirectory, watchdog);
+            var watchdog = new SaveGameWatchdog(context, _gameContextVerifier);
+            var viewModel = new SaveManagerViewModel(manager, context.UserDataDirectory, watchdog);
             viewModel.Refresh(snapshot);
             return viewModel;
         }
@@ -668,16 +671,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
 
-    private CheatViewModel? CreateCheat(string? userDataDirectory)
+    private CheatViewModel? CreateCheat()
     {
-        if (string.IsNullOrWhiteSpace(userDataDirectory))
+        if (_verifiedGameContext is not { } context)
         {
             return null;
         }
 
-        var injector = new SaveGameCheatInjector();
-        var service = new SaveGameCheatService(injector, userDataDirectory, IsCurrentContextVerified);
-        var iniCheat = new IniCheatService(userDataDirectory, IsCurrentContextVerified);
+        var service = new SaveGameCheatService(context, _gameContextVerifier);
+        var iniCheat = new IniCheatService(context, _gameContextVerifier);
         return new CheatViewModel(
             service,
             iniCheat,

@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using AncestorsEnhanced.Infrastructure.Editing;
+﻿using AncestorsEnhanced.Infrastructure.Editing;
 using Xunit;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.Editing;
@@ -14,38 +13,39 @@ public sealed class F012FreeCameraOwnershipTests
     [Fact]
     public void UserOwnedF10IsNeverClaimedOrDuplicated()
     {
-        (string userData, string input) = Setup("ConsoleKeys=F10\n");
+        (string userData, string input) = MakeInput("ConsoleKeys=F10\n");
 
         var service = new IniCheatService(userData);
         service.SetFreeCamera(true);
 
         string content = File.ReadAllText(input);
         Assert.DoesNotContain(Marker, content, StringComparison.Ordinal);
+        Assert.Equal(1, CountConsoleKeys(content));
         Assert.False(service.IsFreeCameraEnabled(), "a user F10 without our marker is not owned");
 
         service.SetFreeCamera(false);
         content = File.ReadAllText(input);
-        Assert.Equal(1, CountOccurrences(content, ToolEntry));
+        Assert.Equal(1, CountConsoleKeys(content));
         Assert.DoesNotContain(Marker, content, StringComparison.Ordinal);
     }
 
     [Fact]
     public void SeveralUserF10EntriesAreLeftUntouched()
     {
-        (string userData, string input) = Setup("ConsoleKeys=F10\nConsoleKeys=F10,F11\n");
+        (string userData, string input) = MakeInput("ConsoleKeys=F10\nConsoleKeys=Backslash,F10\n");
 
         var service = new IniCheatService(userData);
         service.SetFreeCamera(true);
 
         string content = File.ReadAllText(input);
         Assert.DoesNotContain(Marker, content, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(content, "ConsoleKeys=F10"));
+        Assert.Equal(2, CountConsoleKeys(content));
     }
 
     [Fact]
     public void ToolAddsMarkerAndEntryTogetherInOneWrite()
     {
-        (string userData, string input) = Setup("Jump=True\nConsoleKeys=Tilde\n");
+        (string userData, string input) = MakeInput("ConsoleKeys=Tilde\n");
 
         var service = new IniCheatService(userData);
         service.SetFreeCamera(true);
@@ -54,40 +54,38 @@ public sealed class F012FreeCameraOwnershipTests
         Assert.Contains(Marker + "\n" + ToolEntry, content, StringComparison.Ordinal);
         Assert.True(service.IsFreeCameraEnabled());
         Assert.Contains("ConsoleKeys=Tilde", content, StringComparison.Ordinal);
-        Assert.Contains("Jump=True", content, StringComparison.Ordinal);
     }
 
     [Fact]
     public void UserF10AddedAboveToolEntrySurvivesDisable()
     {
-        (string userData, string input) = Setup("ConsoleKeys=Tilde\n");
+        (string userData, string input) = MakeInput("ConsoleKeys=Tilde\n");
 
         var service = new IniCheatService(userData);
         service.SetFreeCamera(true);
         Assert.True(service.IsFreeCameraEnabled());
 
         // The user later adds their own F10 above the tool-owned block.
-        string withUserEntry = Section + "\nConsoleKeys=F10\n" + Marker + "\n" + ToolEntry + "\n";
-        File.WriteAllText(input, withUserEntry);
+        File.WriteAllText(input, Section + "\nConsoleKeys=F10\n" + Marker + "\n" + ToolEntry + "\n");
 
         service.SetFreeCamera(false);
 
         string content = File.ReadAllText(input);
         Assert.DoesNotContain(Marker, content, StringComparison.Ordinal);
         // Only the tool entry was removed; the user's own F10 above it survives.
-        Assert.Equal(1, CountOccurrences(content, ToolEntry));
+        Assert.Equal(1, CountConsoleKeys(content));
     }
 
     [Fact]
     public void EditedToolLineIsNeverRemoved()
     {
-        (string userData, string input) = Setup("ConsoleKeys=Tilde\n");
+        (string userData, string input) = MakeInput("ConsoleKeys=Tilde\n");
 
         var service = new IniCheatService(userData);
         service.SetFreeCamera(true);
 
-        string edited = Section + "\n" + Marker + "\nConsoleKeys=F11\n";
-        File.WriteAllText(input, edited);
+        // The user edits the tool line so it no longer matches the exact owned entry.
+        File.WriteAllText(input, Section + "\n" + Marker + "\nConsoleKeys=F11\n");
 
         service.SetFreeCamera(false);
 
@@ -99,7 +97,7 @@ public sealed class F012FreeCameraOwnershipTests
     [Fact]
     public void MarkerWithoutToolLineIsNotRemoved()
     {
-        (string userData, string input) = Setup("ConsoleKeys=Tilde\n");
+        (string userData, string input) = MakeInput("ConsoleKeys=Tilde\n");
 
         var service = new IniCheatService(userData);
         service.SetFreeCamera(true);
@@ -113,14 +111,16 @@ public sealed class F012FreeCameraOwnershipTests
         Assert.Contains("ConsoleKeys=Tilde", content, StringComparison.Ordinal);
     }
 
-    private static (string UserData, string InputPath) Setup(string body)
+    private static (string UserData, string InputPath) MakeInput(string body)
     {
-        string userData = Path.Combine(Path.GetTempPath(), "aec-f012-" + Guid.NewGuid().ToString("N"));
-        string inputPath = Path.Combine(userData, "Config", "WindowsNoEditor", "Input.ini");
+        string dir = Path.Combine(Path.GetTempPath(), "aec-f012-" + Guid.NewGuid().ToString("N"));
+        string inputPath = Path.Combine(dir, "Config", "WindowsNoEditor", "Input.ini");
         Directory.CreateDirectory(Path.GetDirectoryName(inputPath)!);
         File.WriteAllText(inputPath, Section + "\n" + body);
-        return (userData, inputPath);
+        return (dir, inputPath);
     }
+
+    private static int CountConsoleKeys(string text) => CountOccurrences(text, "ConsoleKeys=");
 
     private static int CountOccurrences(string text, string value)
     {

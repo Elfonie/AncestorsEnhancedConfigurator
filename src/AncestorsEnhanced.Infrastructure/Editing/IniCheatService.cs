@@ -1,5 +1,6 @@
 using System.Text;
 using AncestorsEnhanced.Core.Editing;
+using AncestorsEnhanced.Core.Inspection;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
@@ -25,6 +26,12 @@ public sealed class IniCheatService
 
     private readonly string _userDataDirectory;
     private readonly Func<bool>? _revalidate;
+
+    /// <summary>Binds to a verified game context; the user-data path comes from the context (F078).</summary>
+    public IniCheatService(VerifiedGameContext context, GameContextVerifier verifier)
+        : this(context.UserDataDirectory, () => verifier.Verify(context))
+    {
+    }
 
     public IniCheatService(string userDataDirectory, Func<bool>? revalidate = null)
     {
@@ -61,13 +68,14 @@ public sealed class IniCheatService
             return;
         }
 
-        if (_revalidate is not null && !_revalidate())
-        {
-            throw new InvalidOperationException("The game context changed; the free camera cannot be toggled safely. Refresh and try again.");
-        }
 
         MutationCoordinator.Run(() =>
         {
+            // Revalidate inside the global mutation lock, immediately before the write (F063-1c).
+            if (_revalidate is not null && !_revalidate())
+            {
+                throw new InvalidOperationException("The game context changed; the free camera cannot be toggled safely. Refresh and try again.");
+            }
             if (fileExisted)
             {
                 BackupInputIni(path);

@@ -70,16 +70,15 @@ internal sealed class SettingsTransaction(
                 }
             }
 
-            // Revalidate the live game context immediately before the first write.
-            // Nothing has been written yet; a drift aborts without a write (F061/F063/F078).
-            if (!_revalidateContext(plan))
-            {
-                return Failure("The game context changed since this change was previewed. Refresh and try again.");
-            }
 
             string operationDirectory = SettingsBackupStore.Prepare(plan);
             SettingsOperationResult? appliedResult = MutationCoordinator.Run(() =>
             {
+                // Revalidate inside the global mutation lock, immediately before the writes (F063-1c).
+                if (!_revalidateContext(plan))
+                {
+                    return Failure("The game context changed since this change was previewed. Refresh and try again.");
+                }
                 List<ConfigurationFileChangePlan> applied = [];
                 try
                 {
@@ -170,9 +169,8 @@ internal sealed class SettingsTransaction(
             {
                 return false;
             }
-            return SettingsBackupStore.FindLast(
-                snapshot,
-                AncestorsGameProfile.SupportedBuildId) is not null;
+            VerifiedGameContext? context = VerifiedGameContext.TryCreateFromSnapshot(snapshot);
+            return context is not null && SettingsBackupStore.FindLast(context) is not null;
         }
         catch (Exception exception) when (IsExpectedWriteException(exception))
         {
@@ -191,13 +189,8 @@ internal sealed class SettingsTransaction(
         try
         {
             GameEditingGuard.ValidateSnapshot(snapshot, _isExpectedUserDataDirectory);
-            if (!_revalidateSnapshot(snapshot))
-            {
-                return Failure("The game context changed; the backup cannot be restored safely. Refresh and try again.");
-            }
-            StoredSettingsOperation? operation = SettingsBackupStore.FindLast(
-                snapshot,
-                AncestorsGameProfile.SupportedBuildId);
+            VerifiedGameContext? verifiable = VerifiedGameContext.TryCreateFromSnapshot(snapshot);
+            StoredSettingsOperation? operation = verifiable is null ? null : SettingsBackupStore.FindLast(verifiable);
             if (operation is null)
             {
                 return Failure("There is no unchanged configurator operation that can be restored safely.");
@@ -211,6 +204,11 @@ internal sealed class SettingsTransaction(
             // can never race another configurator write (F001).
             return MutationCoordinator.Run(() =>
             {
+                // Revalidate inside the global mutation lock, immediately before the restore (F063-1c).
+                if (!_revalidateSnapshot(snapshot))
+                {
+                    return Failure("The game context changed; the backup cannot be restored safely. Refresh and try again.");
+                }
             List<(ManifestFile File, byte[] Current)> restored = [];
             try
             {

@@ -1,5 +1,7 @@
 using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.Editing;
+using AncestorsEnhanced.Core.Inspection;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
@@ -10,7 +12,7 @@ namespace AncestorsEnhanced.Infrastructure.SaveGames;
 /// arrive while a backup is already queued or in its cooldown are marked dirty and
 /// backed up once afterwards instead of being discarded (I-1).
 /// </summary>
-public sealed class SaveGameWatchdog : ISaveGameWatchdog
+public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 {
     private readonly SafeSaveGameManager _manager;
     private readonly string _userDataDirectory;
@@ -18,10 +20,17 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
     private readonly Dictionary<int, Task> _running = new();
     private readonly Dictionary<int, bool> _pending = new();
     private readonly Dictionary<int, DateTimeOffset> _lastBackupTimes = new();
-    private readonly Dictionary<int, DateTimeOffset> _suppressedUntil = new();
+    private readonly Dictionary<int, int> _activeMutations = new();
     private TimeSpan _cooldown = TimeSpan.FromMinutes(5);
+    private CancellationTokenSource _stopCancellation = new();
     private bool _stopped;
     private FileSystemWatcher? _watcher;
+
+    /// <summary>Binds to a verified game context; the user-data path comes from the context (F078).</summary>
+    public SaveGameWatchdog(VerifiedGameContext context, GameContextVerifier verifier)
+        : this(context.UserDataDirectory, () => verifier.Verify(context))
+    {
+    }
 
     public SaveGameWatchdog(string userDataDirectory, Func<bool>? revalidate = null)
     {
@@ -64,6 +73,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             }
 
             _stopped = false;
+            if (_stopCancellation.IsCancellationRequested)
+            {
+                _stopCancellation.Dispose();
+                _stopCancellation = new CancellationTokenSource();
+            }
             string saveDirectory = SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory);
             if (!Directory.Exists(saveDirectory))
             {
@@ -104,9 +118,10 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             }
 
             _stopped = true;
+            _stopCancellation.Cancel();
             _pending.Clear();
             _lastBackupTimes.Clear();
-            _suppressedUntil.Clear();
+            _activeMutations.Clear();
             snapshot = new Dictionary<int, Task>(_running);
         }
 
@@ -133,12 +148,14 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         }
     }
 
-    public void SuppressSlot(int slotNumber, TimeSpan duration)
+    public IDisposable BeginSlotMutation(int slotNumber)
     {
         lock (_gate)
         {
-            _suppressedUntil[slotNumber] = DateTimeOffset.UtcNow + duration;
+            _activeMutations[slotNumber] = _activeMutations.TryGetValue(slotNumber, out int count) ? count + 1 : 1;
         }
+
+        return new SlotMutationLease(this, slotNumber);
     }
 
     /// <summary>
@@ -206,6 +223,22 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             {
             }
         }
+
+        // FileSystemWatcher can lose an arbitrary number of notifications during an
+        // overflow. Reconcile the finite, canonical slot set after it is restarted.
+        for (int slot = 0; slot < SaveGamePaths.SlotCount; slot++)
+        {
+            if (File.Exists(SaveGamePaths.GetSlotPath(_userDataDirectory, slot)))
+            {
+                MarkDirty(slot);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        StopWatch();
+        _stopCancellation.Dispose();
     }
 
     private void OnChanged(object sender, FileSystemEventArgs args)
@@ -215,6 +248,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             return;
         }
 
+        MarkDirty(slot);
+    }
+
+    private void MarkDirty(int slot)
+    {
         lock (_gate)
         {
             if (_stopped)
@@ -222,17 +260,8 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
                 return;
             }
 
-            if (_running.ContainsKey(slot))
-            {
-                // A backup for this slot is already queued/running. Remember the change
-                // and let the running task pick it up once, instead of spawning a second
-                // parallel job (guarantee: at most one queued backup per slot).
-                _pending[slot] = true;
-                return;
-            }
-
-            Task task = BackupSlotAsync(slot);
-            _running[slot] = task;
+            _pending[slot] = true;
+            EnsureWorkerLocked(slot);
         }
     }
 
@@ -240,47 +269,58 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
     {
         try
         {
-            await Task.Delay(500).ConfigureAwait(false);
+            await Task.Delay(500, _stopCancellation.Token).ConfigureAwait(false);
 
-            // Process changes that arrived while this job was running. Each iteration
-            // handles one pending change; loop until the slot is quiescent.
             while (true)
             {
+                TimeSpan? wait = null;
                 lock (_gate)
                 {
                     if (_stopped)
                     {
                         return;
                     }
-                }
 
-                if (!IsSuppressed(slot) && CanBackup(slot))
-                {
-                    SaveGameOperationResult result = _manager.CreateCheckpoint(
-                        slot.ToString(CultureInfo.InvariantCulture),
-                        "AutoBackup");
-                    if (result.Succeeded && result.CreatedCheckpointId is not null)
+                    if (!_pending.TryGetValue(slot, out bool dirty) || !dirty)
                     {
-                        RecordBackupTime(slot);
-                        CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
+                        return;
+                    }
+
+                    if (_activeMutations.ContainsKey(slot))
+                    {
+                        wait = TimeSpan.FromMilliseconds(100);
+                    }
+                    else if (_lastBackupTimes.TryGetValue(slot, out DateTimeOffset last) &&
+                             DateTimeOffset.UtcNow < last + _cooldown)
+                    {
+                        wait = last + _cooldown - DateTimeOffset.UtcNow;
+                    }
+                    else
+                    {
+                        // Consume dirty immediately before the mutation. Events racing
+                        // the backup set it again and this worker performs another pass.
+                        _pending[slot] = false;
                     }
                 }
 
-                lock (_gate)
+                if (wait is not null)
                 {
-                    if (_stopped || !_pending.TryGetValue(slot, out bool dirty) || !dirty)
-                    {
-                        _pending.Remove(slot);
-                        break;
-                    }
-
-                    _pending.Remove(slot);
+                    await Task.Delay(wait.Value, _stopCancellation.Token).ConfigureAwait(false);
+                    continue;
                 }
 
-                // A change arrived while the first backup was being written; schedule one
-                // more pass with a fresh debounce so in-progress writes can settle.
-                await Task.Delay(500).ConfigureAwait(false);
+                SaveGameOperationResult result = _manager.CreateCheckpoint(
+                    slot.ToString(CultureInfo.InvariantCulture), "AutoBackup");
+                if (result.Succeeded && result.CreatedCheckpointId is not null)
+                {
+                    RecordBackupTime(slot);
+                    CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
+                }
             }
+        }
+        catch (OperationCanceledException) when (_stopCancellation.IsCancellationRequested)
+        {
+            // StopWatch deliberately interrupts debounce/cooldown waits.
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or InvalidOperationException or
@@ -301,35 +341,33 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
         }
     }
 
-    private bool IsSuppressed(int slot)
+    private void EndSlotMutation(int slot)
     {
         lock (_gate)
         {
-            if (!_suppressedUntil.TryGetValue(slot, out DateTimeOffset until))
+            if (!_activeMutations.TryGetValue(slot, out int count))
             {
-                return false;
+                return;
             }
 
-            if (DateTimeOffset.UtcNow < until)
+            if (count == 1)
             {
-                return true;
+                _activeMutations.Remove(slot);
+                // Reconcile after restore even if a watcher event was missed.
+                _pending[slot] = true;
+                EnsureWorkerLocked(slot);
+                return;
             }
 
-            _suppressedUntil.Remove(slot);
-            return false;
+            _activeMutations[slot] = count - 1;
         }
     }
 
-    private bool CanBackup(int slot)
+    private void EnsureWorkerLocked(int slot)
     {
-        lock (_gate)
+        if (!_running.ContainsKey(slot))
         {
-            if (!_lastBackupTimes.TryGetValue(slot, out DateTimeOffset last))
-            {
-                return true;
-            }
-
-            return DateTimeOffset.UtcNow >= last + _cooldown;
+            _running[slot] = BackupSlotAsync(slot);
         }
     }
 
@@ -349,15 +387,22 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog
             return false;
         }
 
-        if (!fileName.StartsWith("Savegame", StringComparison.OrdinalIgnoreCase) ||
-            !fileName.EndsWith(".sav", StringComparison.OrdinalIgnoreCase))
+        for (int slot = 0; slot < SaveGamePaths.SlotCount; slot++)
         {
-            return false;
+            if (string.Equals(fileName, SaveGamePaths.GetSlotFileName(slot), StringComparison.Ordinal))
+            {
+                slotNumber = slot;
+                return true;
+            }
         }
 
-        string number = fileName["Savegame".Length..^".sav".Length];
-        return int.TryParse(number, out slotNumber) &&
-               slotNumber >= 0 &&
-               slotNumber < SaveGamePaths.SlotCount;
+        return false;
+    }
+
+    private sealed class SlotMutationLease(SaveGameWatchdog owner, int slot) : IDisposable
+    {
+        private SaveGameWatchdog? _owner = owner;
+
+        public void Dispose() => Interlocked.Exchange(ref _owner, null)?.EndSlotMutation(slot);
     }
 }

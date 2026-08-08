@@ -1,4 +1,6 @@
-﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
@@ -15,6 +17,12 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
     private readonly ISaveGameCheatInjector _injector;
     private readonly string _userDataDirectory;
     private readonly Func<bool>? _revalidate;
+
+    /// <summary>Binds to a verified game context; the user-data path comes from the context (F078).</summary>
+    public SaveGameCheatService(VerifiedGameContext context, GameContextVerifier verifier)
+        : this(new SaveGameCheatInjector(), context.UserDataDirectory, () => verifier.Verify(context))
+    {
+    }
 
     public SaveGameCheatService(
         ISaveGameCheatInjector injector,
@@ -104,16 +112,20 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                 return new CheatApplyResult(false, "The modified save changed bytes outside the reported ranges.");
             }
 
-            if (_revalidate is not null && !_revalidate())
-            {
-                return new CheatApplyResult(false, "The game context changed; the cheat cannot be applied safely. Refresh and try again.");
-            }
 
             var store = new SaveGameCheckpointStore(
                 () => DateTimeOffset.UtcNow,
                 maxCheckpointsPerSlot: 50);
-            string checkpointId = AncestorsEnhanced.Infrastructure.Editing.MutationCoordinator.Run(
-                () => store.Create(_userDataDirectory, slot, recompressed, $"Cheat:{kind}"));
+            string checkpointId = AncestorsEnhanced.Infrastructure.Editing.MutationCoordinator.Run(() =>
+            {
+                // Revalidate inside the global mutation lock, immediately before the store write (F063-1c).
+                if (_revalidate is not null && !_revalidate())
+                {
+                    throw new InvalidOperationException("The game context changed; the cheat cannot be applied safely. Refresh and try again.");
+                }
+
+                return store.Create(_userDataDirectory, slot, recompressed, $"Cheat:{kind}");
+            });
 
             return new CheatApplyResult(
                 true,

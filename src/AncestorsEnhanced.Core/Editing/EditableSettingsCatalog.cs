@@ -232,7 +232,7 @@ public static class EditableSettingsCatalog
             .FirstOrDefault(candidate =>
                 string.Equals(candidate.Name, request.FileName, StringComparison.OrdinalIgnoreCase));
         IniSettingSnapshot? entry = file?.Settings
-            .FirstOrDefault(setting =>
+            .LastOrDefault(setting =>
                 string.Equals(setting.Key, request.Key, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(setting.Section, request.Section, StringComparison.OrdinalIgnoreCase));
         return entry?.Value;

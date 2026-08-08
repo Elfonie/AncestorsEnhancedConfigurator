@@ -291,11 +291,20 @@ public sealed class SaveManagerViewModelTests
 
         public int SuppressedSlot { get; private set; } = -1;
 
-        public void SuppressSlot(int slotNumber, TimeSpan duration) => SuppressedSlot = slotNumber;
+        public IDisposable BeginSlotMutation(int slotNumber)
+        {
+            SuppressedSlot = slotNumber;
+            return new DisposableAction();
+        }
 
         public event EventHandler<string>? CheckpointCreated;
 
         public event EventHandler<string>? WatcherError;
+
+        private sealed class DisposableAction : IDisposable
+        {
+            public void Dispose() { }
+        }
 
         public void Start() => StartCount++;
 

@@ -97,6 +97,15 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public bool CanCreate => !IsBusy;
 
+    /// <summary>Starts persisted watchdog settings only after the owner has loaded slots.</summary>
+    public void Activate()
+    {
+        if (IsWatchdogEnabled)
+        {
+            _watchdog?.Start();
+        }
+    }
+
     public void Refresh(SaveGamesSnapshot snapshot)
     {
         Slots = snapshot.Slots
@@ -158,7 +167,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             {
                 result = await Task.Run(operation);
             }
-            catch (Exception exception) when (IsExpectedException(exception))
+            catch (Exception exception)
             {
                 StatusMessage = $"Operation failed: {exception.Message}";
                 StatusAccent = "#E04D42";
@@ -178,7 +187,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                     StatusMessage = result.Message;
                     StatusAccent = "#B4D941";
                 }
-                catch (Exception exception) when (IsExpectedException(exception))
+                catch (Exception exception)
                 {
                     StatusMessage = $"{result.Message} (checkpoints could not be refreshed: {exception.Message})";
                     StatusAccent = "#E04D42";
@@ -217,11 +226,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             return new SaveGameOperationResult(false, "Another save operation is already running.");
         }
 
-        if (_watchdog is not null && int.TryParse(slotNumber, out int slot))
-        {
-            _watchdog.SuppressSlot(slot, TimeSpan.FromSeconds(5));
-        }
-
+        using IDisposable? mutation = _watchdog is not null && int.TryParse(slotNumber, out int slot)
+            ? _watchdog.BeginSlotMutation(slot)
+            : null;
         return await RunOperation(() => _manager.LoadCheckpoint(slotNumber, checkpointId));
     }
 
@@ -277,7 +284,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         if (_watchdog is not null)
         {
-            if (value)
+            if (value && !_loadingSettings)
             {
                 _watchdog.Start();
             }
@@ -398,18 +405,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         // Der Watchdog feuert vom Thread-Pool; UI-Änderungen gehören auf den UI-Thread.
         // In Tests ohne UI-Loop läuft der Aufruf synchron über CheckAccess.
-        void Refresh()
-        {
-            try
-            {
-                _ = RefreshAsync();
-            }
-            catch (Exception exception) when (IsExpectedException(exception))
-            {
-                StatusMessage = $"Could not refresh after auto-backup: {exception.Message}";
-                StatusAccent = "#E04D42";
-            }
-        }
+        void Refresh() => _ = RefreshAfterWatchdogAsync();
 
         if (Dispatcher.UIThread.CheckAccess())
         {
@@ -418,6 +414,19 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         else
         {
             _dispatchToUi(Refresh);
+        }
+    }
+
+    private async Task RefreshAfterWatchdogAsync()
+    {
+        try
+        {
+            await RefreshAsync();
+        }
+        catch (Exception exception)
+        {
+            StatusMessage = $"Could not refresh after auto-backup: {exception.Message}";
+            StatusAccent = "#E04D42";
         }
     }
 

@@ -1,5 +1,6 @@
 ﻿using AncestorsEnhanced.Infrastructure.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;
+using AncestorsEnhanced.Core.SaveGames;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
 
@@ -107,6 +108,46 @@ public sealed class SaveGameWatchdogTests : IDisposable
             Thread.Sleep(700);
 
             Assert.Single(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
+        }
+        finally
+        {
+            watchdog.StopWatch();
+        }
+    }
+
+    [Fact]
+    public void RestoreUnderMutationLeaseDoesNotPublishAnIntermediateAutoCheckpoint()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        byte[] original = SnappyBlockCodec.EncodeLiteral([1, 2, 3]);
+        byte[] changed = SnappyBlockCodec.EncodeLiteral([8, 9, 10, 11]);
+        File.WriteAllBytes(slotPath, original);
+        var manager = new SafeSaveGameManager(
+            userData,
+            () => DateTimeOffset.UtcNow,
+            () => false,
+            new SaveGameManagerOptions(MaxCheckpointsPerSlot: 50));
+        string checkpoint = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        var watchdog = new SaveGameWatchdog(userData) { Cooldown = TimeSpan.Zero };
+
+        watchdog.Start();
+        try
+        {
+            // Both the temporary live change and restore occur in one operation-aware
+            // lease. Events remain dirty until the restored content can be reconciled.
+            using (watchdog.BeginSlotMutation(0))
+            {
+                File.WriteAllBytes(slotPath, changed);
+                SaveGameOperationResult restored = manager.LoadCheckpoint("0", checkpoint);
+                Assert.True(restored.Succeeded, restored.Message);
+            }
+
+            watchdog.WaitForIdle();
+            Assert.Equal(original, File.ReadAllBytes(slotPath));
+            IReadOnlyList<SaveGameCheckpoint> checkpoints = SaveGameCheckpointStore.ListCheckpoints(userData, 0);
+            Assert.Equal(2, checkpoints.Count);
+            Assert.DoesNotContain(checkpoints, checkpoint => checkpoint.Origin == "AutoBackup");
         }
         finally
         {

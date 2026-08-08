@@ -10,7 +10,8 @@ public interface ISaveGameWatchdog
 
     void StopWatch();
 
-    void SuppressSlot(int slotNumber, TimeSpan duration);
+    /// <summary>Marks a restore/write operation so filesystem events are reconciled afterwards.</summary>
+    IDisposable BeginSlotMutation(int slotNumber);
 
     event EventHandler<string>? CheckpointCreated;
 

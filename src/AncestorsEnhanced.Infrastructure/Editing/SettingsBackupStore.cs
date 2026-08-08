@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AncestorsEnhanced.Core;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
@@ -55,11 +56,9 @@ internal static class SettingsBackupStore
             Path.Combine(directory, RevertedMarkerName),
             Encoding.UTF8.GetBytes(revertedAtUtc.ToString("O")));
 
-    public static StoredSettingsOperation? FindLast(
-        GameInspectionSnapshot snapshot,
-        string supportedBuildId)
+    public static StoredSettingsOperation? FindLast(VerifiedGameContext context)
     {
-        string backupRoot = GetBackupRoot(snapshot.UserDataDirectory!);
+        string backupRoot = GetBackupRoot(context.UserDataDirectory);
         if (!Directory.Exists(backupRoot))
         {
             return null;
@@ -68,38 +67,29 @@ internal static class SettingsBackupStore
         foreach (string directory in Directory.EnumerateDirectories(backupRoot)
                      .OrderByDescending(path => path, StringComparer.Ordinal))
         {
-            // A reparse point is a security violation: stop looking entirely.
-            if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
-            {
-                return null;
-            }
-
-            if (!File.Exists(Path.Combine(directory, AppliedMarkerName)) ||
-                File.Exists(Path.Combine(directory, RevertedMarkerName)) ||
-                Directory.EnumerateFiles(directory).Any(name => IsReparsePointFile(Path.Combine(directory, name))))
-            {
-                continue;
-            }
-
-            OperationManifest? manifest = ReadManifest(directory);
-            if (manifest is null ||
-                manifest.Version != 2 ||
-                !(string.Equals(manifest.BuildId, supportedBuildId, StringComparison.Ordinal) ||
-                  string.Equals(manifest.ContentSignature, AncestorsEnhanced.Core.AncestorsGameProfile.SupportedContentSignature, StringComparison.Ordinal)) ||
-                !string.Equals(
-                    Path.GetFullPath(manifest.UserDataDirectory),
-                    Path.GetFullPath(snapshot.UserDataDirectory!),
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                // Damaged, incompatible or belonging to another build/data path:
-                // skip and keep looking for an older valid operation.
-                continue;
-            }
-
-            bool validFiles;
             try
             {
-                validFiles = manifest.Files.Count > 0 && manifest.Files.All(file =>
+                // A reparse point is a security violation: this candidate is skipped
+                // (fail-safe) but does not block older valid candidates (F128).
+                if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    continue;
+                }
+
+                if (!File.Exists(Path.Combine(directory, AppliedMarkerName)) ||
+                    File.Exists(Path.Combine(directory, RevertedMarkerName)) ||
+                    Directory.EnumerateFiles(directory).Any(name => IsReparsePointFile(Path.Combine(directory, name))))
+                {
+                    continue;
+                }
+
+                OperationManifest? manifest = ReadManifest(directory);
+                if (manifest is null || !IsCandidateUsable(manifest, context))
+                {
+                    continue;
+                }
+
+                bool validFiles = manifest.Files.Count > 0 && manifest.Files.All(file =>
                 {
                     _ = GetTargetPath(
                         manifest.UserDataDirectory,
@@ -114,28 +104,17 @@ internal static class SettingsBackupStore
                     bool backupOk = !file.Existed ||
                         (IsNormalFile(backupPath) &&
                          string.Equals(Sha256(File.ReadAllBytes(backupPath)), file.OriginalSha256, StringComparison.Ordinal));
-                    return string.Equals(
-                        file.BackupFileName,
-                        expectedBackup,
-                        StringComparison.OrdinalIgnoreCase) &&
+                    return string.Equals(file.BackupFileName, expectedBackup, PathComparison) &&
                         backupOk;
                 });
-            }
-            catch (Exception exception) when (IsExpectedStoreException(exception))
-            {
-                // A damaged entry must not block older valid ones.
-                continue;
-            }
+                if (!validFiles)
+                {
+                    continue;
+                }
 
-            if (!validFiles)
-            {
-                continue;
-            }
-
-            bool unchanged;
-            try
-            {
-                unchanged = manifest.Files.All(file =>
+                // A valid but externally-modified newest candidate must not stop the search:
+                // keep looking for an older, still-unchanged operation (F019).
+                bool unchanged = manifest.Files.All(file =>
                 {
                     string path = GetTargetPath(
                         manifest.UserDataDirectory,
@@ -149,23 +128,61 @@ internal static class SettingsBackupStore
                             StringComparison.Ordinal)
                         : !File.Exists(path);
                 });
+                if (!unchanged)
+                {
+                    continue;
+                }
+
+                return new StoredSettingsOperation(directory, manifest);
             }
             catch (Exception exception) when (IsExpectedStoreException(exception))
             {
+                // F128: a broken or unreadable candidate must never prevent older valid
+                // candidates from being checked.
                 continue;
             }
-
-            // A valid but externally-modified newest candidate must not stop the search:
-            // keep looking for an older, still-unchanged operation (F019).
-            if (!unchanged)
-            {
-                continue;
-            }
-
-            return new StoredSettingsOperation(directory, manifest);
         }
 
         return null;
+    }
+
+    private static bool IsCandidateUsable(OperationManifest manifest, VerifiedGameContext context)
+    {
+        if (manifest.Version != 2)
+        {
+            return false;
+        }
+
+        bool pathMatches = PathEquals(manifest.UserDataDirectory, context.UserDataDirectory) &&
+            PathEquals(manifest.InstallDirectory, context.InstallDirectory);
+
+        // Newer manifests carry the context fingerprint: it must match exactly (Paket 3).
+        if (!string.IsNullOrEmpty(manifest.ContextFingerprint))
+        {
+            return pathMatches && string.Equals(manifest.ContextFingerprint, context.ContextFingerprint, StringComparison.Ordinal);
+        }
+
+        // Legacy manifest without a fingerprint: fail-safe, accept only when the identity
+        // and the exact paths unambiguously match the current context.
+        return pathMatches && GameIdentity.IsSupported(manifest.BuildId, manifest.ContentSignature, contentSignatureReadFailed: false);
+    }
+
+    private static bool PathEquals(string? first, string? second)
+        => PathEqualsForPlatform(first, second, OperatingSystem.IsWindows());
+
+    internal static bool PathEqualsForPlatform(string? first, string? second, bool isWindows)
+    {
+        if (string.IsNullOrEmpty(first) || string.IsNullOrEmpty(second))
+        {
+            return false;
+        }
+
+        // F126: path comparison is platform-specific (OrdinalIgnoreCase on Windows,
+        // Ordinal on Linux), never a blanket OrdinalIgnoreCase.
+        return string.Equals(
+            Path.GetFullPath(first),
+            Path.GetFullPath(second),
+            isWindows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     }
 
     private static bool IsReparsePointFile(string path)
@@ -231,7 +248,10 @@ internal static class SettingsBackupStore
                 file.Existed ? $"{file.FileName}.before" : null,
                 file.Target,
                 file.ResultExists)).ToArray(),
-            plan.ContentSignature);
+            plan.ContentSignature,
+            plan.ContextFingerprint);
+
+
 
     private static OperationManifest? ReadManifest(string directory)
     {
@@ -271,7 +291,8 @@ internal sealed record OperationManifest(
     string? InstallDirectory,
     IReadOnlyList<SettingChangePreview> Changes,
     IReadOnlyList<ManifestFile> Files,
-    string? ContentSignature = null);
+    string? ContentSignature = null,
+    string? ContextFingerprint = null);
 
 internal sealed record ManifestFile(
     string FileName,

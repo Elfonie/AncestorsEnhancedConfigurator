@@ -14,4 +14,6 @@ internal interface IReadOnlyFileSystem
 
     IReadOnlyList<ReadOnlyFileMetadata> EnumerateFiles(string directoryPath, string searchPattern);
 
+    IReadOnlyList<string> EnumerateDirectories(string directoryPath);
+
 }

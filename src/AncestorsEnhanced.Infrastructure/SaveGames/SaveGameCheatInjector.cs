@@ -36,18 +36,17 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
         var actual = new Dictionary<CheatTargetSpec, int>();
         int modified = ApplyToTree(root, targets, work, [], ranges, actual);
 
-        // Each target must not match more nodes than it is authorised to (F027):
-        // exceeding the cap is evidence of an accidental double assignment. A target
-        // that is simply absent (unverified real-world path) is left untouched, and
-        // the modified==0 check below then fails closed.
+        // Every production target is required.  A missing target is just as unsafe
+        // as a duplicate: accepting either case would publish a partially modified
+        // save whose real schema has not been established (F027).
         foreach (CheatTargetSpec spec in targets)
         {
             int count = actual.TryGetValue(spec, out int found) ? found : 0;
-            if (count > spec.ExpectedMatchCount)
+            if (count != spec.ExpectedMatchCount)
             {
                 return new CheatInjectionResult(
                     false,
-                    $"The target matched {count} node(s), but at most {spec.ExpectedMatchCount} were expected.");
+                    $"The target matched {count} node(s), but exactly {spec.ExpectedMatchCount} were required.");
             }
         }
 

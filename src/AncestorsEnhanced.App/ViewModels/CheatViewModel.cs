@@ -160,6 +160,11 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             string slot = (SelectedSlot?.Number ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
             result = await Task.Run(() => _service.Apply(kind, slot));
         }
+        catch (Exception exception)
+        {
+            SetStatus($"Could not apply cheat: {exception.Message}", "#E04D42");
+            return;
+        }
         finally
         {
             IsBusy = false;

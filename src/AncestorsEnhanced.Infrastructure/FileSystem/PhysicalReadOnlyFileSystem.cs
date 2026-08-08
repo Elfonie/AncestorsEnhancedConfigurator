@@ -31,4 +31,9 @@ internal sealed class PhysicalReadOnlyFileSystem : IReadOnlyFileSystem
             .ToArray();
     }
 
+    public IReadOnlyList<string> EnumerateDirectories(string directoryPath) => Directory
+        .EnumerateDirectories(directoryPath, "*", SearchOption.TopDirectoryOnly)
+        .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
 }

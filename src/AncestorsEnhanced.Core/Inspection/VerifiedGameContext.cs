@@ -37,9 +37,17 @@ public sealed record VerifiedGameContext(
         string? contentSignature,
         bool contentSignatureReadFailed)
     {
-        using var sha = SHA256.Create();
-        void Write(string value) => sha.TransformBlock(
-            Encoding.UTF8.GetBytes(value ?? string.Empty), 0, (value ?? string.Empty).Length, null, 0);
+        // Hash the encoding of each field and nothing else: AppendData hashes the exact
+        // UTF-8 bytes, avoiding the previous bug of hashing character count instead of
+        // byte count (F063-1a). Fields are separated by a delimiter that cannot appear
+        // inside a normal path, and path fields are canonicalised first.
+        using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        void Write(string value)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
+            sha.AppendData(bytes);
+        }
+
         Write(Path.GetFullPath(installDirectory));
         Write("\u001f");
         Write(Path.GetFullPath(userDataDirectory));
@@ -61,8 +69,7 @@ public sealed record VerifiedGameContext(
         Write(contentSignature ?? string.Empty);
         Write("\u001f");
         Write(contentSignatureReadFailed ? "failed" : "ok");
-        sha.TransformFinalBlock([], 0, 0);
-        return Convert.ToHexString(sha.Hash!);
+        return Convert.ToHexString(sha.GetHashAndReset());
     }
 
     /// <summary>
@@ -111,6 +118,8 @@ public sealed record VerifiedGameContext(
             && Store == installation.Store
             && Host == installation.Host
             && CompatibilityLayer == installation.CompatibilityLayer
+            // A build ID that was present must not silently disappear or change (F063-1b).
+            && string.Equals(BuildId ?? string.Empty, installation.BuildId ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(ContentSignature ?? string.Empty, installation.ContentSignature ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(
                 Path.GetFullPath(LibraryRoot ?? string.Empty),

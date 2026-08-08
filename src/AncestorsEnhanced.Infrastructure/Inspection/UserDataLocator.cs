@@ -28,8 +28,7 @@ internal sealed class UserDataLocator(
                 // Only accept a user whose Ancestors Saved directory actually exists.
                 // If several wine users own a save, the location is ambiguous and must
                 // not be guessed (F113).
-                string[] candidates = Directory.EnumerateDirectories(users)
-                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                string[] candidates = fileSystem.EnumerateDirectories(users)
                     .Select(path => Path.Combine(path, "AppData", "Local", "Ancestors", "Saved"))
                     .Where(fileSystem.DirectoryExists)
                     .ToArray();
@@ -74,6 +73,7 @@ internal sealed class UserDataLocator(
                 InspectionSeverity.Warning,
                 "userdata.not-found",
                 "Ancestors user data was not found. It is normally created after the game starts."));
+            return null;
         }
 
         return userDataDirectory;

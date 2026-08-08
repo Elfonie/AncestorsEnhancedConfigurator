@@ -175,6 +175,73 @@ public sealed class ReadOnlyAncestorsInspectorTests
         Assert.Equal(saved, snapshot.UserDataDirectory);
     }
 
+    [Fact]
+    public void InspectRejectsAmbiguousProtonUserData()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        CreateValidInstallation(steamRoot);
+        CreateProtonSaved(steamRoot, "userA");
+        CreateProtonSaved(steamRoot, "userB");
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(), new TestHostEnvironment([steamRoot], null, HostKind.Linux)).Inspect();
+
+        Assert.Null(snapshot.UserDataDirectory);
+        Assert.Contains(snapshot.Notices, notice => notice.Code == "userdata.ambiguous-proton-user");
+    }
+
+    [Fact]
+    public void InspectReturnsNoProtonUserDataWhenNoWineUserHasSaved()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        CreateValidInstallation(steamRoot);
+        Directory.CreateDirectory(Path.Combine(
+            steamRoot, "steamapps", "compatdata", "536270", "pfx", "drive_c", "users", "userA"));
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(), new TestHostEnvironment([steamRoot], null, HostKind.Linux)).Inspect();
+
+        Assert.Null(snapshot.UserDataDirectory);
+        Assert.Contains(snapshot.Notices, notice => notice.Code == "userdata.not-found");
+    }
+
+    [Fact]
+    public void InspectIgnoresWineUsersWithoutAncestorsSaved()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        CreateValidInstallation(steamRoot);
+        string saved = CreateProtonSaved(steamRoot, "userA");
+        Directory.CreateDirectory(Path.Combine(
+            steamRoot, "steamapps", "compatdata", "536270", "pfx", "drive_c", "users", "userB"));
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(), new TestHostEnvironment([steamRoot], null, HostKind.Linux)).Inspect();
+
+        Assert.Equal(saved, snapshot.UserDataDirectory);
+    }
+
+    [Fact]
+    public void InspectReturnsNoWindowsUserDataBeforeTheGameCreatesSaved()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        string localAppData = temporaryDirectory.CreateDirectory("Local");
+        CreateValidInstallation(steamRoot);
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(), new TestHostEnvironment(steamRoot, localAppData)).Inspect();
+
+        Assert.Null(snapshot.UserDataDirectory);
+        Assert.Contains(snapshot.Notices, notice => notice.Code == "userdata.not-found");
+    }
+
+    private static string CreateProtonSaved(string steamRoot, string user) => Directory.CreateDirectory(Path.Combine(
+        steamRoot, "steamapps", "compatdata", "536270", "pfx", "drive_c", "users", user,
+        "AppData", "Local", "Ancestors", "Saved")).FullName;
+
     private static void CreateSteamLibraryList(string steamRoot, string libraryRoot)
     {
         string steamApps = Directory.CreateDirectory(Path.Combine(steamRoot, "steamapps")).FullName;
