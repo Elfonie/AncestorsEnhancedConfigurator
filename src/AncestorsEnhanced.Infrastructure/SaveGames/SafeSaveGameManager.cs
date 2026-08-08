@@ -14,6 +14,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     private readonly SaveGameCheckpointStore _store;
     private readonly string _userDataDirectory;
     private readonly Func<bool>? _revalidate;
+    private readonly Action? _beforeRestoreCommit;
 
     public SafeSaveGameManager(
         VerifiedGameContext context,
@@ -46,13 +47,15 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         Func<DateTimeOffset> utcNow,
         Func<bool> isGameRunning,
         SaveGameManagerOptions options,
-        Func<bool>? revalidate = null)
+        Func<bool>? revalidate = null,
+        Action? beforeRestoreCommit = null)
     {
         _userDataDirectory = userDataDirectory;
         _utcNow = utcNow;
         _isGameRunning = isGameRunning;
         _store = new SaveGameCheckpointStore(utcNow, options.MaxCheckpointsPerSlot);
         _revalidate = revalidate;
+        _beforeRestoreCommit = beforeRestoreCommit;
     }
 
     private SaveGameOperationResult? RevalidateFailure(string action)
@@ -117,10 +120,26 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             // checkpoint while the newest checkpoint is the automatic PreRestore copy.
             // Dedupe against every valid checkpoint so reconciliation cannot publish a
             // redundant AutoBackup of the restored content (F162).
-            if (latest.Any(checkpoint =>
-                    IsIdentical(content, SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpoint.Id))))
+            string liveHash = Sha256(content);
+            foreach (SaveGameCheckpoint checkpoint in latest)
             {
-                return new SaveGameOperationResult(true, $"Slot {slot} is unchanged; no checkpoint was created.", null);
+                if (!string.Equals(checkpoint.Sha256, liveHash, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (IsIdentical(content, SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpoint.Id)))
+                    {
+                        return new SaveGameOperationResult(true, $"Slot {slot} is unchanged; no checkpoint was created.", null);
+                    }
+                }
+                catch (Exception exception) when (IsExpectedException(exception))
+                {
+                    // A damaged historical checkpoint must not prevent a current save
+                    // from being protected (F008). Continue with other candidates.
+                }
             }
 
             string checkpointId = _store.Create(_userDataDirectory, slot, content, origin);
@@ -162,9 +181,12 @@ public sealed class SafeSaveGameManager : ISaveGameManager
 
             // Everything before WriteBytesAtomically is part of the "not committed"
             // phase: if any of it fails, the live save is still intact.
-            if (File.Exists(slotPath))
+            bool expectedExists = File.Exists(slotPath);
+            string? expectedSha256 = null;
+            if (expectedExists)
             {
                 byte[] current = ReadStableBounded(slotPath, 64L * 1024 * 1024);
+                expectedSha256 = Sha256(current);
                 if (!IsIdentical(current, checkpoint))
                 {
                     _store.Create(_userDataDirectory, slot, current, "PreRestore");
@@ -174,7 +196,16 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             // The atomic replace is the commit point. After it, the save has already
             // been changed, so a later failure must be reported as committed-with-warning
             // and never as "Nothing was loaded".
-            WriteBytesAtomically(slotPath, checkpoint);
+            // Re-check game process and the exact live state after the PreRestore
+            // checkpoint has been published. Neither Cloud nor another tool may win
+            // this window and be silently overwritten (lost-update Restore CAS).
+            _beforeRestoreCommit?.Invoke();
+            if (_isGameRunning())
+            {
+                return Failure("Close Ancestors before loading a save checkpoint.");
+            }
+
+            CompareAndReplace(slotPath, checkpoint, expectedSha256, expectedExists);
             try
             {
                 File.SetLastWriteTimeUtc(slotPath, _utcNow().UtcDateTime);

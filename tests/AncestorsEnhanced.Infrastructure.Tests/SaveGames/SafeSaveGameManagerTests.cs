@@ -134,6 +134,46 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.Single(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
     }
 
+    [Fact]
+    public void LoadRefusesToOverwriteALiveSaveChangedAfterPreRestore()
+    {
+        byte[] checkpointContent = SnappyBlockCodec.EncodeLiteral([1, 2, 3]);
+        byte[] liveContent = SnappyBlockCodec.EncodeLiteral([4, 5, 6]);
+        byte[] foreignContent = SnappyBlockCodec.EncodeLiteral([7, 8, 9]);
+        string userData = CreateUserDataWithSave(0, checkpointContent);
+        var creator = CreateManager(userData, gameRunning: false);
+        string checkpointId = creator.CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, liveContent);
+        var manager = new SafeSaveGameManager(
+            userData,
+            () => DateTimeOffset.UtcNow,
+            () => false,
+            new SaveGameManagerOptions(),
+            beforeRestoreCommit: () => File.WriteAllBytes(slotPath, foreignContent));
+
+        SaveGameOperationResult result = manager.LoadCheckpoint("0", checkpointId);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("changed after", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(foreignContent, File.ReadAllBytes(slotPath));
+    }
+
+    [Fact]
+    public void DamagedMatchingCheckpointDoesNotBlockANewBackup()
+    {
+        byte[] content = SnappyBlockCodec.EncodeLiteral([1, 2, 3]);
+        string userData = CreateUserDataWithSave(0, content);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string damaged = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        File.WriteAllBytes(SaveGamePaths.GetCheckpointPath(userData, 0, damaged), [0, 0, 0]);
+
+        SaveGameOperationResult result = manager.CreateCheckpoint("0");
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.NotEqual(damaged, result.CreatedCheckpointId);
+    }
+
 
     [Fact]
     public void DeleteCheckpointRemovesTheStoredCheckpoint()

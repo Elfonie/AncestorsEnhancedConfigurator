@@ -91,6 +91,19 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         Assert.True(File.Exists(SaveGamePaths.GetCheckpointPath(userData, 0, checkpointId)));
     }
 
+    [Fact]
+    public void TemporaryDirectoryWithAValidLookingManifestIsNeverListed()
+    {
+        string userData = CreateUserData();
+        string slotRoot = SaveGamePaths.GetSlotRoot(userData, 0);
+        string temp = Path.Combine(slotRoot, ".20260801-120000-000-aaaaaaaaaaaa.tmp");
+        Directory.CreateDirectory(temp);
+        File.WriteAllText(Path.Combine(temp, "checkpoint.json"),
+            "{\"createdAtUtc\":\"2026-08-01T12:00:00+00:00\",\"sizeBytes\":3,\"sha256\":\"00\",\"origin\":\"Manual\"}");
+
+        Assert.Empty(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
+    }
+
     private static readonly DateTimeOffset FixedTime = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
 
     private string CreateUserData()

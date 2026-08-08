@@ -20,6 +20,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     private readonly Dictionary<int, Task> _running = new();
     private readonly Dictionary<int, bool> _pending = new();
     private readonly Dictionary<int, DateTimeOffset> _lastBackupTimes = new();
+    private readonly Dictionary<int, int> _retryAttempts = new();
     private readonly Dictionary<int, int> _activeMutations = new();
     private TimeSpan _cooldown = TimeSpan.FromMinutes(5);
     private CancellationTokenSource _stopCancellation = new();
@@ -121,6 +122,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             _stopCancellation.Cancel();
             _pending.Clear();
             _lastBackupTimes.Clear();
+            _retryAttempts.Clear();
             _activeMutations.Clear();
             snapshot = new Dictionary<int, Task>(_running);
         }
@@ -316,6 +318,22 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     RecordBackupTime(slot);
                     CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
                 }
+                else if (!result.Succeeded)
+                {
+                    TimeSpan? retryDelay = RegisterFailure(slot, result.Message);
+                    if (retryDelay is not null)
+                    {
+                        await Task.Delay(retryDelay.Value, _stopCancellation.Token).ConfigureAwait(false);
+                        continue;
+                    }
+                }
+                else
+                {
+                    lock (_gate)
+                    {
+                        _retryAttempts.Remove(slot);
+                    }
+                }
             }
         }
         catch (OperationCanceledException) when (_stopCancellation.IsCancellationRequested)
@@ -337,9 +355,47 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             lock (_gate)
             {
                 _running.Remove(slot);
+                // The final empty check and worker removal must be one state
+                // transition. An event that arrives during worker shutdown either sees
+                // this worker or causes its replacement, never a stranded dirty slot.
+                if (!_stopped && _pending.TryGetValue(slot, out bool dirty) && dirty)
+                {
+                    EnsureWorkerLocked(slot);
+                }
             }
         }
     }
+
+    private TimeSpan? RegisterFailure(int slot, string message)
+    {
+        lock (_gate)
+        {
+            if (!IsTransientBackupFailure(message))
+            {
+                _retryAttempts.Remove(slot);
+                WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot}: {message}");
+                return null;
+            }
+
+            int attempt = _retryAttempts.TryGetValue(slot, out int previous) ? previous + 1 : 1;
+            _retryAttempts[slot] = attempt;
+            if (attempt > 3)
+            {
+                _retryAttempts.Remove(slot);
+                WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot} after {attempt - 1} retries: {message}");
+                return null;
+            }
+
+            _pending[slot] = true;
+            return TimeSpan.FromMilliseconds(250 * attempt);
+        }
+    }
+
+    private static bool IsTransientBackupFailure(string message) =>
+        message.Contains("being written", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("currently being written", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("corrupt; skipped backup", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("could not be read as a stable version", StringComparison.OrdinalIgnoreCase);
 
     private void EndSlotMutation(int slot)
     {

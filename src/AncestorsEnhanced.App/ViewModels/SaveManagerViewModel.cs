@@ -14,6 +14,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private bool _loadingSettings;
     private readonly SemaphoreSlim _settingsWriteLock = new(1, 1);
     private Task? _pendingSettingsWrite;
+    private int _settingsVersion;
 
     private const string ToolSettingsFileName = "AncestorsEnhanced_ToolSettings.json";
     private static readonly System.Text.Json.JsonSerializerOptions JsonSettings =
@@ -354,11 +355,24 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
 
         string path = ToolSettingsPath();
-        _pendingSettingsWrite = Task.Run(async () =>
+        int version = Interlocked.Increment(ref _settingsVersion);
+        _pendingSettingsWrite = WriteSettingsAsync(path, settings, version);
+    }
+
+    private async Task WriteSettingsAsync(string path, ToolSettings settings, int version)
+    {
+        try
         {
             await _settingsWriteLock.WaitAsync();
             try
             {
+                // A delayed older task must never overwrite a newer snapshot. The
+                // latest queued task remains the one Dispose waits for (F011).
+                if (version != Volatile.Read(ref _settingsVersion))
+                {
+                    return;
+                }
+
                 byte[] payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(settings, JsonSettings);
                 // Atomic replace: write a temp file then move it over the target,
                 // so a crash never leaves a truncated settings file.
@@ -375,7 +389,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             {
                 _settingsWriteLock.Release();
             }
-        });
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ReportStatus("Could not save tool settings: " + exception.Message, "#E04D42");
+        }
     }
 
     private void ReportStatus(string message, string accent)

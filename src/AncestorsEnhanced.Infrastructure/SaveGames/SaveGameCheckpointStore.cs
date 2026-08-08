@@ -76,7 +76,17 @@ internal sealed class SaveGameCheckpointStore(
             throw;
         }
 
-        EnforceCap(slotRoot, maxCheckpointsPerSlot);
+        // Publication above is the commit point. Retention is best-effort and must
+        // never turn a successfully published checkpoint into a reported failure.
+        try
+        {
+            EnforceCap(slotRoot, maxCheckpointsPerSlot);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or
+            System.Security.SecurityException)
+        {
+        }
         return checkpointId;
     }
 
@@ -110,7 +120,7 @@ internal sealed class SaveGameCheckpointStore(
 
         return Directory
             .EnumerateDirectories(slotRoot)
-            .Where(path => IsNormalDirectory(path))
+            .Where(path => IsFinalCheckpointDirectory(path))
             .Select(path =>
             {
                 CheckpointManifest? manifest = ReadManifest(path);
@@ -134,7 +144,7 @@ internal sealed class SaveGameCheckpointStore(
     {
         List<(string Path, DateTimeOffset CreatedAtUtc)> checkpoints = Directory
             .EnumerateDirectories(slotRoot)
-            .Where(IsNormalDirectory)
+            .Where(IsFinalCheckpointDirectory)
             .Select(path => (Path: path, Manifest: ReadManifest(path)))
             .Where(entry => entry.Manifest is not null)
             .Select(entry => (entry.Path, entry.Manifest!.CreatedAtUtc))
@@ -150,6 +160,24 @@ internal sealed class SaveGameCheckpointStore(
 
     private static bool IsNormalDirectory(string path) =>
         Directory.Exists(path) && !File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
+
+    private static bool IsFinalCheckpointDirectory(string path)
+    {
+        if (!IsNormalDirectory(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            SaveGamePaths.ValidateCheckpointId(Path.GetFileName(path));
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
 
     private static void TryDeleteDirectory(string path)
     {
