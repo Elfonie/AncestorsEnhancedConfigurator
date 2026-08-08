@@ -314,24 +314,43 @@ internal sealed class SettingsTransaction(
                     installDirectory,
                     file.FileName,
                     file.Target);
+
+                string? currentHash = File.Exists(targetPath)
+                    ? Sha256(File.ReadAllBytes(targetPath))
+                    : null;
+
+                // If the file is already back in its Result state (the state before this
+                // undo ran), there is nothing to fold back. Only the Original state that
+                // this undo wrote may be restored; a foreign concurrent change is never
+                // overwritten (F067).
+                bool inResult = file.ResultExists
+                    ? currentHash is not null && string.Equals(currentHash, file.ResultSha256, StringComparison.Ordinal)
+                    : currentHash is null;
+                if (inResult)
+                {
+                    continue;
+                }
+
+                bool inOriginal = file.Existed
+                    ? currentHash is not null && string.Equals(currentHash, file.OriginalSha256, StringComparison.Ordinal)
+                    : currentHash is null;
+                if (!inOriginal)
+                {
+                    failures.Add(file.FileName);
+                    continue;
+                }
+
                 if (file.ResultExists)
                 {
-                    bool valid = File.Exists(targetPath) && string.Equals(
-                        Sha256(File.ReadAllBytes(targetPath)),
-                        Sha256(current),
-                        StringComparison.Ordinal);
-                    if (!valid)
-                    {
-                        failures.Add(file.FileName);
-                    }
+                    CompareAndReplace(
+                        targetPath,
+                        current,
+                        file.Existed ? file.OriginalSha256 : null,
+                        file.Existed);
                 }
-                else
+                else if (file.Existed)
                 {
-                    File.Delete(targetPath);
-                    if (File.Exists(targetPath))
-                    {
-                        failures.Add(file.FileName);
-                    }
+                    CompareAndDelete(targetPath, file.OriginalSha256);
                 }
             }
             catch (Exception exception) when (IsExpectedWriteException(exception))
@@ -393,6 +412,11 @@ internal sealed class SettingsTransaction(
     /// Restores every touched file best-effort. Returns the names of files that could
     /// not be restored (empty list means the rollback was complete).
     /// </summary>
+    /// <summary>
+    /// Restores every already-applied file back to its original state, but only when the
+    /// current file still matches the result state this apply wrote. A foreign concurrent
+    /// change is never overwritten; such files are reported as failures (F066).
+    /// </summary>
     private static List<string> RestoreFilesBestEffort(IEnumerable<ConfigurationFileChangePlan> files)
     {
         var failures = new List<string>();
@@ -400,25 +424,14 @@ internal sealed class SettingsTransaction(
         {
             try
             {
+                string resultHash = Sha256(file.UpdatedContent);
                 if (file.Existed)
                 {
-                    WriteBytesAtomically(file.FullPath, file.OriginalContent);
-                    bool restored = File.Exists(file.FullPath) && string.Equals(
-                        Sha256(File.ReadAllBytes(file.FullPath)),
-                        file.OriginalSha256,
-                        StringComparison.Ordinal);
-                    if (!restored)
-                    {
-                        failures.Add(file.FileName);
-                    }
+                    CompareAndReplace(file.FullPath, file.OriginalContent, resultHash, expectedExists: true);
                 }
                 else
                 {
-                    File.Delete(file.FullPath);
-                    if (File.Exists(file.FullPath))
-                    {
-                        failures.Add(file.FileName);
-                    }
+                    CompareAndDelete(file.FullPath, resultHash);
                 }
             }
             catch (Exception exception) when (IsExpectedWriteException(exception))

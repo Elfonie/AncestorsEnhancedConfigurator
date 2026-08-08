@@ -284,7 +284,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
     }
 
     private static byte[] ReadSaveWithRetries(string slotPath) =>
-        AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.ReadStableBounded(slotPath);
+        AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.ReadStableBounded(slotPath, 64L * 1024 * 1024);
     private static bool IsExpectedException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or
             ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException;

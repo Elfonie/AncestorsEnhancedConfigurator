@@ -58,6 +58,19 @@ public sealed class EditableSettingsCatalogTests
             out _));
     }
 
+    [Fact]
+    public void ChoiceLabelsUseWellFormedUtf8WithoutMojibake()
+    {
+        // Regression guard for NEW-IMP-UI-01: the "x" choice labels must use the real
+        // multiplication sign (U+00D7) and never the double-encoded mojibake sequence.
+        SettingEditSnapshot editor = Assert.IsType<SettingEditSnapshot>(
+            EditableSettingsCatalog.Create(CreateSnapshot(), "r.MaxAnisotropy", null));
+
+        string[] labels = editor.Choices!.Select(choice => choice.Label).ToArray();
+        Assert.Contains(labels, label => label.Contains('\u00d7', StringComparison.Ordinal));
+        Assert.DoesNotContain(labels, label => label.Contains('\u00c3', StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(StoreKind.EpicGames, HostKind.Windows, CompatibilityLayerKind.None)]
     [InlineData(StoreKind.Gog, HostKind.Windows, CompatibilityLayerKind.None)]

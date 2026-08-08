@@ -260,8 +260,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     private async Task PollGameRunningLoopAsync(CancellationToken token)
     {
-        // Rotiert vollstÃ¤ndig losgelÃ¶st vom UI-Thread; der UI-Thread wird nur bei
-        // einer StatusÃ¤nderung benachrichtigt.
+        // Rotiert vollständig losgelöst vom UI-Thread; der UI-Thread wird nur bei
+        // einer Statusänderung benachrichtigt.
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));

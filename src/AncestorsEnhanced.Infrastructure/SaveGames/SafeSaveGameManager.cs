@@ -121,7 +121,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             // phase: if any of it fails, the live save is still intact.
             if (File.Exists(slotPath))
             {
-                byte[] current = File.ReadAllBytes(slotPath);
+                byte[] current = ReadStableBounded(slotPath);
                 if (!IsIdentical(current, checkpoint))
                 {
                     _store.Create(_userDataDirectory, slot, current, "PreRestore");
@@ -249,7 +249,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     }
 
     private static byte[] ReadSaveWithRetries(string slotPath) =>
-        ReadStableBounded(slotPath);
+        ReadStableBounded(slotPath, 64L * 1024 * 1024);
     private static bool IsExpectedException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or
             ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException;

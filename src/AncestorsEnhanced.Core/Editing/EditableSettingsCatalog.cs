@@ -39,10 +39,10 @@ public static class EditableSettingsCatalog
             ["r.MaxAnisotropy"] = Choice(
                 "16",
                 ("0", "Game default"),
-                ("2", "2Ã—"),
-                ("4", "4Ã—"),
-                ("8", "8Ã—"),
-                ("16", "16Ã—")),
+                ("2", "2×"),
+                ("4", "4×"),
+                ("8", "8×"),
+                ("16", "16×")),
             ["r.Streaming.PoolSize"] = Number(4096, 256, 16384, 256),
             ["r.Streaming.MipBias"] = Number(0, -4, 16, 0.25m),
             ["r.Streaming.Boost"] = Number(1, 0.1m, 4, 0.1m),
@@ -435,7 +435,7 @@ public static class EditableSettingsCatalog
         [.. SystemGraphicsOptionCatalog.Resolutions
             .Select(value => new SettingChoice(
                 value,
-                value.Replace("x", " Ã— ", StringComparison.Ordinal)))];
+                value.Replace("x", " × ", StringComparison.Ordinal)))];
 
     private static string Invariant(decimal value) =>
         value.ToString(System.Globalization.CultureInfo.InvariantCulture);

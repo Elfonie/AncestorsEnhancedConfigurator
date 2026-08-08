@@ -225,6 +225,8 @@ public sealed class IniCheatService
         string currentSection = string.Empty;
         var kept = new List<string>(lines.Length);
         bool removedAny = false;
+        bool handled = false;
+
 
         foreach (string sourceLine in lines)
         {
@@ -251,6 +253,15 @@ public sealed class IniCheatService
                 kept.Add(sourceLine);
                 continue;
             }
+
+            // Only the first (tool-owned) matching entry is edited; later
+            // matching entries are preserved unchanged (F075).
+            if (handled)
+            {
+                kept.Add(sourceLine);
+                continue;
+            }
+            handled = true;
 
             string[] tokens = ownedValue!.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries)
                 .Select(token => token.Trim())

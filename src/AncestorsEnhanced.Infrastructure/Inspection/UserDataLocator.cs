@@ -25,16 +25,26 @@ internal sealed class UserDataLocator(
                 "users");
             if (fileSystem.DirectoryExists(users))
             {
-                // Prefer the deterministic first folder order and only accept a user
-                // whose Ancestors Saved directory actually exists; never guess between
-                // several wine users (F113).
-                string? protonData = Directory.EnumerateDirectories(users)
+                // Only accept a user whose Ancestors Saved directory actually exists.
+                // If several wine users own a save, the location is ambiguous and must
+                // not be guessed (F113).
+                string[] candidates = Directory.EnumerateDirectories(users)
                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                     .Select(path => Path.Combine(path, "AppData", "Local", "Ancestors", "Saved"))
-                    .FirstOrDefault(fileSystem.DirectoryExists);
-                if (protonData is not null)
+                    .Where(fileSystem.DirectoryExists)
+                    .ToArray();
+                if (candidates.Length == 1)
                 {
-                    return protonData;
+                    return candidates[0];
+                }
+
+                if (candidates.Length > 1)
+                {
+                    notices.Add(new InspectionNotice(
+                        InspectionSeverity.Warning,
+                        "userdata.ambiguous-proton-user",
+                        "Multiple Wine users with Ancestors saves were detected. Resolve the user before making changes."));
+                    return null;
                 }
             }
 

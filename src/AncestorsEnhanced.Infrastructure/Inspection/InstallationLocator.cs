@@ -54,11 +54,14 @@ internal sealed class InstallationLocator
 
         if (unique.Count > 1)
         {
-            GameInstallationSnapshot selected = unique[0];
+            // Multiple distinct installations are ambiguous: never pick and write to one
+            // of them automatically. Fail closed so the user resolves the conflict
+            // instead of guessing (F037).
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "game.multiple-installations",
-                $"Multiple Ancestors installations were detected. Using {selected.Store} at {selected.InstallDirectory}."));
+                "Multiple distinct Ancestors installations were detected. Resolve the duplicates before making changes."));
+            return null;
         }
 
         return unique[0];
