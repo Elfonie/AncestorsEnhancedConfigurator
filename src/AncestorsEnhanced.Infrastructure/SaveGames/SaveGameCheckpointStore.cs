@@ -120,21 +120,7 @@ internal sealed class SaveGameCheckpointStore(
 
         return Directory
             .EnumerateDirectories(slotRoot)
-            .Where(path => IsFinalCheckpointDirectory(path))
-            .Select(path =>
-            {
-                CheckpointManifest? manifest = ReadManifest(path);
-                string checkpointId = Path.GetFileName(path);
-                return manifest is null
-                    ? null
-                    : new SaveGameCheckpoint(
-                        checkpointId,
-                        manifest.CreatedAtUtc,
-                        slotNumber.ToString(CultureInfo.InvariantCulture),
-                        manifest.SizeBytes,
-                        manifest.Sha256,
-                        manifest.Origin);
-            })
+            .Select(path => TryReadCheckpoint(path, slotNumber))
             .OfType<SaveGameCheckpoint>()
             .OrderByDescending(checkpoint => checkpoint.CreatedAtUtc)
             .ToArray();
@@ -144,10 +130,9 @@ internal sealed class SaveGameCheckpointStore(
     {
         List<(string Path, DateTimeOffset CreatedAtUtc)> checkpoints = Directory
             .EnumerateDirectories(slotRoot)
-            .Where(IsFinalCheckpointDirectory)
-            .Select(path => (Path: path, Manifest: ReadManifest(path)))
-            .Where(entry => entry.Manifest is not null)
-            .Select(entry => (entry.Path, entry.Manifest!.CreatedAtUtc))
+            .Select(path => TryReadCheckpoint(path, slotNumber: 0))
+            .OfType<SaveGameCheckpoint>()
+            .Select(checkpoint => (Path: Path.Combine(slotRoot, checkpoint.Id), checkpoint.CreatedAtUtc))
             .OrderBy(entry => entry.CreatedAtUtc)
             .ToList();
 
@@ -158,26 +143,53 @@ internal sealed class SaveGameCheckpointStore(
         }
     }
 
+    private static SaveGameCheckpoint? TryReadCheckpoint(string path, int slotNumber)
+    {
+        try
+        {
+            if (!IsFinalCheckpointDirectory(path))
+            {
+                return null;
+            }
+
+            CheckpointManifest? manifest = ReadManifest(path);
+            return manifest is null
+                ? null
+                : new SaveGameCheckpoint(
+                    Path.GetFileName(path), manifest.CreatedAtUtc,
+                    slotNumber.ToString(CultureInfo.InvariantCulture), manifest.SizeBytes,
+                    manifest.Sha256, manifest.Origin);
+        }
+        catch (Exception exception) when (IsCandidateReadException(exception))
+        {
+            return null;
+        }
+    }
+
     private static bool IsNormalDirectory(string path) =>
         Directory.Exists(path) && !File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint);
 
     private static bool IsFinalCheckpointDirectory(string path)
     {
-        if (!IsNormalDirectory(path))
-        {
-            return false;
-        }
-
         try
         {
+            if (!IsNormalDirectory(path))
+            {
+                return false;
+            }
+
             SaveGamePaths.ValidateCheckpointId(Path.GetFileName(path));
             return true;
         }
-        catch (InvalidOperationException)
+        catch (Exception exception) when (IsCandidateReadException(exception))
         {
             return false;
         }
     }
+
+    private static bool IsCandidateReadException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or
+            InvalidOperationException or System.Security.SecurityException;
 
     private static void TryDeleteDirectory(string path)
     {
@@ -210,7 +222,9 @@ internal sealed class SaveGameCheckpointStore(
             return JsonSerializer.Deserialize<CheckpointManifest>(
                 File.ReadAllText(path, Encoding.UTF8));
         }
-        catch (JsonException)
+        catch (Exception exception) when (
+            exception is JsonException or IOException or UnauthorizedAccessException or NotSupportedException or
+                System.Security.SecurityException)
         {
             return null;
         }

@@ -40,6 +40,8 @@ public sealed class SaveGameCheatServiceTests : IDisposable
         SaveGameSchemaNode root = SaveGameSchemaAnalyzer.Parse(roundTripped);
         SaveGameSchemaNode arrayNode = FindNode(root, "NeuronalEnergySources")
             ?? throw new InvalidDataException("The stored checkpoint lost the NeuronalEnergySources array.");
+        SaveGameSchemaNode poolNode = FindNode(root, "AvailableNeuronalEnergy")
+            ?? throw new InvalidDataException("The stored checkpoint lost the AvailableNeuronalEnergy pool.");
         Assert.Equal("ArrayProperty", arrayNode.Type);
         Assert.Equal("FloatProperty", arrayNode.ElementType);
         // 4 (count header) + 3 * 4 (float elements).
@@ -48,13 +50,10 @@ public sealed class SaveGameCheatServiceTests : IDisposable
         int count = BinaryPrimitives.ReadInt32LittleEndian(
             roundTripped.AsSpan(arrayNode.ValueOffset, 4));
         Assert.Equal(3, count);
-        for (int element = 0; element < count; element++)
-        {
-            float value = BitConverter.Int32BitsToSingle(
-                BinaryPrimitives.ReadInt32LittleEndian(
-                    roundTripped.AsSpan(arrayNode.ValueOffset + 4 + element * 4, 4)));
-            Assert.Equal(999_999.0f, value);
-        }
+        Assert.Equal(0.5f, ReadFloat(roundTripped, arrayNode.ValueOffset + 4));
+        Assert.Equal(0.6f, ReadFloat(roundTripped, arrayNode.ValueOffset + 8));
+        Assert.Equal(0.7f, ReadFloat(roundTripped, arrayNode.ValueOffset + 12));
+        Assert.Equal(1000.0f, ReadFloat(roundTripped, poolNode.ValueOffset));
     }
 
     [Fact]
@@ -118,6 +117,7 @@ public sealed class SaveGameCheatServiceTests : IDisposable
             stream.Write(value);
         }
 
+        stream.Write(UnrealTaggedProperties.EncodeFloat("AvailableNeuronalEnergy", 0.02f));
         stream.Write(UnrealTaggedProperties.EncodeTerminator());
         byte[] rpgBody = stream.ToArray();
         using var rpg = new MemoryStream();
@@ -125,6 +125,9 @@ public sealed class SaveGameCheatServiceTests : IDisposable
         rpg.Write(UnrealTaggedProperties.EncodeTerminator());
         return rpg.ToArray();
     }
+
+    private static float ReadFloat(byte[] data, int offset) => BitConverter.Int32BitsToSingle(
+        BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset, sizeof(float))));
 
     public void Dispose()
     {

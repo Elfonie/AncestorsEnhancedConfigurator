@@ -16,7 +16,9 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         SaveGameSlotSnapshot slot,
         Func<Task> create,
         Func<SaveGameCheckpoint, Func<Task>> loadCheckpoint,
-        Func<SaveGameCheckpoint, Func<Task>> deleteCheckpoint)
+        Func<SaveGameCheckpoint, Func<Task>> deleteCheckpoint,
+        Func<bool>? canRestore = null,
+        bool showAllCheckpoints = false)
     {
         _exists = slot.Exists;
         SlotNumber = slot.SlotNumber;
@@ -31,12 +33,14 @@ public partial class SaveGameSlotViewModel : ViewModelBase
             ? "1 checkpoint"
             : string.Create(CultureInfo.CurrentCulture, $"{slot.Checkpoints.Count} checkpoints");
         _create = create;
+        _showAllCheckpoints = showAllCheckpoints;
 
         Checkpoints = slot.Checkpoints
             .Select(checkpoint => new SaveGameCheckpointViewModel(
                 checkpoint,
                 loadCheckpoint(checkpoint),
-                deleteCheckpoint(checkpoint)))
+                deleteCheckpoint(checkpoint),
+                canRestore ?? (() => true)))
             .ToArray();
         UpdateVisibleCheckpoints();
     }
@@ -66,6 +70,8 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     public bool HasExpandedCheckpoints =>
         _showAllCheckpoints && Checkpoints.Count > DefaultVisibleCheckpoints;
+
+    public bool IsShowingAllCheckpoints => _showAllCheckpoints;
     public int HiddenCheckpointCount =>
         Math.Max(0, Checkpoints.Count - DefaultVisibleCheckpoints);
 
@@ -100,5 +106,6 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         OnPropertyChanged(nameof(HiddenCheckpointCount));
         OnPropertyChanged(nameof(ShowAllLabel));
         OnPropertyChanged(nameof(HasExpandedCheckpoints));
+        OnPropertyChanged(nameof(IsShowingAllCheckpoints));
     }
 }

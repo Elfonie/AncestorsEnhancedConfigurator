@@ -9,11 +9,13 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
 {
     private readonly Func<Task> _load;
     private readonly Func<Task> _delete;
+    private readonly Func<bool> _canRestore;
 
     public SaveGameCheckpointViewModel(
         SaveGameCheckpoint checkpoint,
         Func<Task> load,
-        Func<Task> delete)
+        Func<Task> delete,
+        Func<bool> canRestore)
     {
         Id = checkpoint.Id;
         SlotNumber = checkpoint.SlotNumber;
@@ -22,6 +24,7 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         OriginLabel = FormatOrigin(checkpoint.Origin);
         _load = load;
         _delete = delete;
+        _canRestore = canRestore;
     }
 
     public string Id { get; }
@@ -33,6 +36,8 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     public string SizeLabel { get; }
 
     public string OriginLabel { get; }
+
+    public bool CanRestore => _canRestore();
 
     [ObservableProperty]
     public partial bool IsDeleteConfirmVisible { get; set; }
@@ -53,6 +58,11 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     [RelayCommand]
     private void OpenRestoreConfirm()
     {
+        if (!CanRestore)
+        {
+            return;
+        }
+
         IsRestoreConfirmVisible = true;
         IsDeleteConfirmVisible = false;
     }
@@ -63,8 +73,23 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     [RelayCommand]
     private async Task LoadAsync()
     {
+        if (!CanRestore)
+        {
+            return;
+        }
+
         IsRestoreConfirmVisible = false;
         await _load();
+    }
+
+    public void RefreshRestoreAvailability()
+    {
+        if (!CanRestore)
+        {
+            IsRestoreConfirmVisible = false;
+        }
+
+        OnPropertyChanged(nameof(CanRestore));
     }
 
     [RelayCommand]

@@ -14,7 +14,7 @@ namespace AncestorsEnhanced.Infrastructure.SaveGames;
 /// </summary>
 public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 {
-    private readonly SafeSaveGameManager _manager;
+    private readonly Func<int, SaveGameOperationResult> _createCheckpoint;
     private readonly string _userDataDirectory;
     private readonly Lock _gate = new();
     private readonly Dictionary<int, Task> _running = new();
@@ -36,7 +36,15 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     public SaveGameWatchdog(string userDataDirectory, Func<bool>? revalidate = null)
     {
         _userDataDirectory = userDataDirectory;
-        _manager = new SafeSaveGameManager(userDataDirectory, null, revalidate);
+        var manager = new SafeSaveGameManager(userDataDirectory, null, revalidate);
+        _createCheckpoint = slot => manager.CreateCheckpoint(
+            slot.ToString(CultureInfo.InvariantCulture), "AutoBackup");
+    }
+
+    internal SaveGameWatchdog(string userDataDirectory, Func<int, SaveGameOperationResult> createCheckpoint)
+    {
+        _userDataDirectory = userDataDirectory;
+        _createCheckpoint = createCheckpoint ?? throw new ArgumentNullException(nameof(createCheckpoint));
     }
 
     public event EventHandler<string>? CheckpointCreated;
@@ -311,12 +319,21 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     continue;
                 }
 
-                SaveGameOperationResult result = _manager.CreateCheckpoint(
-                    slot.ToString(CultureInfo.InvariantCulture), "AutoBackup");
-                if (result.Succeeded && result.CreatedCheckpointId is not null)
+                SaveGameOperationResult result = _createCheckpoint(slot);
+                if (result.Succeeded)
                 {
-                    RecordBackupTime(slot);
-                    CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
+                    lock (_gate)
+                    {
+                        // Retry budget is per contiguous failure episode, not a
+                        // lifetime counter for this save slot.
+                        _retryAttempts.Remove(slot);
+                    }
+
+                    if (result.CreatedCheckpointId is not null)
+                    {
+                        RecordBackupTime(slot);
+                        CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
+                    }
                 }
                 else if (!result.Succeeded)
                 {
@@ -325,13 +342,6 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     {
                         await Task.Delay(retryDelay.Value, _stopCancellation.Token).ConfigureAwait(false);
                         continue;
-                    }
-                }
-                else
-                {
-                    lock (_gate)
-                    {
-                        _retryAttempts.Remove(slot);
                     }
                 }
             }
@@ -344,11 +354,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             exception is IOException or UnauthorizedAccessException or InvalidOperationException or
                 ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException)
         {
-            WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot}: {exception.Message}");
+            WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot + 1}: {exception.Message}");
         }
         catch (Exception exception)
         {
-            WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot}: {exception.Message}");
+            WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot + 1}: {exception.Message}");
         }
         finally
         {
@@ -373,7 +383,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             if (!IsTransientBackupFailure(message))
             {
                 _retryAttempts.Remove(slot);
-                WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot}: {message}");
+                WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot + 1}: {message}");
                 return null;
             }
 
@@ -382,7 +392,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             if (attempt > 3)
             {
                 _retryAttempts.Remove(slot);
-                WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot} after {attempt - 1} retries: {message}");
+                WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot + 1} after {attempt - 1} retries: {message}");
                 return null;
             }
 

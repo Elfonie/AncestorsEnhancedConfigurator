@@ -56,7 +56,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
             string slotPath = SaveGamePaths.GetSlotPath(_userDataDirectory, slot);
             if (!File.Exists(slotPath))
             {
-                return new CheatApplyResult(false, $"There is no save in slot {slot} to modify.");
+                return new CheatApplyResult(false, $"There is no save in slot {slot + 1} to modify.");
             }
 
             byte[] compressed = ReadSaveWithRetries(slotPath);
@@ -129,7 +129,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
             return new CheatApplyResult(
                 true,
-                $"{kind} applied and saved as a new checkpoint for slot {slot}.",
+                $"{kind} applied and saved as a new checkpoint for slot {slot + 1}.",
                 checkpointId);
         }
         catch (Exception exception) when (IsExpectedException(exception))

@@ -104,6 +104,23 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         Assert.Empty(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
     }
 
+    [Fact]
+    public void BrokenCheckpointCandidateDoesNotHideValidCheckpoints()
+    {
+        string userData = CreateUserData();
+        var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
+        string valid = store.Create(userData, 0, [1, 2, 3]);
+        string broken = Path.Combine(
+            SaveGamePaths.GetSlotRoot(userData, 0), "20260801-120001-000-bbbbbbbbbbbb");
+        Directory.CreateDirectory(broken);
+        File.WriteAllText(Path.Combine(broken, "checkpoint.json"), "{ not-json");
+
+        IReadOnlyList<SaveGameCheckpoint> checkpoints = SaveGameCheckpointStore.ListCheckpoints(userData, 0);
+
+        SaveGameCheckpoint only = Assert.Single(checkpoints);
+        Assert.Equal(valid, only.Id);
+    }
+
     private static readonly DateTimeOffset FixedTime = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
 
     private string CreateUserData()

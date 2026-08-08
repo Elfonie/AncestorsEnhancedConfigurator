@@ -33,6 +33,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
+    public partial bool IsGameRunning { get; set; }
+
+    [ObservableProperty]
     public partial bool IsWatchdogEnabled { get; set; }
 
     private int _cooldownMinutes = 5;
@@ -109,12 +112,19 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public void Refresh(SaveGamesSnapshot snapshot)
     {
+        var expandedSlots = Slots
+            .Where(slot => slot.IsShowingAllCheckpoints)
+            .Select(slot => slot.SlotNumber)
+            .ToHashSet(StringComparer.Ordinal);
+
         Slots = snapshot.Slots
             .Select(slot => new SaveGameSlotViewModel(
                 slot,
                 () => RunCreate(slot.SlotNumber),
                 checkpoint => () => RunLoad(slot.SlotNumber, checkpoint.Id),
-                checkpoint => () => RunDelete(slot.SlotNumber, checkpoint.Id)))
+                checkpoint => () => RunDelete(slot.SlotNumber, checkpoint.Id),
+                () => !IsGameRunning,
+                expandedSlots.Contains(slot.SlotNumber)))
             .ToArray();
 
 
@@ -122,6 +132,32 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         StatusAccent = HasSlots ? "#B4D941" : "#7A877A";
 
         NotifyState();
+    }
+
+    partial void OnIsGameRunningChanged(bool value)
+    {
+        foreach (SaveGameSlotViewModel slot in Slots)
+        {
+            foreach (SaveGameCheckpointViewModel checkpoint in slot.Checkpoints)
+            {
+                checkpoint.RefreshRestoreAvailability();
+            }
+        }
+    }
+
+    public async Task<bool> RefreshSilentlyAsync()
+    {
+        try
+        {
+            Refresh(await Task.Run(_manager.Inspect));
+            return true;
+        }
+        catch (Exception exception) when (IsExpectedException(exception))
+        {
+            StatusMessage = $"Could not reload save games: {exception.Message}";
+            StatusAccent = "#E04D42";
+            return false;
+        }
     }
 
     [RelayCommand]
@@ -439,7 +475,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            await RefreshAsync();
+            // An automatic checkpoint must not activate the full-window busy overlay.
+            SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
+            Refresh(snapshot);
         }
         catch (Exception exception)
         {

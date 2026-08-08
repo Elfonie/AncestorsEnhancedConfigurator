@@ -151,6 +151,32 @@ public sealed class SaveManagerViewModelTests
         Assert.Equal("#E04D42", viewModel.StatusAccent);
     }
 
+    [Fact]
+    public void RefreshPreservesExpandedCheckpointsAndDisablesRestoreWhileGameRuns()
+    {
+        SaveGameCheckpoint[] checkpoints = Enumerable.Range(1, 3)
+            .Select(index => new SaveGameCheckpoint(
+                $"cp-{index}", DateTimeOffset.UnixEpoch, "0", index, $"checkpoint-{index}", "Manual"))
+            .ToArray();
+        var snapshot = new SaveGamesSnapshot(
+            DateTimeOffset.UnixEpoch,
+            "user-data",
+            [new SaveGameSlotSnapshot("0", "Savegame0.sav", "path-0", true, 42, DateTimeOffset.UnixEpoch, checkpoints)]);
+        var viewModel = new SaveManagerViewModel(new FakeSaveGameManager(snapshot), "user-data", watchdog: null);
+
+        viewModel.Refresh(snapshot);
+        viewModel.Slots[0].ShowOlderCommand.Execute(null);
+        viewModel.IsGameRunning = true;
+
+        Assert.True(viewModel.Slots[0].HasExpandedCheckpoints);
+        Assert.All(viewModel.Slots[0].Checkpoints, checkpoint => Assert.False(checkpoint.CanRestore));
+
+        viewModel.Refresh(snapshot);
+
+        Assert.True(viewModel.Slots[0].HasExpandedCheckpoints);
+        Assert.All(viewModel.Slots[0].Checkpoints, checkpoint => Assert.False(checkpoint.CanRestore));
+    }
+
     private static string TempUserData() =>
         Path.Combine(Path.GetTempPath(), "aec-sm-" + Guid.NewGuid().ToString("N"));
 

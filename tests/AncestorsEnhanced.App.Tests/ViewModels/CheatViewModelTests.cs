@@ -29,8 +29,8 @@ public sealed class CheatViewModelTests
             Slot("4", saved: false),
         ]);
 
+        Assert.Single(viewModel.Slots);
         Assert.Equal("Slot 1 \u00b7 saved", viewModel.Slots[0].Label);
-        Assert.Equal("Slot 5 \u00b7 empty", viewModel.Slots[1].Label);
         Assert.All(viewModel.Slots, slot => Assert.DoesNotContain("Slot 01", slot.Label, StringComparison.Ordinal));
         Assert.All(viewModel.Slots, slot => Assert.DoesNotContain("Slot 11", slot.Label, StringComparison.Ordinal));
     }

@@ -15,11 +15,13 @@ The structural target model (`CheatTargetSpec`, F027) is implemented and tests c
 - more matches than authorised fail closed,
 - compress/decompress round trip, range containment and byte-for-byte diff confinement.
 
-The following targets are wired with test-verified (synthetic) schema paths:
+The following targets are wired with schema paths. The Max Neuronal Energy path was
+identified from an analysed real Ancestors save; the other cheat paths remain subject
+to the real-fixture and In-Game validation gate below.
 
 | Cheat | Property / path | Type |
 |-------|-----------------|------|
-| MaxNeuronalEnergy | `<save>/RPGData/NeuronalEnergySources` | FloatProperty array |
+| MaxNeuronalEnergy | `<save>/RPGData/AvailableNeuronalEnergy` | FloatProperty |
 | MaxNeeds | `<save>/PlayerControllerData/CharacterData/VitalityData/{RegimenStamina,Energy,Stamina}` | FloatProperty |
 | HealClan | `<save>/PlayerControllerData/CharacterData/{VitalityData/{Energy,Stamina},HealthData/Health}` | FloatProperty |
 

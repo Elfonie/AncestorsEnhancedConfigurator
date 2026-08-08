@@ -155,6 +155,40 @@ public sealed class SaveGameWatchdogTests : IDisposable
         }
     }
 
+    [Fact]
+    public void SuccessfulBackupResetsRetryBudgetForTheNextFailureEpisode()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        Queue<SaveGameOperationResult> outcomes = new(
+        [
+            new(false, "Slot is currently being written or corrupt; skipped backup."),
+            new(true, "Checkpoint saved.", "first"),
+            new(false, "Slot is currently being written or corrupt; skipped backup."),
+            new(false, "Slot is currently being written or corrupt; skipped backup."),
+            new(false, "Slot is currently being written or corrupt; skipped backup."),
+            new(true, "Checkpoint saved.", "second"),
+        ]);
+        var watchdog = new SaveGameWatchdog(userData, _ => outcomes.Dequeue()) { Cooldown = TimeSpan.Zero };
+        int successes = 0;
+        watchdog.CheckpointCreated += (_, _) => Interlocked.Increment(ref successes);
+        watchdog.Start();
+        try
+        {
+            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([4, 5, 6]));
+            WaitFor(() => Volatile.Read(ref successes) == 1);
+
+            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([7, 8, 9]));
+            WaitFor(() => Volatile.Read(ref successes) == 2);
+            Assert.Empty(outcomes);
+        }
+        finally
+        {
+            watchdog.StopWatch();
+        }
+    }
+
     private string CreateUserData()
     {
         string userData = Path.Combine(_temporaryDirectory, "Saved");

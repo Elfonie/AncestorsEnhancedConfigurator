@@ -536,7 +536,7 @@
        <Border Padding="14,10" CornerRadius="7" BorderThickness="1"
                   BorderBrush="{Binding SaveManager.StatusAccent}"
                   Background="{DynamicResource SurfaceBrush}"
-                  IsVisible="{Binding SaveManager.HasSlots}">
+                  IsVisible="True">
             <TextBlock Text="{Binding SaveManager.StatusMessage}" TextWrapping="Wrap" Foreground="{Binding SaveManager.StatusAccent}" />
           </Border>
 
@@ -575,8 +575,8 @@
                               </StackPanel>
 
                               <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                                <Button Command="{Binding OpenRestoreConfirmCommand}" Content="Restore" Padding="12,6" />
-                                <Button IsVisible="{Binding IsRestoreConfirmVisible}" Classes="PrimaryAction" Content="Confirm restore" Padding="12,6" Command="{Binding LoadCommand}" />
+                                <Button Command="{Binding OpenRestoreConfirmCommand}" IsEnabled="{Binding CanRestore}" Content="Restore" Padding="12,6" />
+                                <Button IsVisible="{Binding IsRestoreConfirmVisible}" IsEnabled="{Binding CanRestore}" Classes="PrimaryAction" Content="Confirm restore" Padding="12,6" Command="{Binding LoadCommand}" />
                                 <Button IsVisible="{Binding IsRestoreConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelRestoreConfirmCommand}" />
                               </StackPanel>
                             </Grid>
@@ -634,7 +634,7 @@
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <StackPanel Spacing="2">
               <TextBlock Text="Cheats" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
-              <TextBlock Text="Savegame cheats are stored as new checkpoints; INI tweaks are written to the game config directly. Your original save is never overwritten." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              <TextBlock Text="Cheats are created as separate checkpoints. Restoring one replaces the live save after creating a safety checkpoint; INI tweaks are written directly to the game config." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
 
@@ -744,7 +744,7 @@
                 <GradientStop Offset="1" Color="#0D1C16" />
               </LinearGradientBrush>
             </Border.Background>
-            <TextBlock Text="Cheats linked to your save files. New checkpoints only; your original saves are never overwritten." TextWrapping="Wrap" Foreground="#E8E4D9" />
+            <TextBlock Text="Cheats are created as separate checkpoints. Restoring one replaces the live save after creating a safety checkpoint." TextWrapping="Wrap" Foreground="#E8E4D9" />
           </Border>
 
           <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#3B3120" BorderThickness="1">

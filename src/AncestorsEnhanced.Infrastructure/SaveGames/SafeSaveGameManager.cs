@@ -103,7 +103,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             string slotPath = SaveGamePaths.GetSlotPath(_userDataDirectory, slot);
             if (!File.Exists(slotPath))
             {
-                return Failure($"There is no save in slot {slot} to back up.");
+                return Failure($"There is no save in slot {slot + 1} to back up.");
             }
 
             byte[] content = ReadSaveWithRetries(slotPath);
@@ -113,7 +113,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             }
             catch (InvalidDataException)
             {
-                return Failure($"Slot {slot} is currently being written or is corrupt; skipped backup.");
+                return Failure($"Slot {slot + 1} is currently being written or is corrupt; skipped backup.");
             }
             IReadOnlyList<SaveGameCheckpoint> latest = SaveGameCheckpointStore.ListCheckpoints(_userDataDirectory, slot);
             // A restore can legitimately make the live slot equal to an older manual
@@ -132,7 +132,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 {
                     if (IsIdentical(content, SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpoint.Id)))
                     {
-                        return new SaveGameOperationResult(true, $"Slot {slot} is unchanged; no checkpoint was created.", null);
+                        return new SaveGameOperationResult(true, $"Slot {slot + 1} is unchanged; no checkpoint was created.", null);
                     }
                 }
                 catch (Exception exception) when (IsExpectedException(exception))
@@ -145,7 +145,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             string checkpointId = _store.Create(_userDataDirectory, slot, content, origin);
             return new SaveGameOperationResult(
                 true,
-                $"Checkpoint saved for slot {slot}.",
+                $"Checkpoint saved for slot {slot + 1}.",
                 checkpointId);
         }
         catch (Exception exception) when (IsExpectedException(exception))
@@ -220,7 +220,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
 
             return new SaveGameOperationResult(
                 true,
-                $"Loaded checkpoint for slot {slot}. Start Ancestors to continue.",
+                $"Loaded checkpoint for slot {slot + 1}. Start Ancestors to continue.",
                 CommitState: SaveOperationCommitState.Committed);
         }
         catch (Exception exception) when (IsExpectedException(exception))
@@ -257,7 +257,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             }
 
             Directory.Delete(checkpointDirectory, recursive: true);
-            return new SaveGameOperationResult(true, $"Checkpoint deleted from slot {slot}.");
+            return new SaveGameOperationResult(true, $"Checkpoint deleted from slot {slot + 1}.");
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {

@@ -59,6 +59,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
 
         Slots = slotViewModels
+            .Where(slot => slot.HasSave)
             .Select(slot =>
             {
                 int number = int.TryParse(
@@ -76,9 +77,9 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
                 return new CheatSlotChoice(number, label);
             })
             .ToArray();
-        if (SelectedSlot is null || SelectedSlot.Number >= Slots.Count)
+        if (SelectedSlot is null || !Slots.Any(slot => slot.Number == SelectedSlot.Number))
         {
-            SelectedSlot = Slots[0];
+            SelectedSlot = Slots.Count > 0 ? Slots[0] : null;
         }
         else
         {
@@ -125,7 +126,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         HasStatus = true;
     }
 
-    public bool CanApply => !IsBusy && !IsGameRunning;
+    public bool CanApply => !IsBusy && !IsGameRunning && SelectedSlot is not null;
 
     public string SteamCloudWarning { get; } =
         "Steam Cloud Tip: If Steam shows a Cloud Conflict on launch, select Upload to Steam Cloud (Local files) to keep the applied save or cheat checkpoint.";
@@ -204,6 +205,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             if (result.Succeeded)
             {
                 SetStatus("Cheat checkpoint restored. Start Ancestors to continue.", "#B4D941");
+                _lastCheckpointSlot = null;
+                _lastCheckpointId = null;
             }
             else
             {
@@ -262,6 +265,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     partial void OnIsBusyChanged(bool value) => NotifyState();
 
     partial void OnIsGameRunningChanged(bool value) => NotifyState();
+
+    partial void OnSelectedSlotChanged(CheatSlotChoice? value) => NotifyState();
 
     private async Task PollGameRunningLoopAsync(CancellationToken token)
     {

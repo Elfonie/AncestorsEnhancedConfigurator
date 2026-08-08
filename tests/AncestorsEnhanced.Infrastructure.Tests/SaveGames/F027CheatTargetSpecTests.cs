@@ -77,11 +77,11 @@ public sealed class F027CheatTargetSpecTests
     [Fact]
     public void MultipleTargetsAtTheSamePathExceedTheAuthorisedCount()
     {
-        // Two NeuronalEnergySources properties inside one RPGData struct share the exact
-        // schema path. The array target authorises only one match, so this fails closed.
+        // Two AvailableNeuronalEnergy properties inside one RPGData struct share the
+        // exact schema path. The scalar target authorises only one match.
         byte[] rpg = Concat(
-            ArrayProperty("NeuronalEnergySources", [0.5f]),
-            ArrayProperty("NeuronalEnergySources", [0.6f]),
+            UnrealTaggedProperties.EncodeFloat("AvailableNeuronalEnergy", 0.5f),
+            UnrealTaggedProperties.EncodeFloat("AvailableNeuronalEnergy", 0.6f),
             UnrealTaggedProperties.EncodeTerminator()).ToArray();
         byte[] decompressed = Concat(
             UnrealTaggedProperties.EncodeStruct("RPGData", "RPGData", rpg),
@@ -102,7 +102,7 @@ public sealed class F027CheatTargetSpecTests
     public void RightPathWrongTypeIsNotPatched()
     {
         byte[] rpg = Concat(
-            UnrealTaggedProperties.EncodeFloat("NeuronalEnergySources", 0.5f),
+            UnrealTaggedProperties.EncodeInt("AvailableNeuronalEnergy", 1),
             UnrealTaggedProperties.EncodeTerminator()).ToArray();
         byte[] decompressed = Concat(
             UnrealTaggedProperties.EncodeStruct("RPGData", "RPGData", rpg),
@@ -123,7 +123,7 @@ public sealed class F027CheatTargetSpecTests
     public void RightNameWrongParentIsNotPatched()
     {
         byte[] other = Concat(
-            UnrealTaggedProperties.EncodeFloat("NeuronalEnergySources", 0.5f),
+            UnrealTaggedProperties.EncodeFloat("AvailableNeuronalEnergy", 0.5f),
             UnrealTaggedProperties.EncodeTerminator()).ToArray();
         byte[] decompressed = Concat(
             UnrealTaggedProperties.EncodeStruct("OtherData", "SomethingElse", other),

@@ -259,6 +259,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             OnPropertyChanged(nameof(IsAnyOperationRunning));
         }
+
+        if (sender is CheatViewModel cheat &&
+            e.PropertyName == nameof(CheatViewModel.IsGameRunning) &&
+            SaveManager is not null)
+        {
+            SaveManager.IsGameRunning = cheat.IsGameRunning;
+        }
     }
     private void UpdateViewVisibility()
     {
@@ -406,9 +413,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             IsBusy = false;
         }
-        if (result.Succeeded)
+        if (result.Succeeded && !await RefreshFromDiskAsync())
         {
-            await RefreshFromDiskAsync();
+            ShowMessage("The backup was restored, but the configuration could not be refreshed.", "#E04D42");
+            return;
         }
 
         ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#E04D42");
@@ -559,6 +567,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         try
         {
             GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
+            bool canKeepChildState = _verifiedGameContext?.Matches(snapshot) == true &&
+                SaveManager is not null && Cheat is not null;
             _snapshot = snapshot;
             _verifiedGameContext = VerifyGameContext(snapshot);
             if (snapshot.HasErrors)
@@ -590,14 +600,22 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ApplyViewMode();
             LoadTechnicalDetails(snapshot);
             CanRevertLast = _settingsEditor.CanRevertLast(snapshot);
-            SaveManager?.Dispose();
-            SaveManager = await CreateSaveManagerAsync();
-            SaveManager?.Activate();
-            Cheat?.Dispose();
-            Cheat = CreateCheat();
-            Cheat?.Start();
+            if (canKeepChildState)
+            {
+                await SaveManager!.RefreshSilentlyAsync();
+            }
+            else
+            {
+                SaveManager?.Dispose();
+                SaveManager = await CreateSaveManagerAsync();
+                SaveManager?.Activate();
+                Cheat?.Dispose();
+                Cheat = CreateCheat();
+                Cheat?.Start();
+            }
             if (Cheat is not null && SaveManager is not null)
             {
+                SaveManager.IsGameRunning = Cheat.IsGameRunning;
                 Cheat.UpdateSlotAvailability(SaveManager.Slots);
             }
             return true;

@@ -58,9 +58,9 @@ public sealed class SaveGameCheatInspectorTests
         Assert.NotNull(modified);
         Assert.Equal(decompressed.Length, modified!.Length);
     }    [Fact]
-    public void MaxNeuronalEnergyPatchesTheRpgArrayInPlace()
+    public void MaxNeuronalEnergyPatchesOnlyAvailablePoolAndLeavesSourcesUntouched()
     {
-        byte[] decompressed = DecompressedSaveWithRpgArray([0.5f, 0.6f, 0.7f]);
+        byte[] decompressed = DecompressedSaveWithRpgEnergy([0.5f, 0.6f, 0.7f], 0.02f);
         var injector = new SaveGameCheatInjector();
 
         CheatInjectionResult result = injector.TryInject(
@@ -69,88 +69,39 @@ public sealed class SaveGameCheatInspectorTests
             out byte[]? modified);
 
         Assert.True(result.Succeeded, result.Message);
-        Assert.Equal(3, result.ModifiedCount);
+        Assert.Equal(1, result.ModifiedCount);
+        Assert.NotNull(modified);
         Assert.Equal(decompressed.Length, modified!.Length);
+        SaveGameSchemaNode root = SaveGameSchemaAnalyzer.Parse(modified);
+        SaveGameSchemaNode pool = FindSchemaNode(root, "AvailableNeuronalEnergy")!;
+        SaveGameSchemaNode sources = FindSchemaNode(root, "NeuronalEnergySources")!;
+        Assert.Equal(1000.0f, ReadFloat(modified, pool.ValueOffset));
+        Assert.Equal([0.5f, 0.6f, 0.7f], ReadArray(modified, sources));
+        Assert.True(ArraysEqualExcept(decompressed, modified, result.ModifiedRanges));
     }
-    [Fact]
-    public void ArrayElementCountBeyondNodePayloadIsRejected()
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("wrong-type")]
+    [InlineData("wrong-parent")]
+    [InlineData("duplicate")]
+    public void MaxNeuronalEnergyRejectsAnyAmbiguousOrInvalidTarget(string shape)
     {
-        // A valid 3-element array whose header is changed to claim 10 elements must be
-        // rejected as a whole: no clamping, no partial patching.
-        byte[] decompressed = DecompressedSaveWithRpgArray([0.5f, 0.6f, 0.7f]);
-        WriteCount(decompressed, FindArrayCountOffset(decompressed), 10);
-        var injector = new SaveGameCheatInjector();
+        byte[] save = shape switch
+        {
+            "missing" => DecompressedSaveWithRpgArray([0.5f]),
+            "wrong-type" => DecompressedSaveWithRpgProperty("AvailableNeuronalEnergy", "IntProperty"),
+            "wrong-parent" => DecompressedSaveWithOtherPool(),
+            "duplicate" => DecompressedSaveWithRpgDuplicatePool(),
+            _ => throw new ArgumentOutOfRangeException(nameof(shape)),
+        };
 
-        CheatInjectionResult result = injector.TryInject(
-            decompressed,
-            CheatKind.MaxNeuronalEnergy,
-            out byte[]? modified);
-
-        Assert.False(result.Succeeded);
-        Assert.Contains("exactly 1", result.Message, StringComparison.Ordinal);
-        Assert.Null(modified);
-    }
-    [Fact]
-    public void MaxNeuronalEnergyRejectsNegativeCount()
-    {
-        // A valid 3-element array whose header is changed to -1 must be rejected
-        // without modifying any byte.
-        byte[] decompressed = DecompressedSaveWithRpgArray([0.5f, 0.6f, 0.7f]);
-        WriteCount(decompressed, FindArrayCountOffset(decompressed), -1);
-        byte[] beforeInject = (byte[])decompressed.Clone();
-        var injector = new SaveGameCheatInjector();
-
-        CheatInjectionResult result = injector.TryInject(
-            decompressed,
-            CheatKind.MaxNeuronalEnergy,
-            out byte[]? modified);
+        CheatInjectionResult result = new SaveGameCheatInjector().TryInject(
+            save, CheatKind.MaxNeuronalEnergy, out byte[]? modified);
 
         Assert.False(result.Succeeded);
         Assert.Null(modified);
         Assert.Empty(result.ModifiedRanges);
-        // The Injector must not touch the input bytes at all for a rejected array.
-        Assert.Equal(beforeInject, decompressed);
-    }
-    [Fact]
-    public void MaxNeuronalEnergyRejectsCountThatOverflowsTheLengthMath()
-    {
-        // An extreme count must be rejected before any multiplication can overflow.
-        byte[] decompressed = DecompressedSaveWithRpgArray([0.5f, 0.6f, 0.7f]);
-        WriteCount(decompressed, FindArrayCountOffset(decompressed), int.MaxValue);
-        var injector = new SaveGameCheatInjector();
-
-        CheatInjectionResult result = injector.TryInject(
-            decompressed,
-            CheatKind.MaxNeuronalEnergy,
-            out byte[]? modified);
-
-        Assert.False(result.Succeeded);
-        Assert.Null(modified);
-    }
-    [Fact]
-    public void MaxNeuronalEnergyLeavesTheCountHeaderAndTrailingPropertyUnchanged()
-    {
-        // A NeuronalEnergySources array immediately followed by a normal FloatProperty.
-        // Only the array elements may change; the count header and the trailing property
-        // must stay byte-identical.
-        byte[] original = DecompressedSaveWithRpgArrayAndTrailing([0.5f, 0.6f, 0.7f], 42.0f);
-        var injector = new SaveGameCheatInjector();
-
-        CheatInjectionResult result = injector.TryInject(
-            original,
-            CheatKind.MaxNeuronalEnergy,
-            out byte[]? modified);
-
-        Assert.True(result.Succeeded, result.Message);
-        Assert.Equal(3, result.ModifiedCount);
-        Assert.NotNull(modified);
-
-        int countOffset = FindArrayCountOffset(modified!);
-        Assert.Equal(3, BinaryPrimitives.ReadInt32LittleEndian(modified.AsSpan(countOffset, 4)));
-        Assert.Equal(999_999.0f, ReadFloat(modified, countOffset + 4));
-        Assert.Equal(999_999.0f, ReadFloat(modified, countOffset + 8));
-        Assert.Equal(999_999.0f, ReadFloat(modified, countOffset + 12));
-        Assert.True(ArraysEqualExcept(original, modified, result.ModifiedRanges));
     }
     [Fact]
     public void HealClanDoesNotTouchUnrelatedHealthFields()
@@ -291,6 +242,42 @@ public sealed class SaveGameCheatInspectorTests
         return root;
     }
 
+    private static byte[] DecompressedSaveWithRpgEnergy(float[] elements, float available)
+    {
+        byte[] array = DecompressedSaveWithArray("NeuronalEnergySources", elements);
+        array = array[..^UnrealTaggedProperties.EncodeTerminator().Length];
+        byte[] rpg = Concat(
+            array,
+            UnrealTaggedProperties.EncodeFloat("AvailableNeuronalEnergy", available),
+            UnrealTaggedProperties.EncodeTerminator());
+        return Concat(
+            UnrealTaggedProperties.EncodeStruct("RPGData", "RPGData", rpg),
+            UnrealTaggedProperties.EncodeTerminator());
+    }
+
+    private static byte[] DecompressedSaveWithRpgProperty(string name, string type)
+    {
+        byte[] property = type == "IntProperty"
+            ? UnrealTaggedProperties.EncodeInt(name, 2)
+            : UnrealTaggedProperties.EncodeFloat(name, 0.02f);
+        return Concat(
+            UnrealTaggedProperties.EncodeStruct("RPGData", "RPGData", Concat(property, UnrealTaggedProperties.EncodeTerminator())),
+            UnrealTaggedProperties.EncodeTerminator());
+    }
+
+    private static byte[] DecompressedSaveWithOtherPool() => Concat(
+        UnrealTaggedProperties.EncodeStruct("OtherData", "OtherData", Concat(
+            UnrealTaggedProperties.EncodeFloat("AvailableNeuronalEnergy", 0.02f),
+            UnrealTaggedProperties.EncodeTerminator())),
+        UnrealTaggedProperties.EncodeTerminator());
+
+    private static byte[] DecompressedSaveWithRpgDuplicatePool() => Concat(
+        UnrealTaggedProperties.EncodeStruct("RPGData", "RPGData", Concat(
+            UnrealTaggedProperties.EncodeFloat("AvailableNeuronalEnergy", 0.02f),
+            UnrealTaggedProperties.EncodeFloat("AvailableNeuronalEnergy", 0.03f),
+            UnrealTaggedProperties.EncodeTerminator())),
+        UnrealTaggedProperties.EncodeTerminator());
+
     private static byte[] DecompressedSaveWithRootHealth(float value)
     {
         return Concat(
@@ -322,6 +309,14 @@ public sealed class SaveGameCheatInspectorTests
     private static float ReadFloat(byte[] data, int offset) =>
         BitConverter.Int32BitsToSingle(
             BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset, 4)));
+
+    private static float[] ReadArray(byte[] data, SaveGameSchemaNode node)
+    {
+        int count = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(node.ValueOffset, sizeof(int)));
+        return Enumerable.Range(0, count)
+            .Select(index => ReadFloat(data, node.ValueOffset + sizeof(int) + index * sizeof(float)))
+            .ToArray();
+    }
 
     // True when actual equals expected except for the given ranges.
     private static bool ArraysEqualExcept(

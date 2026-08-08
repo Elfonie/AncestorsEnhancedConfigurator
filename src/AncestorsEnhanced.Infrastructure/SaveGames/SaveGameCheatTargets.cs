@@ -17,12 +17,12 @@ internal static class SaveGameCheatTargets
         CheatKind.MaxNeuronalEnergy =>
         [
             new CheatTargetSpec(
-                "<save>/RPGData/NeuronalEnergySources",
-                "NeuronalEnergySources",
-                "ArrayProperty",
+                "<save>/RPGData/AvailableNeuronalEnergy",
+                "AvailableNeuronalEnergy",
                 "FloatProperty",
-                IsArray: true,
-                999_999.0f),
+                null,
+                IsArray: false,
+                1000.0f),
         ],
         CheatKind.MaxNeeds => VitalityScalars(
             ["RegimenStamina", "Energy", "Stamina"],
