@@ -121,7 +121,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             // phase: if any of it fails, the live save is still intact.
             if (File.Exists(slotPath))
             {
-                byte[] current = ReadStableBounded(slotPath);
+                byte[] current = ReadStableBounded(slotPath, 64L * 1024 * 1024);
                 if (!IsIdentical(current, checkpoint))
                 {
                     _store.Create(_userDataDirectory, slot, current, "PreRestore");

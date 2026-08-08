@@ -425,15 +425,25 @@ internal sealed class SettingsTransaction(
             try
             {
                 string resultHash = Sha256(file.UpdatedContent);
-                if (file.Existed)
+                if (file.Existed && file.ResultExists)
                 {
+                    // Replace: the file existed before and after; fold our own write back
+                    // only if it still matches the result state we wrote (F066).
                     CompareAndReplace(file.FullPath, file.OriginalContent, resultHash, expectedExists: true);
                 }
-                else
+                else if (!file.Existed && file.ResultExists)
                 {
+                    // Create: the file did not exist before; remove the file we created.
                     CompareAndDelete(file.FullPath, resultHash);
                 }
-            }
+                else if (file.Existed && !file.ResultExists)
+                {
+                    // Delete: the file existed before and was removed by this apply.
+                    // Recreate the original only if the target is still absent, so a
+                    // foreign re-created file is never overwritten (F066).
+                    CompareAndReplace(file.FullPath, file.OriginalContent, expectedSha256: null, expectedExists: false);
+                }
+                }
             catch (Exception exception) when (IsExpectedWriteException(exception))
             {
                 failures.Add(file.FileName);

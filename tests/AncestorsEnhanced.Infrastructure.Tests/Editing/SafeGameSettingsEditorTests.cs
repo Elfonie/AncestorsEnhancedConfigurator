@@ -539,6 +539,62 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         }
     }
 
+    [Fact]
+    public void ApplyFailureRollsBackADeletedFile()
+    {
+        string userData = CreateUserData();
+        string install = Path.Combine(_temporaryDirectory, "install-apply");
+        string pakDirectory = Directory.CreateDirectory(Path.Combine(
+            install, "Ancestors", "Content", "Paks")).FullName;
+        string vignettePath = Path.Combine(pakDirectory, "AncestorsEnhanced-Vignette_P.pak");
+        byte[] original = [1, 2, 3];
+        File.WriteAllBytes(vignettePath, original);
+
+        // Occupying the second target with a directory makes its write fail, forcing the
+        // apply to roll back after the vignette file was already deleted (F066).
+        string blockerPath = Path.Combine(pakDirectory, "pakchunk99-WindowsNoEditor_P.pak");
+        Directory.CreateDirectory(blockerPath);
+
+        DateTimeOffset created = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+        var plan = new SettingsChangePlan(
+            "apply-del",
+            created,
+            "5495393",
+            userData,
+            [
+                new SettingChangePreview("Vignette", "AncestorsEnhanced-Vignette_P.pak", "mod.VignettePercent", "50", "35"),
+                new SettingChangePreview("Vignette", "pakchunk99-WindowsNoEditor_P.pak", "mod.VignettePercent", "50", "35"),
+            ],
+            [
+                new ConfigurationFileChangePlan(
+                    "AncestorsEnhanced-Vignette_P.pak",
+                    vignettePath,
+                    true,
+                    ConfigurationFileOperations.Sha256(original),
+                    original,
+                    [],
+                    SettingFileTarget.Pak,
+                    false),
+                new ConfigurationFileChangePlan(
+                    "pakchunk99-WindowsNoEditor_P.pak",
+                    blockerPath,
+                    false,
+                    ConfigurationFileOperations.Sha256([4]),
+                    [4],
+                    [5, 6],
+                    SettingFileTarget.Pak,
+                    true),
+            ],
+            install);
+
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        SettingsOperationResult result = editor.Apply(plan);
+
+        Assert.False(result.Succeeded, result.Message);
+        Assert.True(File.Exists(vignettePath));
+        Assert.Equal(original, File.ReadAllBytes(vignettePath));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_temporaryDirectory))
