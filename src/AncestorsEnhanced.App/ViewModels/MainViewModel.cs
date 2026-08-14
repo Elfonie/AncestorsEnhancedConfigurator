@@ -292,6 +292,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             SaveManager.IsGameRunning = cheat.IsGameRunning;
         }
+
+        if (sender is SaveManagerViewModel saves &&
+            e.PropertyName == nameof(SaveManagerViewModel.Slots) &&
+            Cheat is not null)
+        {
+            Cheat.UpdateSlotAvailability(saves.Slots);
+        }
     }
     private void UpdateViewVisibility()
     {
@@ -689,7 +696,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             {
                 SaveManager.IsGameRunning = Cheat.IsGameRunning;
                 Cheat.UpdateSlotAvailability(SaveManager.Slots);
-                Cheat.RefreshFreeCameraState();
             }
             return true;
         }
@@ -772,10 +778,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         var service = new SaveGameCheatService(context, _gameContextVerifier);
-        var iniCheat = new IniCheatService(context, _gameContextVerifier);
         return new CheatViewModel(
             service,
-            iniCheat,
             async (slot, checkpointId) =>
             {
                 if (SaveManager is null)

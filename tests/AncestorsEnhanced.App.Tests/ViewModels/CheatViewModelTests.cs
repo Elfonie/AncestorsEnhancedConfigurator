@@ -1,5 +1,4 @@
 using AncestorsEnhanced.App.ViewModels;
-using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Core.SaveGames;
 using Xunit;
 
@@ -10,7 +9,7 @@ public sealed class CheatViewModelTests
     [Fact]
     public void ExposesAllSlotsAndDefaultsToSlotZero()
     {
-        var viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
+        var viewModel = new CheatViewModel(new FakeCheatService());
 
         Assert.Equal(5, viewModel.Slots.Count);
         Assert.Equal("Slot 1", viewModel.Slots[0].Label);
@@ -21,7 +20,7 @@ public sealed class CheatViewModelTests
     [Fact]
     public void UpdateSlotAvailabilityLabelsSlotsOneBased()
     {
-        var viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
+        var viewModel = new CheatViewModel(new FakeCheatService());
 
         viewModel.UpdateSlotAvailability(
         [
@@ -38,7 +37,7 @@ public sealed class CheatViewModelTests
     public async Task MaxNeuronalEnergyDelegatesToService()
     {
         var service = new FakeCheatService();
-        var viewModel = new CheatViewModel(service, new IniCheatService(tmp));
+        var viewModel = new CheatViewModel(service);
 
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
@@ -50,7 +49,7 @@ public sealed class CheatViewModelTests
     public async Task HealClanDelegatesToService()
     {
         var service = new FakeCheatService();
-        var viewModel = new CheatViewModel(service, new IniCheatService(tmp));
+        var viewModel = new CheatViewModel(service);
 
         await viewModel.HealClanCommand.ExecuteAsync(null);
 
@@ -61,88 +60,13 @@ public sealed class CheatViewModelTests
     public async Task FailedCheatReportsFailureAccent()
     {
         var service = new FakeCheatService { Fail = true };
-        var viewModel = new CheatViewModel(service, new IniCheatService(tmp));
+        var viewModel = new CheatViewModel(service);
 
         await viewModel.MaxNeedsCommand.ExecuteAsync(null);
 
         Assert.False(service.LastResult.Succeeded);
         Assert.Equal("#E04D42", viewModel.StatusAccent);
     }
-
-    private static readonly string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aec-cheatvm-"+System.Guid.NewGuid().ToString("N"));
-
-    [Fact]
-    public void FreeCameraToggleWritesInputIni()
-    {
-        System.IO.Directory.CreateDirectory(tmp);
-        CheatViewModel viewModel = null!;
-        try
-        {
-            viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
-            viewModel.IsFreeCamEnabled = true;
-
-            string inputPath = System.IO.Path.Combine(tmp, "Config", "WindowsNoEditor", "Input.ini");
-            Assert.True(System.IO.File.Exists(inputPath));
-            Assert.Contains("ToggleDebugCamera", System.IO.File.ReadAllText(inputPath), StringComparison.Ordinal);
-            Assert.Contains("added to Input.ini", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            viewModel?.Dispose();
-            if (System.IO.Directory.Exists(tmp)) { System.IO.Directory.Delete(tmp, true); }
-        }
-    }
-
-    [Fact]
-    public void RefreshFreeCameraStateReadsExternalInputIniChangesWithoutWriting()
-    {
-        string tmp = Path.Combine(Path.GetTempPath(), "aec-freecam-refresh-" + Guid.NewGuid().ToString("N"));
-        CheatViewModel? viewModel = null;
-        try
-        {
-            viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(tmp));
-            viewModel.IsFreeCamEnabled = true;
-            string inputPath = Path.Combine(tmp, "Config", "WindowsNoEditor", "Input.ini");
-            File.WriteAllText(inputPath, "[/Script/Engine.PlayerInput]\n+DebugExecBindings=(Key=F10,Command=\"OtherCamera\")\n");
-
-            viewModel.RefreshFreeCameraState();
-
-            Assert.False(viewModel.IsFreeCamEnabled);
-            Assert.DoesNotContain("AncestorsEnhanced", File.ReadAllText(inputPath), StringComparison.Ordinal);
-            Assert.Contains("no longer", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            viewModel?.Dispose();
-            if (Directory.Exists(tmp)) Directory.Delete(tmp, recursive: true);
-        }
-    }
-
-
-    [Fact]
-    public void FreeCameraFailureRevertsWithoutRecursing()
-    {
-        // Point the user-data directory at an existing FILE so that creating the
-        // Config\WindowsNoEditor folder inside it fails with an IOException.
-        string asFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aec-file-"+System.Guid.NewGuid().ToString("N"));
-        System.IO.File.WriteAllText(asFile, "occupied");
-        CheatViewModel viewModel = null!;
-        try
-        {
-            viewModel = new CheatViewModel(new FakeCheatService(), new IniCheatService(asFile));
-            viewModel.IsFreeCamEnabled = true;
-
-            // The write failed: the toggle must revert to false *and* stop (no recursion).
-            Assert.False(viewModel.IsFreeCamEnabled);
-            Assert.Contains("Could not update free camera", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            viewModel?.Dispose();
-            if (System.IO.File.Exists(asFile)) { System.IO.File.Delete(asFile); }
-        }
-    }
-
 
     [Fact]
     public async Task RestoreLastCheckpointCallsBackWithSlotAndId()
@@ -151,7 +75,6 @@ public sealed class CheatViewModelTests
         var restored = new List<(string Slot, string Id)>();
         var viewModel = new CheatViewModel(
             service,
-            new IniCheatService(tmp),
             (slot, id) => { restored.Add((slot, id)); return Task.FromResult(new SaveGameOperationResult(true, "Loaded.")); });
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
@@ -170,7 +93,6 @@ public sealed class CheatViewModelTests
     {
         var viewModel = new CheatViewModel(
             new FakeCheatService(),
-            new IniCheatService(tmp),
             (slot, id) => Task.FromResult(new SaveGameOperationResult(false, "Close Ancestors before restoring.")));
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 

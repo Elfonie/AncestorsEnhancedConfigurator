@@ -214,7 +214,7 @@
                                 BorderThickness="0,1,0,0"
                                 ToolTip.Tip="{Binding Description}">
                           <Grid RowDefinitions="Auto,Auto"
-                                ColumnDefinitions="Auto,190,330"
+                                ColumnDefinitions="*,140,260"
                                 ColumnSpacing="18"
                                 MinHeight="46">
                             <StackPanel VerticalAlignment="Center" Spacing="2">
@@ -245,7 +245,7 @@
                                          HorizontalAlignment="Right"
                                          TextAlignment="Right"
                                          TextWrapping="Wrap"
-                                         MaxWidth="190"
+                                         MaxWidth="140"
                                          FontWeight="SemiBold"
                                          Foreground="#E8E4D9" />
                             </StackPanel>
@@ -644,22 +644,7 @@
           </Border>
 
           <StackPanel IsVisible="{Binding IsCheatAvailable}" Spacing="8">
-          <TextBlock Text="INI TWEAKS — applied immediately, no save changes" FontSize="12" FontWeight="Bold" Foreground="#B4D941" Margin="2,6,0,0" />
-          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-              <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="UE4 Free Camera (F10)" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                <TextBlock Text="Adds an F10 ToggleDebugCamera binding to Input.ini. Close Ancestors first, then start it and press F10. This works only if Ancestors permits UE4 debug camera commands in its current build." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-              </StackPanel>
-              <ToggleSwitch Grid.Column="1"
-                            IsChecked="{Binding Cheat.IsFreeCamEnabled, Mode=TwoWay}"
-                            IsEnabled="{Binding Cheat.CanChangeFreeCamera}"
-                            AutomationProperties.Name="Free camera"
-                            VerticalAlignment="Center" />
-            </Grid>
-          </Border>
-
-          <TextBlock Text="SAVEGAME CHEATS — create a new checkpoint per slot" FontSize="12" FontWeight="Bold" Foreground="#FF5A00" Margin="2,8,0,0" />
+          <TextBlock Text="EXPERIMENTAL SAVEGAME CHEATS — create a checkpoint per slot" FontSize="12" FontWeight="Bold" Foreground="#FF5A00" Margin="2,8,0,0" />
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="16">
               <StackPanel Spacing="2" VerticalAlignment="Center">
@@ -745,7 +730,7 @@
                 <GradientStop Offset="1" Color="#0D1C16" />
               </LinearGradientBrush>
             </Border.Background>
-            <TextBlock Text="Cheats are created as separate checkpoints. Restoring one replaces the live save after creating a safety checkpoint." TextWrapping="Wrap" Foreground="#E8E4D9" />
+            <TextBlock Text="Experimental: savegame cheats are not yet verified with real saves in-game. A checkpoint is created first, but keep your own save backup before using them." TextWrapping="Wrap" Foreground="#E8E4D9" />
           </Border>
 
           <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#3B3120" BorderThickness="1">

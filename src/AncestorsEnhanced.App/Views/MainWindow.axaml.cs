@@ -8,6 +8,8 @@ namespace AncestorsEnhanced.App.Views;
 
 public partial class MainWindow : Window
 {
+    private MainViewModel? _subscribedViewModel;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -16,14 +18,15 @@ public partial class MainWindow : Window
 
     private void OnDataContextChanged(object? sender, System.EventArgs e)
     {
-        if (sender is MainViewModel previousViewModel)
+        if (_subscribedViewModel is not null)
         {
-            previousViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
-        if (DataContext is MainViewModel viewModel)
+        _subscribedViewModel = DataContext as MainViewModel;
+        if (_subscribedViewModel is not null)
         {
-            viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _subscribedViewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
     }
 

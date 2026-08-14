@@ -9,8 +9,8 @@ public static class SystemGraphicsOptionCatalog
         Array.AsReadOnly<string>(
         [
             "1024x576", "1152x648", "1280x720", "1280x800", "1366x768", "1440x900",
-            "1600x900", "1680x1050", "1920x1080", "1920x1200", "2560x1440", "2560x1600",
-            "3840x2160", "7680x4320",
+            "1600x900", "1680x1050", "1920x1080", "1920x1200", "2560x1080", "2560x1440", "2560x1600",
+            "3440x1440", "3840x1600", "3840x2160", "7680x4320",
         ]);
 
     public static int GetFrameRateIndex(int frameRate)

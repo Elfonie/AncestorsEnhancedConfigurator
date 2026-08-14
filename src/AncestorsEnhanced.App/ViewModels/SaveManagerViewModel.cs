@@ -63,7 +63,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     }
 
     public string SteamCloudWarning { get; } =
-        "Steam Cloud Tip: If Steam shows a 'Cloud Conflict' on launch, simply select 'Upload to Steam Cloud (Local files)' to keep your restored save!";
+        "Steam Cloud: do not choose a conflict option automatically. Compare save dates and sizes first. Local files are the intended version only after a deliberate local restore; when unsure, copy the local saves before deciding.";
 
     public SaveManagerViewModel(
         ISaveGameManager manager,

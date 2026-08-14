@@ -18,7 +18,7 @@ A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It can
   - Optional automatic checkpoints when the game saves
 - **Optional tweaks**
   - Free camera toggle using `F10` in-game
-  - Max Neuronal Energy, Max Needs, and Heal Current Ape create a separate checkpoint first; they do not edit the live save directly
+  - Experimental: Max Neuronal Energy, Max Needs, and Heal Current Ape create a separate checkpoint first; keep your own save backup and verify the result in-game
 
 ## Compatibility
 

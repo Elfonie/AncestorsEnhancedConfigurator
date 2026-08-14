@@ -124,12 +124,12 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                     throw new InvalidOperationException("The game context changed; the cheat cannot be applied safely. Refresh and try again.");
                 }
 
-                return store.Create(_userDataDirectory, slot, recompressed, $"Cheat:{kind}");
+                return store.Create(_userDataDirectory, slot, recompressed, $"Cheat:{DisplayName(kind)}");
             });
 
             return new CheatApplyResult(
                 true,
-                $"{kind} applied and saved as a new checkpoint for slot {slot + 1}.",
+                $"{DisplayName(kind)} applied and saved as a new checkpoint for slot {slot + 1}.",
                 checkpointId);
         }
         catch (Exception exception) when (IsExpectedException(exception))
@@ -137,6 +137,12 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
             return new CheatApplyResult(false, $"Nothing was applied: {exception.Message}");
         }
     }
+
+    private static string DisplayName(CheatKind kind) => kind switch
+    {
+        CheatKind.HealClan => "Heal Current Ape",
+        _ => kind.ToString(),
+    };
 
     private static bool IsByteRoundTripFaithful(byte[] deferred, byte[] roundTripped) =>
         deferred.AsSpan().SequenceEqual(roundTripped);

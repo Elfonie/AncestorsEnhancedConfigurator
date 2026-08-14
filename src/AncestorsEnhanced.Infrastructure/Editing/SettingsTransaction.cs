@@ -307,6 +307,7 @@ internal sealed class SettingsTransaction(
 
             try
             {
+                ToolChangeBaselineStore.MarkReverted(verifiable!, operation.Manifest);
                 SettingsBackupStore.MarkReverted(operation.Directory, _utcNow());
             }
             catch (Exception exception) when (IsExpectedWriteException(exception))

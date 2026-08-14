@@ -1041,7 +1041,7 @@ public static class ReadableSettingsCatalog
         1 => "Low",
         2 => "Medium",
         3 => "High",
-        _ => "Ultra",
+        _ => $"Level {value}",
     };
 
     private static string FormatMegabytes(int value) =>

@@ -167,6 +167,55 @@ internal static class ToolChangeBaselineStore
         Write(plan.UserDataDirectory, manifest with { Files = files });
     }
 
+    public static void MarkReverted(VerifiedGameContext context, OperationManifest operation)
+    {
+        BaselineManifest? manifest = Read(context.UserDataDirectory);
+        if (manifest is null)
+        {
+            return;
+        }
+
+        if (!string.Equals(manifest.ContextFingerprint, context.ContextFingerprint, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The tool-change baseline belongs to a different game context.");
+        }
+
+        List<BaselineFile> files = [.. manifest.Files];
+        foreach (ManifestFile reverted in operation.Files)
+        {
+            int index = files.FindIndex(file => file.Target == reverted.Target &&
+                string.Equals(file.FileName, reverted.FileName, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                continue;
+            }
+
+            BaselineFile file = files[index];
+            if (file.ToolStateExists != reverted.ResultExists ||
+                !string.Equals(file.ToolStateSha256, reverted.ResultSha256, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"The baseline state for {reverted.FileName} no longer matches the operation being undone.");
+            }
+
+            files[index] = file with
+            {
+                ToolStateExists = reverted.Existed,
+                ToolStateSha256 = reverted.OriginalSha256,
+            };
+        }
+
+        if (files.All(file =>
+                file.ToolStateExists == file.OriginalExists &&
+                string.Equals(file.ToolStateSha256, file.OriginalSha256, StringComparison.Ordinal)))
+        {
+            Delete(context.UserDataDirectory);
+            return;
+        }
+
+        Write(context.UserDataDirectory, manifest with { Files = files });
+    }
+
     private static BaselineManifest? Read(GameInspectionSnapshot snapshot)
     {
         string? userData = snapshot.UserDataDirectory;
