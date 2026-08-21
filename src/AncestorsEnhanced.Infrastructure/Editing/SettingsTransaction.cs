@@ -79,6 +79,10 @@ internal sealed class SettingsTransaction(
                 {
                     return Failure("The game context changed since this change was previewed. Refresh and try again.");
                 }
+                if (_isGameRunning())
+                {
+                    return Failure("Close Ancestors before applying configuration changes.");
+                }
                 operationDirectory = SettingsBackupStore.Prepare(plan);
                 List<ConfigurationFileChangePlan> applied = [];
                 try
@@ -251,6 +255,11 @@ internal sealed class SettingsTransaction(
                 {
                     return Failure("The game context changed; the backup cannot be restored safely. Refresh and try again.");
                 }
+                if (_isGameRunning())
+                {
+                    return Failure("Close Ancestors before restoring a backup.");
+                }
+                SettingsBackupStore.MarkRevertPending(operation.Directory, _utcNow());
                 List<(ManifestFile File, byte[] Current)> restored = [];
                 try
                 {
@@ -318,13 +327,16 @@ internal sealed class SettingsTransaction(
                             operation.Directory);
                     }
 
+                    SettingsBackupStore.ClearRevertPending(operation.Directory);
+
                     throw;
                 }
 
                 try
                 {
-                    ToolChangeBaselineStore.MarkReverted(verifiable!, operation.Manifest);
                     SettingsBackupStore.MarkReverted(operation.Directory, _utcNow());
+                    ToolChangeBaselineStore.MarkReverted(verifiable!, operation.Manifest);
+                    SettingsBackupStore.ClearRevertPending(operation.Directory);
                 }
                 catch (Exception exception) when (IsExpectedWriteException(exception))
                 {

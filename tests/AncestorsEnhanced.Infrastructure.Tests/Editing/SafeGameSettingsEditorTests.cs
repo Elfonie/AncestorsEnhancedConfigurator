@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using AncestorsEnhanced.Core;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Editing;
@@ -74,6 +75,313 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         Assert.True(recovered);
         Assert.Equal([1, 2, 3], File.ReadAllBytes(engineIni));
         Assert.False(File.Exists(captured));
+    }
+
+    [Fact]
+    public void ApplyStopsBeforeAnyMutationWhenGameStartsAfterPreviewCheck()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        const string original = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        File.WriteAllText(engineIni, original);
+        int checks = 0;
+        SafeGameSettingsEditor editor = CreateEditor(
+            () => Interlocked.Increment(ref checks) >= 2);
+        SettingsChangePlan plan = editor.CreatePlan(
+            CreateSnapshot(userData),
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+
+        SettingsOperationResult result = editor.Apply(plan);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Close Ancestors", result.Message, StringComparison.Ordinal);
+        Assert.Equal(original, File.ReadAllText(engineIni));
+        Assert.False(Directory.Exists(ConfigurationFileOperations.GetBackupRoot(userData)));
+        Assert.False(Directory.Exists(ConfigurationFileOperations.GetToolChangesRoot(userData)));
+    }
+
+    [Theory]
+    [InlineData(StoreKind.EpicGames, "epic-build-version")]
+    [InlineData(StoreKind.Gog, null)]
+    public void VerifiedNonSteamStoreCanCreateAndApplyASettingsPlan(
+        StoreKind store,
+        string? storeVersion)
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        snapshot = snapshot with
+        {
+            Installation = snapshot.Installation! with
+            {
+                Store = store,
+                BuildId = storeVersion,
+                ContentSignature = AncestorsGameProfile.SupportedContentSignature,
+            },
+        };
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+
+        SettingsChangePlan plan = editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+        SettingsOperationResult result = editor.Apply(plan);
+
+        Assert.Equal(store, plan.Store);
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Contains("r.ViewDistanceScale=1.2", File.ReadAllText(engineIni), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UndoStopsBeforeAnyMutationWhenGameStartsAfterCommandCheck()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SafeGameSettingsEditor setup = CreateEditor(gameRunning: false);
+        Assert.True(setup.Apply(setup.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
+        string applied = File.ReadAllText(engineIni);
+        string backupRoot = ConfigurationFileOperations.GetBackupRoot(userData);
+        Dictionary<string, byte[]> historyBefore = Directory.EnumerateFiles(
+                backupRoot, "*", SearchOption.AllDirectories)
+            .ToDictionary(
+                path => Path.GetRelativePath(backupRoot, path),
+                File.ReadAllBytes,
+                StringComparer.Ordinal);
+        int checks = 0;
+        SafeGameSettingsEditor editor = CreateEditor(
+            () => Interlocked.Increment(ref checks) >= 2);
+
+        SettingsOperationResult result = editor.RevertLast(snapshot);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Close Ancestors", result.Message, StringComparison.Ordinal);
+        Assert.Equal(applied, File.ReadAllText(engineIni));
+        Dictionary<string, byte[]> historyAfter = Directory.EnumerateFiles(
+                backupRoot, "*", SearchOption.AllDirectories)
+            .ToDictionary(
+                path => Path.GetRelativePath(backupRoot, path),
+                File.ReadAllBytes,
+                StringComparer.Ordinal);
+        Assert.Equal(historyBefore.Keys.Order(), historyAfter.Keys.Order());
+        Assert.All(historyBefore, entry => Assert.Equal(entry.Value, historyAfter[entry.Key]));
+    }
+
+    [Fact]
+    public void StartupRollsBackInterruptedMultiFileApply()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        const string engineOriginal = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        const string gameOriginal = "[/Script/MoviePlayer.MoviePlayerSettings]\nbWaitForMoviesToComplete=True\n";
+        File.WriteAllText(engineIni, engineOriginal);
+        File.WriteAllText(gameIni, gameOriginal);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SettingsChangePlan plan = editor.CreatePlan(snapshot,
+        [
+            Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2"),
+            new SettingChangeRequest(
+                "Skip intro", "Game.ini", "/Script/MoviePlayer.MoviePlayerSettings",
+                "bWaitForMoviesToComplete", "False"),
+        ]);
+        string operation = SettingsBackupStore.Prepare(plan);
+        ToolChangeBaselineStore.CaptureBeforeApply(plan);
+        ConfigurationFileChangePlan first = plan.Files[0];
+        File.WriteAllBytes(first.FullPath, first.UpdatedContent);
+
+        bool recovered = editor.RecoverInterruptedChanges(snapshot);
+
+        Assert.True(recovered);
+        Assert.Equal(engineOriginal, File.ReadAllText(engineIni));
+        Assert.Equal(gameOriginal, File.ReadAllText(gameIni));
+        Assert.True(File.Exists(Path.Combine(operation, "aborted")));
+        Assert.False(Directory.Exists(ConfigurationFileOperations.GetToolChangesRoot(userData)));
+    }
+
+    [Fact]
+    public void StartupCompletesInterruptedMultiFileUndo()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        const string engineOriginal = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        const string gameOriginal = "[/Script/MoviePlayer.MoviePlayerSettings]\nbWaitForMoviesToComplete=True\n";
+        File.WriteAllText(engineIni, engineOriginal);
+        File.WriteAllText(gameIni, gameOriginal);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SettingsChangePlan plan = editor.CreatePlan(snapshot,
+        [
+            Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2"),
+            new SettingChangeRequest(
+                "Skip intro", "Game.ini", "/Script/MoviePlayer.MoviePlayerSettings",
+                "bWaitForMoviesToComplete", "False"),
+        ]);
+        Assert.True(editor.Apply(plan).Succeeded);
+        string operation = Directory.EnumerateDirectories(
+            ConfigurationFileOperations.GetBackupRoot(userData)).Single();
+        SettingsBackupStore.MarkRevertPending(operation, DateTimeOffset.UnixEpoch);
+        File.Copy(Path.Combine(operation, "Engine.ini.before"), engineIni, overwrite: true);
+
+        bool recovered = editor.RecoverInterruptedChanges(snapshot);
+
+        Assert.True(recovered);
+        Assert.Equal(engineOriginal, File.ReadAllText(engineIni));
+        Assert.Equal(gameOriginal, File.ReadAllText(gameIni));
+        Assert.True(File.Exists(Path.Combine(operation, "reverted")));
+        Assert.False(File.Exists(Path.Combine(operation, "revert-pending")));
+        Assert.False(Directory.Exists(ConfigurationFileOperations.GetToolChangesRoot(userData)));
+    }
+
+    [Fact]
+    public void StartupRollsBackInterruptedRemoveToolChanges()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        File.WriteAllText(gameIni, "[/Script/MoviePlayer.MoviePlayerSettings]\nbWaitForMoviesToComplete=True\n");
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SettingsChangePlan apply = editor.CreatePlan(snapshot,
+        [
+            Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2"),
+            new SettingChangeRequest(
+                "Skip intro", "Game.ini", "/Script/MoviePlayer.MoviePlayerSettings",
+                "bWaitForMoviesToComplete", "False"),
+        ]);
+        Assert.True(editor.Apply(apply).Succeeded);
+        string engineToolState = File.ReadAllText(engineIni);
+        string gameToolState = File.ReadAllText(gameIni);
+        SettingsChangePlan removal = editor.CreateRemoveToolChangesPlan(snapshot);
+        string operation = SettingsBackupStore.Prepare(removal);
+        ToolChangeBaselineStore.CaptureBeforeApply(removal);
+        ConfigurationFileChangePlan first = removal.Files[0];
+        if (first.ResultExists)
+        {
+            File.WriteAllBytes(first.FullPath, first.UpdatedContent);
+        }
+        else
+        {
+            File.Delete(first.FullPath);
+        }
+
+        bool recovered = editor.RecoverInterruptedChanges(snapshot);
+
+        Assert.True(recovered);
+        Assert.Equal(engineToolState, File.ReadAllText(engineIni));
+        Assert.Equal(gameToolState, File.ReadAllText(gameIni));
+        Assert.True(File.Exists(Path.Combine(operation, "aborted")));
+        Assert.True(editor.CanRemoveToolChanges(snapshot));
+    }
+
+    [Fact]
+    public void RecoveryPreservesForeignContentAndJournalForManualAction()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        File.WriteAllText(gameIni, "[/Script/MoviePlayer.MoviePlayerSettings]\nbWaitForMoviesToComplete=True\n");
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SettingsChangePlan plan = editor.CreatePlan(snapshot,
+        [
+            Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2"),
+            new SettingChangeRequest(
+                "Skip intro", "Game.ini", "/Script/MoviePlayer.MoviePlayerSettings",
+                "bWaitForMoviesToComplete", "False"),
+        ]);
+        string operation = SettingsBackupStore.Prepare(plan);
+        ToolChangeBaselineStore.CaptureBeforeApply(plan);
+        File.WriteAllBytes(plan.Files[0].FullPath, plan.Files[0].UpdatedContent);
+        const string Foreign = "foreign-user-content";
+        File.WriteAllText(plan.Files[1].FullPath, Foreign);
+        byte[] firstBefore = File.ReadAllBytes(plan.Files[0].FullPath);
+
+        IOException exception = Assert.Throws<IOException>(() =>
+            editor.RecoverInterruptedChanges(snapshot));
+
+        Assert.Contains("neither the original nor the tool result", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(firstBefore, File.ReadAllBytes(plan.Files[0].FullPath));
+        Assert.Equal(Foreign, File.ReadAllText(plan.Files[1].FullPath));
+        Assert.False(File.Exists(Path.Combine(operation, "aborted")));
+    }
+
+    [Fact]
+    public void RecoveryRemovesProvenCommittedCasSidecarWithoutChangingTarget()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        const string Original = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        File.WriteAllText(engineIni, Original);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        SettingsChangePlan plan = editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+        Assert.True(editor.Apply(plan).Succeeded);
+        byte[] applied = File.ReadAllBytes(engineIni);
+        string sidecar = Path.Combine(
+            Path.GetDirectoryName(engineIni)!,
+            $".Engine.ini.{Guid.NewGuid():N}.cas");
+        File.WriteAllText(sidecar, Original);
+
+        bool recovered = editor.RecoverInterruptedChanges(snapshot);
+
+        Assert.True(recovered);
+        Assert.Equal(applied, File.ReadAllBytes(engineIni));
+        Assert.False(File.Exists(sidecar));
+    }
+
+    [Fact]
+    public void RecoveryDoesNotTreatSupersededAppliedHistoryAsInterrupted()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        DateTimeOffset now = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+        var editor = new SafeGameSettingsEditor(() => now, () => false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        Assert.True(editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
+        now = now.AddMilliseconds(1);
+        Assert.True(editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.3")])).Succeeded);
+        byte[] current = File.ReadAllBytes(engineIni);
+
+        bool recovered = editor.RecoverInterruptedChanges(snapshot);
+
+        Assert.False(recovered);
+        Assert.Equal(current, File.ReadAllBytes(engineIni));
+        Assert.Contains("r.ViewDistanceScale=1.3", File.ReadAllText(engineIni), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RecoveryIgnoresExternalChangesAfterACommittedOperation()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        Assert.True(editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
+        const string External = "[SystemSettings]\nr.ViewDistanceScale=1.4\n";
+        File.WriteAllText(engineIni, External);
+
+        bool recovered = editor.RecoverInterruptedChanges(snapshot);
+
+        Assert.False(recovered);
+        Assert.Equal(External, File.ReadAllText(engineIni));
     }
 
     [Fact]
@@ -848,6 +1156,11 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         new(
             () => new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero),
             () => gameRunning);
+
+    private static SafeGameSettingsEditor CreateEditor(Func<bool> gameRunning) =>
+        new(
+            () => new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero),
+            gameRunning);
 
     private static SettingChangeRequest Change(
         string _,

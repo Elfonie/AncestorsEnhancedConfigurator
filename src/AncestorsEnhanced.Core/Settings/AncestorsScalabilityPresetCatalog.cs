@@ -25,7 +25,7 @@ internal sealed record ScalabilityPresetValues(
 
 internal static class AncestorsScalabilityPresetCatalog
 {
-    public const string SupportedBuildId = AncestorsGameProfile.SupportedBuildId;
+    public const string SupportedBuildId = AncestorsGameProfile.SupportedSteamBuildId;
     public const string SupportedContentSignature = AncestorsGameProfile.SupportedContentSignature;
 
     private static readonly Dictionary<string, ScalabilityPresetValues> Values =

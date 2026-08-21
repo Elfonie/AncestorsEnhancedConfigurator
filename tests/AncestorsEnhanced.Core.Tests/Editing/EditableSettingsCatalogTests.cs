@@ -88,6 +88,10 @@ public sealed class EditableSettingsCatalogTests
                 Store = store,
                 Host = host,
                 CompatibilityLayer = compatibilityLayer,
+                BuildId = store == StoreKind.Steam
+                    ? AncestorsGameProfile.SupportedSteamBuildId
+                    : store == StoreKind.EpicGames ? "epic-build-version" : null,
+                ContentSignature = AncestorsGameProfile.SupportedContentSignature,
             },
         };
 
@@ -95,6 +99,39 @@ public sealed class EditableSettingsCatalogTests
             unsupported,
             "r.ViewDistanceScale",
             null));
+    }
+
+    [Fact]
+    public void EpicBuildVersionDoesNotOverrideVerifiedContentIdentity()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot();
+        snapshot = snapshot with
+        {
+            Installation = snapshot.Installation! with
+            {
+                Store = StoreKind.EpicGames,
+                BuildId = "not-a-steam-build-id",
+                ContentSignature = AncestorsGameProfile.SupportedContentSignature,
+            },
+        };
+
+        Assert.NotNull(EditableSettingsCatalog.Create(snapshot, "r.ViewDistanceScale", null));
+    }
+
+    [Fact]
+    public void SteamBuildMismatchStillRejectsMatchingContent()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot();
+        snapshot = snapshot with
+        {
+            Installation = snapshot.Installation! with
+            {
+                BuildId = "wrong-steam-build",
+                ContentSignature = AncestorsGameProfile.SupportedContentSignature,
+            },
+        };
+
+        Assert.Null(EditableSettingsCatalog.Create(snapshot, "r.ViewDistanceScale", null));
     }
 
     [Fact]

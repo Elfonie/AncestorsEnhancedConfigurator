@@ -45,20 +45,12 @@ internal static class GameEditingGuard
 
     public static void ValidatePlan(SettingsChangePlan plan)
     {
-        // The plan may be identified by its recognised build ID or its recognised
-        // content signature, but never by a stale/wrong claim. When both forms of
-        // evidence are present they must both match, so contradictory evidence is
-        // fail-closed (F061/F063/F064).
-        bool buildPending = !string.IsNullOrWhiteSpace(plan.BuildId);
-        bool contentPending = !string.IsNullOrWhiteSpace(plan.ContentSignature);
-        bool buildOk = string.Equals(plan.BuildId, AncestorsGameProfile.SupportedBuildId, StringComparison.Ordinal);
-        bool contentOk = string.Equals(
+        // Reapply the same store-specific identity rule used during inspection.
+        bool identityOk = GameIdentity.IsSupported(
+            plan.Store,
+            plan.BuildId,
             plan.ContentSignature,
-            AncestorsGameProfile.SupportedContentSignature,
-            StringComparison.Ordinal);
-        bool identityOk = buildPending && contentPending
-            ? buildOk && contentOk
-            : buildOk || contentOk;
+            contentSignatureReadFailed: false);
         if (!identityOk ||
             plan.Files.Count == 0 ||
             string.IsNullOrWhiteSpace(plan.UserDataDirectory))

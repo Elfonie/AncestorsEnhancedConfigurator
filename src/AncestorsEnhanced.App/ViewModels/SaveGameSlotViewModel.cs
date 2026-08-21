@@ -9,6 +9,7 @@ public partial class SaveGameSlotViewModel : ViewModelBase
     private const int DefaultVisibleCheckpoints = 2;
 
     private readonly Func<Task> _create;
+    private readonly Func<bool> _canMutate;
     private readonly bool _exists;
     private bool _showAllCheckpoints;
 
@@ -18,6 +19,7 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         Func<SaveGameCheckpoint, Func<Task>> loadCheckpoint,
         Func<SaveGameCheckpoint, Func<Task>> deleteCheckpoint,
         Func<bool>? canRestore = null,
+        Func<bool>? canMutate = null,
         bool showAllCheckpoints = false)
     {
         _exists = slot.Exists;
@@ -35,6 +37,7 @@ public partial class SaveGameSlotViewModel : ViewModelBase
             ? "1 checkpoint"
             : string.Create(CultureInfo.CurrentCulture, $"{slot.Checkpoints.Count} checkpoints");
         _create = create;
+        _canMutate = canMutate ?? (() => true);
         _showAllCheckpoints = showAllCheckpoints;
 
         Checkpoints = slot.Checkpoints
@@ -42,7 +45,8 @@ public partial class SaveGameSlotViewModel : ViewModelBase
                 checkpoint,
                 loadCheckpoint(checkpoint),
                 deleteCheckpoint(checkpoint),
-                canRestore ?? (() => true)))
+                canRestore ?? (() => true),
+                _canMutate))
             .ToArray();
         UpdateVisibleCheckpoints();
     }
@@ -66,7 +70,7 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     public bool HasCheckpoints => Checkpoints.Count > 0;
 
-    public bool CanSaveCheckpoint => _exists;
+    public bool CanSaveCheckpoint => _exists && _canMutate();
 
     public bool HasHiddenCheckpoints => Checkpoints.Count > DefaultVisibleCheckpoints && !_showAllCheckpoints;
 
@@ -89,6 +93,15 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     [RelayCommand]
     private async Task CreateCheckpointAsync() => await _create();
+
+    public void RefreshMutationAvailability()
+    {
+        OnPropertyChanged(nameof(CanSaveCheckpoint));
+        foreach (SaveGameCheckpointViewModel checkpoint in Checkpoints)
+        {
+            checkpoint.RefreshMutationAvailability();
+        }
+    }
 
     public static string FormatSize(long bytes) => bytes switch
     {

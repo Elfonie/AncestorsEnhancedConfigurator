@@ -11,6 +11,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private readonly ISaveGameWatchdog? _watchdog;
     private readonly string _userDataDirectory;
     private readonly Action<Action> _dispatchToUi;
+    private readonly UiMutationGate? _mutationGate;
     private bool _loadingSettings;
     private readonly object _settingsWriteGate = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
@@ -73,7 +74,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         ISaveGameManager manager,
         string userDataDirectory,
         ISaveGameWatchdog? watchdog = null)
-        : this(manager, userDataDirectory, watchdog, dispatchToUi: null)
+        : this(manager, userDataDirectory, watchdog, dispatchToUi: null, mutationGate: null)
     {
     }
 
@@ -82,12 +83,27 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         string userDataDirectory,
         ISaveGameWatchdog? watchdog,
         Action<Action>? dispatchToUi)
+        : this(manager, userDataDirectory, watchdog, dispatchToUi, mutationGate: null)
+    {
+    }
+
+    internal SaveManagerViewModel(
+        ISaveGameManager manager,
+        string userDataDirectory,
+        ISaveGameWatchdog? watchdog,
+        Action<Action>? dispatchToUi,
+        UiMutationGate? mutationGate)
     {
         ArgumentNullException.ThrowIfNull(manager);
         _manager = manager;
         _userDataDirectory = userDataDirectory;
         _watchdog = watchdog;
+        _mutationGate = mutationGate;
         _dispatchToUi = dispatchToUi ?? (action => Dispatcher.UIThread.Post(action));
+        if (_mutationGate is not null)
+        {
+            _mutationGate.Changed += OnMutationGateChanged;
+        }
         if (_watchdog is not null)
         {
             _watchdog.CheckpointCreated += OnWatchdogCheckpointCreated;
@@ -103,7 +119,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public bool HasNoSlots => !HasSlots;
 
-    public bool CanCreate => !IsBusy;
+    public bool CanCreate => CanMutate;
+
+    public bool CanMutate => !IsBusy && !(_mutationGate?.IsBusy ?? false);
+
+    public bool CanConfigureAutoBackup => CanMutate;
 
     /// <summary>Starts persisted watchdog settings only after the owner has loaded slots.</summary>
     public void Activate()
@@ -128,6 +148,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 checkpoint => () => RunLoad(slot.SlotNumber, checkpoint.Id),
                 checkpoint => () => RunDelete(slot.SlotNumber, checkpoint.Id),
                 () => !IsGameRunning,
+                () => CanMutate,
                 expandedSlots.Contains(slot.SlotNumber)))
             .ToArray();
 
@@ -197,6 +218,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     private async Task<SaveGameOperationResult> RunOperation(Func<SaveGameOperationResult> operation)
     {
+        using IDisposable? mutation = _mutationGate?.TryEnter();
+        if (_mutationGate is not null && mutation is null)
+        {
+            return new SaveGameOperationResult(false, "Another operation is already running.");
+        }
         IsBusy = true;
         StatusMessage = "Working...";
         StatusAccent = "#FF5A00";
@@ -252,7 +278,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public async Task RunCreate(string slotNumber)
     {
-        if (IsBusy)
+        if (!CanMutate)
         {
             return;
         }
@@ -262,7 +288,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public async Task<SaveGameOperationResult> RunLoad(string slotNumber, string checkpointId)
     {
-        if (IsBusy)
+        if (!CanMutate)
         {
             return new SaveGameOperationResult(false, "Another save operation is already running.");
         }
@@ -275,7 +301,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public async Task RunDelete(string slotNumber, string checkpointId)
     {
-        if (IsBusy)
+        if (!CanMutate)
         {
             return;
         }
@@ -301,6 +327,10 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             _watchdog.CheckpointCreated -= OnWatchdogCheckpointCreated;
             _watchdog.WatcherError -= OnWatcherError;
             _watchdog.StopWatch();
+        }
+        if (_mutationGate is not null)
+        {
+            _mutationGate.Changed -= OnMutationGateChanged;
         }
         _lifetimeCancellation.Cancel();
         Task allPending;
@@ -506,7 +536,21 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     partial void OnIsBusyChanged(bool value)
     {
+        NotifyMutationAvailability();
+    }
+
+    private void OnMutationGateChanged(object? sender, EventArgs e) =>
+        NotifyMutationAvailability();
+
+    private void NotifyMutationAvailability()
+    {
         OnPropertyChanged(nameof(CanCreate));
+        OnPropertyChanged(nameof(CanMutate));
+        OnPropertyChanged(nameof(CanConfigureAutoBackup));
+        foreach (SaveGameSlotViewModel slot in Slots)
+        {
+            slot.RefreshMutationAvailability();
+        }
     }
 
     private void OnWatchdogCheckpointCreated(object? sender, string slotNumber)
@@ -561,6 +605,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HasSlots));
         OnPropertyChanged(nameof(HasNoSlots));
         OnPropertyChanged(nameof(CanCreate));
+        OnPropertyChanged(nameof(CanMutate));
+        OnPropertyChanged(nameof(CanConfigureAutoBackup));
     }
 
     private static bool IsExpectedException(Exception exception) =>

@@ -83,7 +83,8 @@ internal sealed class SettingsChangePlanner(
             filePlans,
             installation.InstallDirectory,
             VerifiedGameContext.TryCreateFromSnapshot(snapshot)?.ContextFingerprint,
-            installation.ContentSignature);
+            installation.ContentSignature,
+            Store: installation.Store);
     }
 
     private static SettingChangeRequest[] ExpandCompositeRequests(

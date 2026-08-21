@@ -508,7 +508,8 @@
           </Border>
 
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1"
-                    IsVisible="{Binding IsSaveManagerAvailable}">
+                    IsVisible="{Binding IsSaveManagerAvailable}"
+                    IsEnabled="{Binding SaveManager.CanConfigureAutoBackup}">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
               <ToggleSwitch IsChecked="{Binding SaveManager.IsWatchdogEnabled, Mode=TwoWay}"
                              OffContent="Off" OnContent="On"
@@ -569,8 +570,8 @@
                                 <TextBlock Text="{Binding SizeLabel}" FontSize="12" Foreground="#71828D" />
                               </StackPanel>
                               <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
-                                <Button Classes="Ghost" Content=" Delete" Padding="12,6" Foreground="#D6BC84" Command="{Binding OpenDeleteConfirmCommand}" />
-                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="DangerAction" Content="Yes, delete it" Padding="12,6" Command="{Binding DeleteCommand}" />
+                                <Button Classes="Ghost" Content="Delete" Padding="12,6" Foreground="#D6BC84" Command="{Binding OpenDeleteConfirmCommand}" IsEnabled="{Binding CanDelete}" />
+                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="DangerAction" Content="Yes, delete it" Padding="12,6" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanDelete}" />
                                 <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelDeleteConfirmCommand}" />
                               </StackPanel>
 
@@ -640,7 +641,7 @@
 
           <Border Padding="14,11" CornerRadius="7" Background="#2A1F16" BorderBrush="#6B4A26" BorderThickness="1"
                   IsVisible="{Binding Cheat.IsGameRunning}">
-            <TextBlock Text="Game is running - close Ancestors before injecting. The cheat buttons are disabled while the game is open." FontWeight="SemiBold" Foreground="#E8C08A" TextWrapping="Wrap" />
+            <TextBlock Text="Game is running - close Ancestors before creating or restoring a cheat checkpoint. The cheat buttons are disabled while the game is open." FontWeight="SemiBold" Foreground="#E8C08A" TextWrapping="Wrap" />
           </Border>
 
           <StackPanel IsVisible="{Binding IsCheatAvailable}" Spacing="8">

@@ -94,7 +94,8 @@ internal static class ToolChangeBaselineStore
             context.InstallDirectory,
             context.ContextFingerprint,
             context.ContentSignature,
-            IsToolChangeRemoval: true);
+            IsToolChangeRemoval: true,
+            Store: context.Store);
     }
 
     public static void CaptureBeforeApply(SettingsChangePlan plan)
@@ -221,6 +222,57 @@ internal static class ToolChangeBaselineStore
         }
     }
 
+    public static void RollbackInterrupted(
+        VerifiedGameContext context,
+        OperationManifest operation)
+    {
+        BaselineManifest? manifest = Read(context.UserDataDirectory);
+        if (manifest is null)
+        {
+            return;
+        }
+        if (!string.Equals(manifest.ContextFingerprint, context.ContextFingerprint, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The tool-change baseline belongs to a different game context.");
+        }
+
+        List<BaselineFile> files = [.. manifest.Files];
+        foreach (ManifestFile interrupted in operation.Files)
+        {
+            int index = files.FindIndex(file => file.Target == interrupted.Target &&
+                string.Equals(file.FileName, interrupted.FileName, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                continue;
+            }
+
+            BaselineFile file = files[index];
+            bool capturedState = file.ToolStateExists == interrupted.Existed &&
+                string.Equals(file.ToolStateSha256, interrupted.OriginalSha256, StringComparison.Ordinal);
+            bool appliedState = file.ToolStateExists == interrupted.ResultExists &&
+                string.Equals(file.ToolStateSha256, interrupted.ResultSha256, StringComparison.Ordinal);
+            if (!capturedState && !appliedState)
+            {
+                throw new InvalidOperationException(
+                    $"The baseline state for {interrupted.FileName} does not match the interrupted operation.");
+            }
+            files[index] = file with
+            {
+                ToolStateExists = interrupted.Existed,
+                ToolStateSha256 = interrupted.OriginalSha256,
+            };
+        }
+
+        if (files.All(IsAtOriginalState))
+        {
+            Delete(context.UserDataDirectory);
+        }
+        else
+        {
+            Write(context.UserDataDirectory, manifest with { Files = files });
+        }
+    }
+
     public static void MarkReverted(VerifiedGameContext context, OperationManifest operation)
     {
         BaselineManifest? manifest = Read(context.UserDataDirectory);
@@ -245,11 +297,19 @@ internal static class ToolChangeBaselineStore
             }
 
             BaselineFile file = files[index];
-            if (file.ToolStateExists != reverted.ResultExists ||
-                !string.Equals(file.ToolStateSha256, reverted.ResultSha256, StringComparison.Ordinal))
+            bool stillApplied = file.ToolStateExists == reverted.ResultExists &&
+                string.Equals(file.ToolStateSha256, reverted.ResultSha256, StringComparison.Ordinal);
+            bool alreadyReverted = file.ToolStateExists == reverted.Existed &&
+                string.Equals(file.ToolStateSha256, reverted.OriginalSha256, StringComparison.Ordinal);
+            if (!stillApplied && !alreadyReverted)
             {
                 throw new InvalidOperationException(
                     $"The baseline state for {reverted.FileName} no longer matches the operation being undone.");
+            }
+
+            if (alreadyReverted)
+            {
+                continue;
             }
 
             files[index] = file with

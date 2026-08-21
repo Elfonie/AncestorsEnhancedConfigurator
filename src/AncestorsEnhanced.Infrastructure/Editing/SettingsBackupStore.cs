@@ -14,6 +14,7 @@ internal static class SettingsBackupStore
     private const string AppliedMarkerName = "applied";
     private const string RevertedMarkerName = "reverted";
     private const string AbortedMarkerName = "aborted";
+    private const string RevertPendingMarkerName = "revert-pending";
     private const int MaximumManifestSize = 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -66,6 +67,131 @@ internal static class SettingsBackupStore
         WriteBytesAtomically(
             Path.Combine(directory, AbortedMarkerName),
             Encoding.UTF8.GetBytes(abortedAtUtc.ToString("O")));
+
+    public static void MarkRevertPending(string directory, DateTimeOffset startedAtUtc) =>
+        WriteBytesAtomically(
+            Path.Combine(directory, RevertPendingMarkerName),
+            Encoding.UTF8.GetBytes(startedAtUtc.ToString("O")));
+
+    public static void ClearRevertPending(string directory)
+    {
+        string path = Path.Combine(directory, RevertPendingMarkerName);
+        File.Delete(path);
+        if (File.Exists(path))
+        {
+            throw new IOException("The interrupted undo marker could not be removed.");
+        }
+    }
+
+    public static bool RecoverInterrupted(VerifiedGameContext context)
+    {
+        string backupRoot = GetBackupRoot(context.UserDataDirectory);
+        if (!Directory.Exists(backupRoot))
+        {
+            return false;
+        }
+
+        bool recovered = false;
+        foreach (string directory in Directory.EnumerateDirectories(backupRoot)
+                     .OrderByDescending(path => path, StringComparer.Ordinal))
+        {
+            if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
+            {
+                continue;
+            }
+
+            OperationManifest? manifest = ReadManifest(directory);
+            if (manifest is null || !IsCandidateUsable(manifest, context))
+            {
+                continue;
+            }
+
+            bool applied = File.Exists(Path.Combine(directory, AppliedMarkerName));
+            bool reverted = File.Exists(Path.Combine(directory, RevertedMarkerName));
+            bool aborted = File.Exists(Path.Combine(directory, AbortedMarkerName));
+            bool revertPending = File.Exists(Path.Combine(directory, RevertPendingMarkerName));
+            if (aborted || (reverted && !revertPending))
+            {
+                continue;
+            }
+
+            List<RecoveryFile> files = ValidateRecoveryFiles(context, directory, manifest);
+            if (applied && !reverted && !revertPending)
+            {
+                // The applied marker is the commit record. The target may have been
+                // changed by the game, the user, or a newer operation afterwards.
+                // Only a still-present CAS sidecar belongs to crash recovery here.
+                foreach (RecoveryFile file in files.Where(file => file.HasSidecar))
+                {
+                    recovered |= RecoverInterruptedTarget(file.TargetPath, file.ExpectedExistingHashes);
+                }
+                break;
+            }
+
+            ManifestFile? preexistingForeign = files
+                .Where(file => !file.HasSidecar)
+                .FirstOrDefault(file =>
+                    ReadTargetState(file.TargetPath, file.Manifest) == RecoveryTargetState.Foreign)
+                ?.Manifest;
+            if (preexistingForeign is not null)
+            {
+                throw ManualRecoveryRequired(directory, preexistingForeign.FileName);
+            }
+
+            foreach (RecoveryFile file in files.Where(file => file.HasSidecar))
+            {
+                recovered |= RecoverInterruptedTarget(file.TargetPath, file.ExpectedExistingHashes);
+            }
+
+            files = files.Select(file => file with
+            {
+                State = ReadTargetState(file.TargetPath, file.Manifest),
+            }).ToList();
+            ManifestFile? foreign = files.FirstOrDefault(file => file.State == RecoveryTargetState.Foreign)?.Manifest;
+            if (foreign is not null)
+            {
+                throw ManualRecoveryRequired(directory, foreign.FileName);
+            }
+
+            bool allOriginal = files.All(file => file.State == RecoveryTargetState.Original);
+            if (reverted)
+            {
+                if (!allOriginal)
+                {
+                    throw new IOException(
+                        $"The completed undo journal does not match its target files. Inspect {GetManifestPath(directory)} manually.");
+                }
+                ToolChangeBaselineStore.MarkReverted(context, manifest);
+                ClearRevertPending(directory);
+                recovered = true;
+                continue;
+            }
+
+            RestoreOriginalStates(directory, files);
+            if (applied)
+            {
+                MarkReverted(directory, DateTimeOffset.UtcNow);
+                ToolChangeBaselineStore.MarkReverted(context, manifest);
+                if (revertPending)
+                {
+                    ClearRevertPending(directory);
+                }
+            }
+            else
+            {
+                ToolChangeBaselineStore.RollbackInterrupted(context, manifest);
+                MarkAborted(directory, DateTimeOffset.UtcNow);
+            }
+            recovered = true;
+        }
+
+        return recovered;
+    }
+
+    private static IOException ManualRecoveryRequired(string directory, string fileName) =>
+        new(
+            $"Interrupted settings recovery stopped because {fileName} matches neither the original nor the tool result. " +
+            $"No foreign game file was overwritten. Inspect {GetManifestPath(directory)} manually.");
 
     public static StoredSettingsOperation? FindLast(VerifiedGameContext context)
     {
@@ -157,6 +283,116 @@ internal static class SettingsBackupStore
         return null;
     }
 
+    private static List<RecoveryFile> ValidateRecoveryFiles(
+        VerifiedGameContext context,
+        string operationDirectory,
+        OperationManifest manifest)
+    {
+        if (manifest.Files.Count == 0)
+        {
+            throw new IOException($"The interrupted operation has no files: {GetManifestPath(operationDirectory)}");
+        }
+
+        var files = new List<RecoveryFile>(manifest.Files.Count);
+        foreach (ManifestFile file in manifest.Files)
+        {
+            string targetPath = GetTargetPath(
+                context.UserDataDirectory,
+                context.InstallDirectory,
+                file.FileName,
+                file.Target);
+            string? expectedBackupName = file.Existed ? $"{file.FileName}.before" : null;
+            if (!string.Equals(file.BackupFileName, expectedBackupName, PathComparison))
+            {
+                throw new IOException($"The recovery backup name for {file.FileName} is invalid.");
+            }
+
+            if (file.Existed)
+            {
+                string backupPath = Path.Combine(operationDirectory, expectedBackupName!);
+                if (!IsNormalFile(backupPath) ||
+                    !string.Equals(
+                        Sha256(ReadStableBounded(backupPath, 64L * 1024 * 1024)),
+                        file.OriginalSha256,
+                        StringComparison.Ordinal))
+                {
+                    throw new IOException($"The recovery backup for {file.FileName} is missing or invalid.");
+                }
+            }
+
+            var expectedExistingHashes = new List<string>(2);
+            if (file.Existed)
+            {
+                expectedExistingHashes.Add(file.OriginalSha256);
+            }
+            if (file.ResultExists)
+            {
+                expectedExistingHashes.Add(file.ResultSha256);
+            }
+            bool hasSidecar = ValidateInterruptedTargetRecovery(targetPath, expectedExistingHashes);
+            files.Add(new RecoveryFile(
+                file,
+                targetPath,
+                expectedExistingHashes,
+                hasSidecar,
+                RecoveryTargetState.Foreign));
+        }
+        return files;
+    }
+
+    private static RecoveryTargetState ReadTargetState(string targetPath, ManifestFile file)
+    {
+        if (Directory.Exists(targetPath))
+        {
+            return RecoveryTargetState.Foreign;
+        }
+
+        bool exists = File.Exists(targetPath);
+        string? hash = exists
+            ? Sha256(ReadStableBounded(targetPath, 64L * 1024 * 1024))
+            : null;
+        bool original = exists == file.Existed &&
+            (!exists || string.Equals(hash, file.OriginalSha256, StringComparison.Ordinal));
+        if (original)
+        {
+            return RecoveryTargetState.Original;
+        }
+
+        bool result = exists == file.ResultExists &&
+            (!exists || string.Equals(hash, file.ResultSha256, StringComparison.Ordinal));
+        return result ? RecoveryTargetState.Result : RecoveryTargetState.Foreign;
+    }
+
+    private static void RestoreOriginalStates(
+        string operationDirectory,
+        IReadOnlyList<RecoveryFile> files)
+    {
+        foreach (RecoveryFile recovery in files.Where(file => file.State == RecoveryTargetState.Result))
+        {
+            ManifestFile file = recovery.Manifest;
+            if (file.Existed)
+            {
+                byte[] original = ReadStableBounded(
+                    Path.Combine(operationDirectory, file.BackupFileName!),
+                    64L * 1024 * 1024);
+                CompareAndReplace(
+                    recovery.TargetPath,
+                    original,
+                    file.ResultExists ? file.ResultSha256 : null,
+                    file.ResultExists);
+            }
+            else if (file.ResultExists)
+            {
+                CompareAndDelete(recovery.TargetPath, file.ResultSha256);
+            }
+
+            if (ReadTargetState(recovery.TargetPath, file) != RecoveryTargetState.Original)
+            {
+                throw new IOException($"Recovery validation failed for {file.FileName}.");
+            }
+        }
+    }
+
     private static bool IsCandidateUsable(OperationManifest manifest, VerifiedGameContext context)
     {
         if (manifest.Version != 2)
@@ -175,7 +411,11 @@ internal static class SettingsBackupStore
 
         // Legacy manifest without a fingerprint: fail-safe, accept only when the identity
         // and the exact paths unambiguously match the current context.
-        return pathMatches && GameIdentity.IsSupported(manifest.BuildId, manifest.ContentSignature, contentSignatureReadFailed: false);
+        return pathMatches && GameIdentity.IsSupported(
+            StoreKind.Steam,
+            manifest.BuildId,
+            manifest.ContentSignature,
+            contentSignatureReadFailed: false);
     }
 
     private static bool PathEquals(string? first, string? second)
@@ -321,3 +561,17 @@ internal sealed record ManifestFile(
 internal sealed record StoredSettingsOperation(
     string Directory,
     OperationManifest Manifest);
+
+internal enum RecoveryTargetState
+{
+    Original,
+    Result,
+    Foreign,
+}
+
+internal sealed record RecoveryFile(
+    ManifestFile Manifest,
+    string TargetPath,
+    IReadOnlyCollection<string> ExpectedExistingHashes,
+    bool HasSidecar,
+    RecoveryTargetState State);

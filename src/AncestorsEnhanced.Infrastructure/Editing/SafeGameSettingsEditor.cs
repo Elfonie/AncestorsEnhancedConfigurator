@@ -67,9 +67,18 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
             return false;
         }
 
-        return ConfigurationFileOperations.RecoverInterruptedOperations(
-            context.UserDataDirectory,
-            context.InstallDirectory);
+        return MutationCoordinator.Run(() =>
+        {
+            if (_isGameRunning() || (_verifier is not null && !_verifier.Verify(context)))
+            {
+                return false;
+            }
+
+            bool recovered = SettingsBackupStore.RecoverInterrupted(context);
+            return ConfigurationFileOperations.RecoverInterruptedOperations(
+                context.UserDataDirectory,
+                context.InstallDirectory) || recovered;
+        });
     }
 
     public SettingsChangePlan CreatePlan(

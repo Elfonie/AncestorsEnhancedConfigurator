@@ -280,11 +280,10 @@ public static class EditableSettingsCatalog
             return false;
         }
 
-        // The supported build ID and the content signature are independent evidence.
-        // If both are present they must both match, so contradictory evidence is
-        // fail-closed (F061). A content-signature READ ERROR fails closed too (F063):
-        // it is never equivalent to "this platform has no signature".
+        // Steam build evidence is store-specific. Epic and GOG are recognised by the
+        // verified content signature; a signature read error always fails closed.
         return GameIdentity.IsSupported(
+            installation.Store,
             installation.BuildId,
             installation.ContentSignature,
             installation.ContentSignatureReadFailed);

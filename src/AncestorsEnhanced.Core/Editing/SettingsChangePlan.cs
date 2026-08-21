@@ -1,3 +1,5 @@
+using AncestorsEnhanced.Core.Inspection;
+
 namespace AncestorsEnhanced.Core.Editing;
 
 public sealed record SettingsChangePlan(
@@ -10,4 +12,5 @@ public sealed record SettingsChangePlan(
     string? InstallDirectory = null,
     string? ContextFingerprint = null,
     string? ContentSignature = null,
-    bool IsToolChangeRemoval = false);
+    bool IsToolChangeRemoval = false,
+    StoreKind Store = StoreKind.Steam);

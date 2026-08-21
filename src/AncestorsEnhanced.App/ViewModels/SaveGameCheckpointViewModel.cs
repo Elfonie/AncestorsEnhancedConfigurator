@@ -10,12 +10,14 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     private readonly Func<Task> _load;
     private readonly Func<Task> _delete;
     private readonly Func<bool> _canRestore;
+    private readonly Func<bool> _canMutate;
 
     public SaveGameCheckpointViewModel(
         SaveGameCheckpoint checkpoint,
         Func<Task> load,
         Func<Task> delete,
-        Func<bool> canRestore)
+        Func<bool> canRestore,
+        Func<bool>? canMutate = null)
     {
         Id = checkpoint.Id;
         SlotNumber = checkpoint.SlotNumber;
@@ -25,6 +27,7 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         _load = load;
         _delete = delete;
         _canRestore = canRestore;
+        _canMutate = canMutate ?? (() => true);
     }
 
     public string Id { get; }
@@ -37,7 +40,9 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
 
     public string OriginLabel { get; }
 
-    public bool CanRestore => _canRestore();
+    public bool CanRestore => _canRestore() && _canMutate();
+
+    public bool CanDelete => _canMutate();
 
     [ObservableProperty]
     public partial bool IsDeleteConfirmVisible { get; set; }
@@ -48,6 +53,10 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     [RelayCommand]
     private void OpenDeleteConfirm()
     {
+        if (!CanDelete)
+        {
+            return;
+        }
         IsDeleteConfirmVisible = true;
         IsRestoreConfirmVisible = false;
     }
@@ -95,8 +104,22 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     [RelayCommand]
     private async Task DeleteAsync()
     {
+        if (!CanDelete)
+        {
+            return;
+        }
         IsDeleteConfirmVisible = false;
         await _delete();
+    }
+
+    public void RefreshMutationAvailability()
+    {
+        if (!CanDelete)
+        {
+            IsDeleteConfirmVisible = false;
+        }
+        RefreshRestoreAvailability();
+        OnPropertyChanged(nameof(CanDelete));
     }
 
     private static string FormatOrigin(string origin) => origin switch

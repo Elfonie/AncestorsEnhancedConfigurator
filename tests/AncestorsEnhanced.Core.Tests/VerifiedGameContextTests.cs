@@ -70,7 +70,7 @@ public sealed class VerifiedGameContextTests
             CompatibilityLayerKind.None,
             "C:\\library",
             "C:\\install",
-            AncestorsEnhanced.Core.AncestorsGameProfile.SupportedBuildId,
+            AncestorsEnhanced.Core.AncestorsGameProfile.SupportedSteamBuildId,
             ExecutableExists: true,
             null);
         GameInspectionSnapshot snapshot = new(
@@ -92,7 +92,7 @@ public sealed class VerifiedGameContextTests
             HostKind.Windows,
             CompatibilityLayerKind.None,
             "C:\\library",
-            AncestorsEnhanced.Core.AncestorsGameProfile.SupportedBuildId,
+            AncestorsEnhanced.Core.AncestorsGameProfile.SupportedSteamBuildId,
             null,
             false);
 }

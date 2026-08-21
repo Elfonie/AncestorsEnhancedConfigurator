@@ -92,6 +92,41 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
+    public async Task SaveMutationDisablesAllOtherMutationControls()
+    {
+        var checkpoint = new SaveGameCheckpoint(
+            "cp-1", DateTimeOffset.UnixEpoch, "0", 10, "Manual");
+        var slot = new SaveGameSlotSnapshot(
+            "0", "Savegame0.sav", "path-0", true, 10, DateTimeOffset.UnixEpoch, [checkpoint]);
+        var manager = new BlockingSaveGameManager(
+            new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", [slot]));
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            _ => manager);
+        await viewModel.InitializeAsync();
+
+        Task operation = viewModel.SaveManager!.RunCreate("0");
+        Assert.True(manager.Entered.Wait(TimeSpan.FromSeconds(5)));
+
+        SaveGameSlotViewModel shownSlot = Assert.Single(viewModel.SaveManager.Slots);
+        SaveGameCheckpointViewModel shownCheckpoint = Assert.Single(shownSlot.Checkpoints);
+        Assert.True(viewModel.IsAnyOperationRunning);
+        Assert.False(viewModel.CanEditSettings);
+        Assert.False(viewModel.SaveManager.CanConfigureAutoBackup);
+        Assert.False(shownSlot.CanSaveCheckpoint);
+        Assert.False(shownCheckpoint.CanRestore);
+        Assert.False(shownCheckpoint.CanDelete);
+
+        manager.Release.Set();
+        await operation;
+
+        Assert.False(viewModel.IsAnyOperationRunning);
+        Assert.True(viewModel.CanEditSettings);
+        Assert.True(viewModel.SaveManager.CanConfigureAutoBackup);
+    }
+
+    [Fact]
     public async Task WithoutUserDataTheSaveManagerIsNotShown()
     {
         GameInspectionSnapshot snapshot = CreateSnapshot() with { UserDataDirectory = null };
@@ -268,6 +303,31 @@ public sealed class SaveManagerViewModelTests
 
           public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
               new(true, "Deleted.");
+
+        public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
+            new(true, "Loaded.");
+    }
+
+    private sealed class BlockingSaveGameManager(SaveGamesSnapshot snapshot) : ISaveGameManager
+    {
+        public ManualResetEventSlim Entered { get; } = new(false);
+
+        public ManualResetEventSlim Release { get; } = new(false);
+
+        public SaveGamesSnapshot Inspect() => snapshot;
+
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual")
+        {
+            Entered.Set();
+            if (!Release.Wait(TimeSpan.FromSeconds(10)))
+            {
+                return new SaveGameOperationResult(false, "Timed out.");
+            }
+            return new SaveGameOperationResult(true, "Checkpoint saved.", "cp-2");
+        }
+
+        public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+            new(true, "Deleted.");
 
         public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
             new(true, "Loaded.");

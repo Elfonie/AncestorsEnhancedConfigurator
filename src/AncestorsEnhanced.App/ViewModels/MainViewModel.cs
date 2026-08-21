@@ -17,8 +17,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly IGameSettingsEditor _settingsEditor;
     private readonly Func<VerifiedGameContext, ISaveGameManager> _saveManagerFactory;
     private readonly GameContextVerifier _gameContextVerifier;
+    private readonly UiMutationGate _mutationGate = new();
     private VerifiedGameContext? _verifiedGameContext;
     private bool _saveGamesRefreshFailed;
+    private bool _lastRefreshRecoveredOperation;
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
         new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
@@ -124,6 +126,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _gameContextVerifier = new GameContextVerifier(inspector);
         _settingsEditor = settingsEditor;
         _saveManagerFactory = saveManagerFactory ?? (context => new SafeSaveGameManager(context, _gameContextVerifier));
+        _mutationGate.Changed += OnMutationGateChanged;
 
         ProductName = "Ancestors Enhanced Configurator";
         string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.8.0";
@@ -150,10 +153,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool HasPendingChanges => PendingChanges.Count > 0;
 
-    public bool CanUndo => CanRevertLast && !HasPendingChanges && !IsReviewingChanges && !IsBusy;
+    public bool CanUndo => CanRevertLast && !HasPendingChanges && !IsReviewingChanges && !IsAnyOperationRunning;
 
     public bool CanRemoveToolChanges =>
-        HasRemovableToolChanges && !HasPendingChanges && !IsReviewingChanges && !IsBusy;
+        HasRemovableToolChanges && !HasPendingChanges && !IsReviewingChanges && !IsAnyOperationRunning;
 
     public bool ShowPendingActions => HasPendingChanges && !IsReviewingChanges;
 
@@ -163,12 +166,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool IsAnyOperationRunning =>
         IsBusy ||
+        _mutationGate.IsBusy ||
         (SaveManager?.IsBusy ?? false) ||
         (Cheat?.IsBusy ?? false);
-    public bool CanEditSettings => !IsReviewingChanges && !IsBusy;
+    public bool CanEditSettings => !IsReviewingChanges && !IsAnyOperationRunning;
 
     public bool CanRestoreGameDefaults =>
-        !IsBusy &&
+        !IsAnyOperationRunning &&
         !HasPendingChanges &&
         !IsReviewingChanges &&
         _editors.Values.Any(editor => editor.HasActiveOverride);
@@ -226,10 +230,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         if (await RefreshFromDiskAsync())
         {
             ShowMessage(
-                _saveGamesRefreshFailed
+                _lastRefreshRecoveredOperation
+                    ? _saveGamesRefreshFailed
+                        ? "An interrupted tool operation was recovered, but save games could not be refreshed."
+                        : "An interrupted tool operation was recovered safely."
+                    : _saveGamesRefreshFailed
                     ? "Configuration loaded, but save games could not be refreshed."
                     : "Configuration loaded. No files were changed.",
-                _saveGamesRefreshFailed ? "#D6BC84" : "#7A877A");
+                _saveGamesRefreshFailed ? "#D6BC84" : _lastRefreshRecoveredOperation ? "#B4D941" : "#7A877A");
         }
     }
 
@@ -250,7 +258,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         if (await RefreshFromDiskAsync())
         {
             ShowMessage(
-                _saveGamesRefreshFailed
+                _lastRefreshRecoveredOperation
+                    ? _saveGamesRefreshFailed
+                        ? "An interrupted tool operation was recovered, but save games could not be refreshed."
+                        : "An interrupted tool operation was recovered safely and the configuration was reloaded."
+                    : _saveGamesRefreshFailed
                     ? "Configuration reloaded, but save games could not be refreshed."
                     : "Configuration reloaded from disk.",
                 _saveGamesRefreshFailed ? "#D6BC84" : "#B4D941");
@@ -283,7 +295,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         if (e.PropertyName == nameof(SaveManagerViewModel.IsBusy) ||
             e.PropertyName == nameof(CheatViewModel.IsBusy))
         {
-            OnPropertyChanged(nameof(IsAnyOperationRunning));
+            NotifyMutationAvailability();
         }
 
         if (sender is CheatViewModel cheat &&
@@ -356,7 +368,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void OpenReview()
     {
-        if (_snapshot is null || !HasPendingChanges)
+        if (_snapshot is null || !HasPendingChanges || IsAnyOperationRunning)
         {
             return;
         }
@@ -425,6 +437,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task ConfirmApplyAsync()
     {
+        using IDisposable? mutation = _mutationGate.TryEnter();
+        if (mutation is null)
+        {
+            return;
+        }
         SettingsChangePlan? plan = _reviewPlan;
         if (plan is null || !IsReviewingChanges)
         {
@@ -470,6 +487,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private async Task RevertLastAsync()
     {
         if (_snapshot is null || HasPendingChanges || IsReviewingChanges)
+        {
+            return;
+        }
+
+        using IDisposable? mutation = _mutationGate.TryEnter();
+        if (mutation is null)
         {
             return;
         }
@@ -610,9 +633,17 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     partial void OnIsBusyChanged(bool value)
     {
+        NotifyMutationAvailability();
+    }
+
+    private void OnMutationGateChanged(object? sender, EventArgs e) =>
+        NotifyMutationAvailability();
+
+    private void NotifyMutationAvailability()
+    {
+        OnPropertyChanged(nameof(IsAnyOperationRunning));
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRemoveToolChanges));
-        OnPropertyChanged(nameof(IsAnyOperationRunning));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
     }
@@ -644,6 +675,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private async Task<bool> RefreshFromDiskAsync()
     {
         CloseReview();
+        _lastRefreshRecoveredOperation = false;
         IsBusy = true;
         DetectionStatus = "Scanning game files";
         ShowMessage("Reading the installation and settings...", "#FF5A00");
@@ -652,6 +684,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
             if (await Task.Run(() => _settingsEditor.RecoverInterruptedChanges(snapshot)))
             {
+                _lastRefreshRecoveredOperation = true;
                 snapshot = await Task.Run(_inspector.Inspect);
             }
             bool canKeepChildState = _verifiedGameContext?.Matches(snapshot) == true &&
@@ -773,7 +806,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ISaveGameManager manager = _saveManagerFactory(context);
             SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
             var watchdog = new SaveGameWatchdog(context, _gameContextVerifier);
-            var viewModel = new SaveManagerViewModel(manager, context.UserDataDirectory, watchdog);
+            var viewModel = new SaveManagerViewModel(
+                manager,
+                context.UserDataDirectory,
+                watchdog,
+                dispatchToUi: null,
+                mutationGate: _mutationGate);
             viewModel.Refresh(snapshot);
             return viewModel;
         }
@@ -803,7 +841,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 }
 
                 return await SaveManager.RunLoad(slot, checkpointId);
-            });
+            },
+            _mutationGate);
     }    private void RebuildEditors()
     {
         foreach (SettingEditorViewModel editor in _editors.Values)
@@ -1051,6 +1090,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
         }
         _searchDebounceSource?.Dispose();
+        _mutationGate.Changed -= OnMutationGateChanged;
         _searchDebounceSource = null;
         _searchDebounceTask = null;
         SaveManager?.Dispose();

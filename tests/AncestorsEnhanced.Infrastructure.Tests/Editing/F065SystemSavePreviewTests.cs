@@ -101,7 +101,7 @@ public sealed class F065SystemSavePreviewTests
                 CompatibilityLayerKind.None,
                 "library",
                 "install",
-                AncestorsEnhanced.Core.AncestorsGameProfile.SupportedBuildId,
+                AncestorsEnhanced.Core.AncestorsGameProfile.SupportedSteamBuildId,
                 ExecutableExists: true,
                 AncestorsEnhanced.Core.AncestorsGameProfile.SupportedContentSignature),
             userData,

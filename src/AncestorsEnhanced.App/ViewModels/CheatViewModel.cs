@@ -11,6 +11,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 {
     private readonly ISaveGameCheatService _service;
     private readonly Func<string, string, Task<SaveGameOperationResult>>? _restoreCheckpoint;
+    private readonly UiMutationGate? _mutationGate;
     private readonly CancellationTokenSource _gameCheckCts = new();
     private bool _started;
     private bool _disposed;
@@ -80,10 +81,23 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     }
 
     public CheatViewModel(ISaveGameCheatService service, Func<string, string, Task<SaveGameOperationResult>>? restoreCheckpoint = null)
+        : this(service, restoreCheckpoint, mutationGate: null)
+    {
+    }
+
+    internal CheatViewModel(
+        ISaveGameCheatService service,
+        Func<string, string, Task<SaveGameOperationResult>>? restoreCheckpoint,
+        UiMutationGate? mutationGate)
     {
         ArgumentNullException.ThrowIfNull(service);
         _service = service;
         _restoreCheckpoint = restoreCheckpoint;
+        _mutationGate = mutationGate;
+        if (_mutationGate is not null)
+        {
+            _mutationGate.Changed += OnMutationGateChanged;
+        }
         SelectedSlot = null;
     }
 
@@ -105,7 +119,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         HasStatus = true;
     }
 
-    public bool CanApply => !IsBusy && !IsGameRunning && SelectedSlot is not null;
+    public bool CanApply =>
+        !IsBusy && !IsGameRunning && SelectedSlot is not null && !(_mutationGate?.IsBusy ?? false);
 
 
     public string SteamCloudWarning { get; } =
@@ -125,13 +140,19 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     private async Task RunCheatAsync(CheatKind kind)
     {
-        if (IsBusy || IsGameRunning)
+        if (!CanApply)
         {
             return;
         }
 
         CheatSlotChoice? selectedSlot = SelectedSlot;
         if (selectedSlot is null)
+        {
+            return;
+        }
+
+        using IDisposable? mutation = _mutationGate?.TryEnter();
+        if (_mutationGate is not null && mutation is null)
         {
             return;
         }
@@ -174,7 +195,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     }
 
     public bool CanRestoreLastCheckpoint =>
-        _restoreCheckpoint is not null && _lastCheckpointId is not null && !IsBusy && !IsGameRunning;
+        _restoreCheckpoint is not null && _lastCheckpointId is not null && !IsBusy && !IsGameRunning &&
+        !(_mutationGate?.IsBusy ?? false);
 
     [RelayCommand]
     private async Task RestoreLastCheckpointAsync()
@@ -262,6 +284,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanRestoreLastCheckpoint));
     }
 
+    private void OnMutationGateChanged(object? sender, EventArgs e) => NotifyState();
+
     public void Dispose()
     {
         if (_disposed)
@@ -271,6 +295,10 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
         _disposed = true;
         GC.SuppressFinalize(this);
+        if (_mutationGate is not null)
+        {
+            _mutationGate.Changed -= OnMutationGateChanged;
+        }
         _gameCheckCts.Cancel();
         try
         {

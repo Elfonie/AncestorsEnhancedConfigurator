@@ -36,6 +36,7 @@ public sealed class MainViewModelTests
         Assert.Equal(1, editor.RecoveryCount);
         Assert.Equal(2, inspector.Count);
         Assert.Equal("Ancestors is ready", viewModel.DetectionStatus);
+        Assert.Equal("An interrupted tool operation was recovered safely.", viewModel.OperationMessage);
     }
 
     [Fact]

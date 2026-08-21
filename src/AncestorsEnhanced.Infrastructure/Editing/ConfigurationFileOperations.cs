@@ -486,31 +486,26 @@ internal static class ConfigurationFileOperations
         return recovered;
     }
 
-    internal static bool RecoverInterruptedTarget(string path)
+    internal static bool RecoverInterruptedTarget(
+        string path,
+        IReadOnlyCollection<string>? expectedExistingHashes = null)
     {
-        string? directory = Path.GetDirectoryName(path);
-        if (directory is null || !Directory.Exists(directory))
-        {
-            return false;
-        }
-
-        string targetName = Path.GetFileName(path);
-        string prefix = $".{targetName}.";
-        string[] captured = Directory.EnumerateFiles(directory, $".{targetName}.*.cas")
-            .Where(candidate => IsCapturedName(Path.GetFileName(candidate), prefix))
-            .ToArray();
+        string[] captured = GetCapturedSidecars(path);
         if (captured.Length == 0)
         {
             return false;
         }
-        if (captured.Length > 1)
-        {
-            throw new IOException($"Multiple interrupted writes were found for {targetName}. No automatic recovery was attempted.");
-        }
+        ValidateInterruptedTargetRecovery(path, expectedExistingHashes);
+        string targetName = Path.GetFileName(path);
         if (File.Exists(path))
         {
-            throw new IOException(
-                $"An interrupted write and a current {targetName} both exist. Neither file was changed.");
+            TryDeleteFile(captured[0]);
+            if (File.Exists(captured[0]))
+            {
+                throw new IOException($"The completed write sidecar for {targetName} could not be removed.");
+            }
+            TryDeleteFile(Path.ChangeExtension(captured[0], ".new"));
+            return true;
         }
 
         string capturedPath = captured[0];
@@ -519,6 +514,66 @@ internal static class ConfigurationFileOperations
         File.Move(capturedPath, path, overwrite: false);
         TryDeleteFile(Path.ChangeExtension(capturedPath, ".new"));
         return true;
+    }
+
+    internal static bool ValidateInterruptedTargetRecovery(
+        string path,
+        IReadOnlyCollection<string>? expectedExistingHashes = null)
+    {
+        string[] captured = GetCapturedSidecars(path);
+        if (captured.Length == 0)
+        {
+            return false;
+        }
+
+        string targetName = Path.GetFileName(path);
+        if (captured.Length > 1)
+        {
+            throw new IOException($"Multiple interrupted writes were found for {targetName}. No automatic recovery was attempted.");
+        }
+
+        ValidateWritableTarget(captured[0]);
+        string capturedHash = Sha256(ReadStableBounded(captured[0], 64L * 1024 * 1024));
+        if (!File.Exists(path))
+        {
+            if (expectedExistingHashes is not null &&
+                !expectedExistingHashes.Contains(capturedHash, StringComparer.Ordinal))
+            {
+                throw new IOException($"The interrupted write sidecar for {targetName} does not match the operation journal.");
+            }
+            return true;
+        }
+
+        if (expectedExistingHashes is null)
+        {
+            throw new IOException(
+                $"An interrupted write and a current {targetName} both exist. Neither file was changed.");
+        }
+
+        string targetHash = Sha256(ReadStableBounded(path, 64L * 1024 * 1024));
+        if (!expectedExistingHashes.Contains(targetHash, StringComparer.Ordinal) ||
+            !expectedExistingHashes.Contains(capturedHash, StringComparer.Ordinal) ||
+            string.Equals(targetHash, capturedHash, StringComparison.Ordinal))
+        {
+            throw new IOException(
+                $"The current {targetName} and its write sidecar do not prove a completed tool operation. Neither file was changed.");
+        }
+        return true;
+    }
+
+    private static string[] GetCapturedSidecars(string path)
+    {
+        string? directory = Path.GetDirectoryName(path);
+        if (directory is null || !Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        string targetName = Path.GetFileName(path);
+        string prefix = $".{targetName}.";
+        return Directory.EnumerateFiles(directory, $".{targetName}.*.cas")
+            .Where(candidate => IsCapturedName(Path.GetFileName(candidate), prefix))
+            .ToArray();
     }
 
     private static bool IsCapturedName(string fileName, string prefix)

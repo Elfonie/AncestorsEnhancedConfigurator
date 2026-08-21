@@ -138,6 +138,7 @@ public sealed class ReadOnlyAncestorsInspectorTests
             inspector.Inspect().Installation);
         Assert.Equal(StoreKind.EpicGames, installation.Store);
         Assert.Equal(install, installation.InstallDirectory);
+        Assert.Equal("epic build", installation.BuildId);
     }
 
     [Fact]
