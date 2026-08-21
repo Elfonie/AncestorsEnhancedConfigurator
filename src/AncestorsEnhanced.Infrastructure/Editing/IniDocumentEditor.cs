@@ -11,25 +11,16 @@ internal static class IniDocumentEditor
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(changes);
 
-        string newline = content.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        bool hasFinalNewline = content.EndsWith('\n') || content.EndsWith('\r');
-        List<string> lines = [.. content
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Split('\n')];
-
-        if (hasFinalNewline && lines.Count > 0 && lines[^1].Length == 0)
-        {
-            lines.RemoveAt(lines.Count - 1);
-        }
+        List<IniLine> lines = ParseLines(content);
+        string newline = lines.Select(line => line.Ending).FirstOrDefault(ending => ending.Length > 0) ?? "\n";
+        bool hasFinalNewline = lines.Count > 0 && lines[^1].Ending.Length > 0;
 
         foreach (SettingChangeRequest change in changes)
         {
-            ApplyOne(lines, change);
+            ApplyOne(lines, change, newline, hasFinalNewline);
         }
 
-        string result = string.Join(newline, lines);
-        return hasFinalNewline && lines.Count > 0 ? result + newline : result;
+        return string.Concat(lines.Select(line => line.Text + line.Ending));
     }
 
     public static string? FindLastValue(
@@ -40,12 +31,9 @@ internal static class IniDocumentEditor
         string currentSection = string.Empty;
         string? value = null;
 
-        foreach (string sourceLine in content
-                     .Replace("\r\n", "\n", StringComparison.Ordinal)
-                     .Replace('\r', '\n')
-                     .Split('\n'))
+        foreach (IniLine sourceLine in ParseLines(content))
         {
-            string line = sourceLine.Trim();
+            string line = sourceLine.Text.Trim();
             if (TryReadSection(line, out string? parsedSection))
             {
                 currentSection = parsedSection;
@@ -63,7 +51,11 @@ internal static class IniDocumentEditor
         return value;
     }
 
-    private static void ApplyOne(List<string> lines, SettingChangeRequest change)
+    private static void ApplyOne(
+        List<IniLine> lines,
+        SettingChangeRequest change,
+        string newline,
+        bool preserveFinalNewline)
     {
         List<int> matchingLines = [];
         int lastSectionStart = -1;
@@ -72,7 +64,7 @@ internal static class IniDocumentEditor
 
         for (int index = 0; index < lines.Count; index++)
         {
-            string line = lines[index].Trim();
+            string line = lines[index].Text.Trim();
             if (TryReadSection(line, out string? parsedSection))
             {
                 if (lastSectionStart >= 0 && lastSectionEnd < lastSectionStart)
@@ -116,25 +108,71 @@ internal static class IniDocumentEditor
         if (matchingLines.Count > 0)
         {
             int index = matchingLines[^1];
-            string indentation = lines[index][..(lines[index].Length - lines[index].TrimStart().Length)];
-            lines[index] = $"{indentation}{change.Key}={change.Value}";
+            string indentation = lines[index].Text[..(lines[index].Text.Length - lines[index].Text.TrimStart().Length)];
+            lines[index] = lines[index] with { Text = $"{indentation}{change.Key}={change.Value}" };
             return;
         }
 
         if (lastSectionStart >= 0)
         {
-            lines.Insert(lastSectionEnd, $"{change.Key}={change.Value}");
+            InsertLine(lines, lastSectionEnd, $"{change.Key}={change.Value}", newline, preserveFinalNewline);
             return;
         }
 
-        if (lines.Count > 0 && lines[^1].Length != 0)
+        if (lines.Count > 0 && lines[^1].Text.Length != 0)
         {
-            lines.Add(string.Empty);
+            InsertLine(lines, lines.Count, string.Empty, newline, preserveFinalNewline);
         }
 
-        lines.Add($"[{change.Section}]");
-        lines.Add($"{change.Key}={change.Value}");
+        InsertLine(lines, lines.Count, $"[{change.Section}]", newline, preserveFinalNewline);
+        InsertLine(lines, lines.Count, $"{change.Key}={change.Value}", newline, preserveFinalNewline);
     }
+
+    private static void InsertLine(
+        List<IniLine> lines,
+        int index,
+        string text,
+        string newline,
+        bool preserveFinalNewline)
+    {
+        if (index < lines.Count)
+        {
+            lines.Insert(index, new IniLine(text, newline));
+            return;
+        }
+
+        if (lines.Count > 0 && lines[^1].Ending.Length == 0)
+        {
+            lines[^1] = lines[^1] with { Ending = newline };
+        }
+        lines.Add(new IniLine(text, preserveFinalNewline ? newline : string.Empty));
+    }
+
+    private static List<IniLine> ParseLines(string content)
+    {
+        var lines = new List<IniLine>();
+        int start = 0;
+        for (int index = 0; index < content.Length; index++)
+        {
+            if (content[index] is not ('\r' or '\n'))
+            {
+                continue;
+            }
+            int endingLength = content[index] == '\r' && index + 1 < content.Length && content[index + 1] == '\n'
+                ? 2
+                : 1;
+            lines.Add(new IniLine(content[start..index], content.Substring(index, endingLength)));
+            index += endingLength - 1;
+            start = index + 1;
+        }
+        if (start < content.Length)
+        {
+            lines.Add(new IniLine(content[start..], string.Empty));
+        }
+        return lines;
+    }
+
+    private sealed record IniLine(string Text, string Ending);
 
     private static bool TryReadSection(string line, out string section)
     {

@@ -7,4 +7,5 @@ public sealed record SaveGameSlotSnapshot(
     bool Exists,
     long? SizeBytes,
     DateTimeOffset? LastWriteTimeUtc,
-    IReadOnlyList<SaveGameCheckpoint> Checkpoints);
+    IReadOnlyList<SaveGameCheckpoint> Checkpoints,
+    string? ErrorMessage = null);

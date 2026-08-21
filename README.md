@@ -17,7 +17,6 @@ A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It can
   - Up to 50 retained checkpoints per slot
   - Optional automatic checkpoints when the game saves
 - **Optional tweaks**
-  - Free camera toggle using `F10` in-game
   - Experimental: Max Neuronal Energy, Max Needs, and Heal Current Ape create a separate checkpoint first; keep your own save backup and verify the result in-game
 
 ## Compatibility
@@ -38,9 +37,9 @@ The Configurator keeps its own backups, but they are not a substitute for keepin
 
 ## Remove tool changes
 
-From the first configuration write, the Configurator records a private baseline for each file it changes. **Remove tool changes** is available only when that baseline exists and the current installation and file contents still match the tool-managed state. It restores graphics, System.sav, vignette, and startup-video changes that were made through the settings editor, then removes that private baseline.
+From the first configuration write, the Configurator records a private baseline for each file it changes. **Remove tool changes** is available only when that baseline exists and the current installation and file contents still match the tool-managed state. It restores graphics, System.sav, vignette, and startup-video changes that were made through the settings editor, then marks those files as restored to their baseline state.
 
-It never removes the app, save checkpoints, game-progress saves, Steam Cloud data, external mods, or edits made outside the Configurator. For installs that were already modified before this feature existed, no original baseline can be reconstructed, so the button stays unavailable.
+It never removes the app, save checkpoints, game-progress saves, Steam Cloud data, external mods, or edits made outside the Configurator. The private baseline remains available internally so undoing the removal is reversible; while no tool changes are active, the removal button stays unavailable. For installs that were already modified before this feature existed, no original baseline can be reconstructed, so the button stays unavailable.
 
 ## Savegame-cheat status
 

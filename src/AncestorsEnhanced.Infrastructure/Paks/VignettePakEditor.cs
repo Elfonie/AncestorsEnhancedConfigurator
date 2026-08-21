@@ -77,9 +77,10 @@ internal static class VignettePakEditor
         }
     }
 
-    public static ConfigurationFileChangePlan CreatePlan(
+    public static IReadOnlyList<ConfigurationFileChangePlan> CreatePlans(
         GameInspectionSnapshot snapshot,
-        string? value)
+        string? value,
+        out decimal currentPercent)
     {
         GameInstallationSnapshot installation = snapshot.Installation
             ?? throw new InvalidOperationException("The game installation was not detected.");
@@ -90,16 +91,7 @@ internal static class VignettePakEditor
         {
             throw new InvalidOperationException(state.Status);
         }
-
-        // Never rewrite the legacy patch file in place: writing a new hash into the
-        // known legacy path would make the tool unable to recognise it on the next
-        // inspection, locking the user out (F068). Fail-safe for 0.9 instead.
-        if (!string.IsNullOrWhiteSpace(state.ActivePatchPath) &&
-            string.Equals(Path.GetFileName(state.ActivePatchPath), LegacyPatchName, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "A legacy vignette patch is active. It will not be rewritten in place; remove it manually or reset to a managed patch.");
-        }
+        currentPercent = state.Percent ?? 100m;
 
         decimal? requested = value is null
             ? null
@@ -110,23 +102,47 @@ internal static class VignettePakEditor
         }
 
         string pakDirectory = GetPakDirectory(installation.InstallDirectory);
-        string targetPath = state.ActivePatchPath ?? Path.Combine(pakDirectory, OwnPatchName);
+        bool legacyActive = state.ActivePatchPath is not null &&
+            string.Equals(Path.GetFileName(state.ActivePatchPath), LegacyPatchName, StringComparison.OrdinalIgnoreCase);
+        var plans = new List<ConfigurationFileChangePlan>();
+        if (legacyActive)
+        {
+            string legacyPath = state.ActivePatchPath!;
+            byte[] legacy = ReadStableBounded(legacyPath, MaximumManagedPatchSize);
+            plans.Add(new ConfigurationFileChangePlan(
+                LegacyPatchName,
+                legacyPath,
+                Existed: true,
+                Sha256(legacy),
+                legacy,
+                [],
+                SettingFileTarget.Pak,
+                ResultExists: false));
+        }
+
+        string targetPath = legacyActive || state.ActivePatchPath is null
+            ? Path.Combine(pakDirectory, OwnPatchName)
+            : state.ActivePatchPath;
         string fileName = Path.GetFileName(targetPath);
         ValidatePakFileName(fileName);
         bool existed = File.Exists(targetPath);
-        byte[] originalFile = existed ? File.ReadAllBytes(targetPath) : [];
+        byte[] originalFile = existed ? ReadStableBounded(targetPath, MaximumManagedPatchSize) : [];
 
         if (requested is null)
         {
-            return new ConfigurationFileChangePlan(
-                fileName,
-                targetPath,
-                existed,
-                Sha256(originalFile),
-                originalFile,
-                [],
-                SettingFileTarget.Pak,
-                ResultExists: false);
+            if (existed)
+            {
+                plans.Add(new ConfigurationFileChangePlan(
+                    fileName,
+                    targetPath,
+                    existed,
+                    Sha256(originalFile),
+                    originalFile,
+                    [],
+                    SettingFileTarget.Pak,
+                    ResultExists: false));
+            }
+            return plans;
         }
 
         byte[] originalAsset = ReadOriginalAsset(Path.Combine(pakDirectory, SourcePakName));
@@ -138,14 +154,15 @@ internal static class VignettePakEditor
             throw new InvalidDataException("The generated vignette patch failed validation.");
         }
 
-        return new ConfigurationFileChangePlan(
+        plans.Add(new ConfigurationFileChangePlan(
             fileName,
             targetPath,
             existed,
             Sha256(originalFile),
             originalFile,
             updatedPak,
-            SettingFileTarget.Pak);
+            SettingFileTarget.Pak));
+        return plans;
     }
 
     private static byte[] ReadOriginalAsset(string sourcePath)
@@ -161,13 +178,7 @@ internal static class VignettePakEditor
 
     internal static bool IsManagedPatch(string path, string name, byte[] asset)
     {
-        FileInfo file = new(path);
-        if (file.Length > MaximumManagedPatchSize)
-        {
-            return false;
-        }
-
-        byte[] package = File.ReadAllBytes(path);
+        byte[] package = ReadStableBounded(path, MaximumManagedPatchSize);
         if (string.Equals(name, OwnPatchName, StringComparison.OrdinalIgnoreCase))
         {
             return package.AsSpan().SequenceEqual(PakV5Archive.BuildSingleFile(AssetPath, asset));

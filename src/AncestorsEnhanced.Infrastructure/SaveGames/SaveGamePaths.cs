@@ -9,7 +9,7 @@ internal static class SaveGamePaths
     public const int SlotCount = 5;
 
     /// <summary>Hard limit for checkpoint identifiers created by this tool.</summary>
-    public const int MaxCheckpointIdLength = 32;
+    public const int MaxCheckpointIdLength = 64;
 
     public static string GetSaveGamesDirectory(string userDataDirectory) =>
         Path.GetFullPath(Path.Combine(userDataDirectory, "SaveGames"));
@@ -30,8 +30,11 @@ internal static class SaveGamePaths
     public static string GetCheckpointRoot(string userDataDirectory) =>
         Path.GetFullPath(Path.Combine(userDataDirectory, "AncestorsEnhanced", "SaveBackups"));
 
-    public static string GetSlotRoot(string userDataDirectory, int slotNumber) =>
-        Path.GetFullPath(Path.Combine(GetCheckpointRoot(userDataDirectory), $"slot{slotNumber}"));
+    public static string GetSlotRoot(string userDataDirectory, int slotNumber)
+    {
+        _ = GetSlotFileName(slotNumber);
+        return Path.GetFullPath(Path.Combine(GetCheckpointRoot(userDataDirectory), $"slot{slotNumber}"));
+    }
 
     public static string GetCheckpointPath(string userDataDirectory, int slotNumber, string checkpointId)
     {
@@ -90,10 +93,15 @@ internal static class SaveGamePaths
 
         // Only the identifier shape produced by NewCheckpointId() is accepted: no dots,
         // slashes, backslashes, colons or other path separators, no whitespace.
-        bool valid = checkpointId.Length > 0 &&
-            checkpointId.All(character =>
-                char.IsAsciiLetterOrDigit(character) || character == '-') &&
-            !checkpointId.Contains('.', StringComparison.Ordinal);
+        bool valid = checkpointId.Length == 52 &&
+            checkpointId[8] == '-' && checkpointId[15] == '-' && checkpointId[19] == '-' &&
+            DateTimeOffset.TryParseExact(
+                checkpointId[..19],
+                "yyyyMMdd-HHmmss-fff",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal,
+                out _) &&
+            checkpointId.AsSpan(20).ToArray().All(char.IsAsciiHexDigit);
         if (!valid)
         {
             throw new InvalidOperationException("The checkpoint identifier is invalid.");
@@ -102,7 +110,7 @@ internal static class SaveGamePaths
 
     /// <summary>Generates a fresh checkpoint identifier using only the accepted character set.</summary>
     public static string NewCheckpointId(DateTimeOffset createdAt) =>
-        $"{createdAt:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}"[..MaxCheckpointIdLength];
+        $"{createdAt:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}";
 
     public static void ValidateUserDataDirectory(string userDataDirectory) =>
         ValidateConfigurationPath(

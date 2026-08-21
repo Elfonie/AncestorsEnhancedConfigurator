@@ -16,8 +16,7 @@ public sealed class F009CheckpointStoreConcurrencyTests
         {
             string savePath = SaveGamePaths.GetSlotPath(userData, 0);
             Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
-            byte[] payload = [1, 2, 3, 4, 5];
-            File.WriteAllBytes(savePath, SnappyBlockCodec.EncodeLiteral(payload));
+            File.WriteAllBytes(savePath, TestSaveFactory.Create(1, 2, 3, 4, 5));
 
             var manager = new SafeSaveGameManager(
                 userData,

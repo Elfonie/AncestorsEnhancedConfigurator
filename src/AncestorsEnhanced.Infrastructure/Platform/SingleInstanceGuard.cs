@@ -27,8 +27,7 @@ public sealed class SingleInstanceGuard : IDisposable
             }
             catch (AbandonedMutexException)
             {
-                // The previous owner crashed; the mutex is now available.
-                _acquired = _mutex.WaitOne(0);
+                _acquired = true;
             }
         }
         else
@@ -36,7 +35,19 @@ public sealed class SingleInstanceGuard : IDisposable
             string lockPath = BuildLockPath(identifier);
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(lockPath)!);
+                string lockDirectory = Path.GetDirectoryName(lockPath)!;
+                Directory.CreateDirectory(lockDirectory);
+                if (File.GetAttributes(lockDirectory).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    throw new IOException("The runtime lock directory is a symbolic link.");
+                }
+                File.SetUnixFileMode(
+                    lockDirectory,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                if (File.Exists(lockPath) && File.GetAttributes(lockPath).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    throw new IOException("The runtime lock file is a symbolic link.");
+                }
                 _lockFile = new FileStream(
                     lockPath,
                     FileMode.OpenOrCreate,
@@ -59,7 +70,13 @@ public sealed class SingleInstanceGuard : IDisposable
 
     public static string BuildLockPath(string identifier)
     {
-        string root = Path.GetTempPath();
+        string? runtimeDirectory = System.Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+        string root = !string.IsNullOrWhiteSpace(runtimeDirectory)
+            ? Path.Combine(runtimeDirectory, "ancestors-enhanced")
+            : Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+                "AncestorsEnhanced",
+                "Runtime");
         string fileName = new string(
             identifier.Select(character =>
                 char.IsLetterOrDigit(character) || character == '-' || character == '.' || character == '_'
@@ -78,6 +95,10 @@ public sealed class SingleInstanceGuard : IDisposable
         _disposed = true;
         if (!_acquired)
         {
+            _mutex?.Dispose();
+            _lockFile?.Dispose();
+            _lockFile = null;
+            GC.SuppressFinalize(this);
             return;
         }
 

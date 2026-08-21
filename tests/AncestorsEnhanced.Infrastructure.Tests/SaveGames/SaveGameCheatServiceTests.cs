@@ -68,6 +68,26 @@ public sealed class SaveGameCheatServiceTests : IDisposable
         Assert.Null(result.CheckpointId);
     }
 
+    [Fact]
+    public void ApplyRefusesWhenTheLiveSaveChangesDuringPreparation()
+    {
+        Directory.CreateDirectory(Path.Combine(_userData, "SaveGames"));
+        string slotPath = Path.Combine(_userData, "SaveGames", "Savegame0.sav");
+        byte[] original = SnappyBlockCodec.EncodeLiteral(DecompressedSaveWithRpgArray([0.5f]));
+        byte[] foreign = SnappyBlockCodec.EncodeLiteral(DecompressedSaveWithRpgArray([0.9f]));
+        File.WriteAllBytes(slotPath, original);
+        var service = new SaveGameCheatService(
+            new MutatingInjector(slotPath, foreign),
+            _userData);
+
+        CheatApplyResult result = service.Apply(CheatKind.MaxNeuronalEnergy, "0");
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("live save changed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(foreign, File.ReadAllBytes(slotPath));
+        Assert.Empty(SaveGameCheckpointStore.ListCheckpoints(_userData, 0));
+    }
+
     private static SaveGameSchemaNode? FindNode(SaveGameSchemaNode node, string name)
     {
         if (string.Equals(node.Name, name, StringComparison.Ordinal))
@@ -128,6 +148,20 @@ public sealed class SaveGameCheatServiceTests : IDisposable
 
     private static float ReadFloat(byte[] data, int offset) => BitConverter.Int32BitsToSingle(
         BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset, sizeof(float))));
+
+    private sealed class MutatingInjector(string slotPath, byte[] foreign) : ISaveGameCheatInjector
+    {
+        private readonly SaveGameCheatInjector _inner = new();
+
+        public CheatInjectionResult TryInject(
+            byte[] decompressedSave,
+            CheatKind kind,
+            out byte[]? modifiedSave)
+        {
+            File.WriteAllBytes(slotPath, foreign);
+            return _inner.TryInject(decompressedSave, kind, out modifiedSave);
+        }
+    }
 
     public void Dispose()
     {

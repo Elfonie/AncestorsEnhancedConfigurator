@@ -6,7 +6,6 @@
 
 - Checkpoint-IDs strikt validiert (Pfad-/Containment-Checks, keine leeren IDs, Max-Länge 32).
 - Cheat-Float-Arrays strikt an den Node-Payload gebunden; Pre-Store-Validierung (Roundtrip + Feld-/Offset-Check).
-- Free Camera: Ownership-Flag, Erhalt fremder ConsoleKeys, idempotent.
 - Watchdog: Fehler werden gemeldet statt verschluckt, Cooldown nur nach echtem Checkpoint, Error-/Renamed-Handling.
 - Checkpoints transaktional (Temp-Ordner + Validierung vor atomarem Move).
 - Settings-Rollback unterscheidet Applied/RolledBack/PartialRollbackRequired.
@@ -18,7 +17,7 @@
 
 ## Projekt
 
-- **Zweck:** Portabler Desktop-Konfigurator für **Ancestors: The Humankind Odyssey** (Steam/Epic/GOG/Heroic, Windows + Linux/Proton). Grafik-Einstellungen editieren (INI + System.sav + PAK), Savegame-Checkpoints verwalten, Cheats sicher anwenden, Free-Cam einrichten.
+- **Zweck:** Portabler Desktop-Konfigurator für **Ancestors: The Humankind Odyssey**. Grafik-Einstellungen editieren, Savegame-Checkpoints verwalten und experimentelle Savegame-Cheats als separate Checkpoints erzeugen.
 - **Stack:** .NET 10, **Avalonia 12.x** (Cross-Platform-UI, MVVM), CommunityToolkit.Mvvm.
 - **Projekte:** `src/AncestorsEnhanced.Core` (Domäne/Logik), `src/AncestorsEnhanced.Infrastructure` (Datei-/INI-/System.sav-/PAK-/Savegame-Zugriff, Store-Erkennung, Logger), `src/AncestorsEnhanced.App` (Avalonia-UI + ViewModels), `tests/…` (Core/Infrastructure/App).
 
@@ -38,7 +37,7 @@ Einzelne Tests: `dotnet test "tests\<Projekt>\<Projekt>.csproj" -c Release --no-
 - **Grafik:** Simple/Advanced; Suche (modus-unabhängig, 250 ms Debounce async/await); Review-vor-Write mit Backups/Undo/Restore-Game-Defaults; System.sav-Presets (Low/Medium/High).
 - **Qualitätsanzeige:** zentrale `MapQuality`-Abbildung → **Off/Low/Medium/High/Ultra** (statt „Quality 1-5“/„Level 1-4“). Kompakt-Zusammenfassungen zeigen volle Begriffe.
 - **Savegames:** 5 Slots, Checkpoints (max 50/Slot), Auto-Backup-Watchdog (Debounce 500 ms), Load/Delete mit Bestätigungs-Flyout (schließt nach Bestätigung automatisch), „Show older/less“, Steam-Cloud-Hinweis.
-- **Cheats:** Max Neuronal Energy, Max Needs, Heal Clan — als neue Checkpoints (Original nie überschrieben). **Free Camera** = **INI-Tweak** (`Input.ini` → `ConsoleKeys=F10`, mit Backup), kein Savegame-Cheat; im UI getrennt „INI TWEAKS“ vs. „SAVEGAME CHEATS“.
+- **Cheats:** Max Neuronal Energy, Max Needs und Heal Current Ape werden als neue Checkpoints erzeugt. Der Live-Save wird erst über die normale Restore-Funktion ersetzt.
 - **Erkennung:** Steam/Epic/GOG/Heroic (Windows + Linux/Proton); User-Data-Auto-Erkennung; fehlende User-Data-Warnungen verschwinden per Retry-Timer automatisch.
 
 ## Wichtige Architektur-/Stabilitätsentscheidungen

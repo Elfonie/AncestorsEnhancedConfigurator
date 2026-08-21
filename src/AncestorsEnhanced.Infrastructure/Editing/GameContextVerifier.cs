@@ -1,4 +1,5 @@
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Infrastructure.Inspection;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
 
@@ -32,7 +33,7 @@ public sealed class GameContextVerifier
         {
             snapshot = _inspector.Inspect();
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (InspectionErrors.IsExpected(exception))
         {
             return false;
         }
@@ -51,7 +52,7 @@ public sealed class GameContextVerifier
         {
             snapshot = _inspector.Inspect();
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (InspectionErrors.IsExpected(exception))
         {
             return null;
         }

@@ -10,6 +10,18 @@ internal static class SnappyBlockCodec
 
     public static byte[] Decode(ReadOnlySpan<byte> input, int maximumLength)
     {
+        try
+        {
+            return DecodeCore(input, maximumLength);
+        }
+        catch (OverflowException exception)
+        {
+            throw new InvalidDataException("Snappy contains an overflowing numeric value.", exception);
+        }
+    }
+
+    private static byte[] DecodeCore(ReadOnlySpan<byte> input, int maximumLength)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(maximumLength);
         int inputOffset = 0;
         uint expectedLength = ReadVarint(input, ref inputOffset);
@@ -129,6 +141,10 @@ internal static class SnappyBlockCodec
         {
             EnsureAvailable(input.Length, offset, 1);
             byte current = input[offset++];
+            if (shift == 28 && (current & 0xF0) != 0)
+            {
+                throw new InvalidDataException("Snappy has an overflowing size prefix.");
+            }
             value |= (uint)(current & 0x7F) << shift;
             if ((current & 0x80) == 0)
             {

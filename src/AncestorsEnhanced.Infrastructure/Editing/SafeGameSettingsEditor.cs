@@ -1,7 +1,7 @@
-using System.Diagnostics;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Inspection;
+using AncestorsEnhanced.Infrastructure.Platform;
 
 namespace AncestorsEnhanced.Infrastructure.Editing;
 
@@ -14,7 +14,7 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
     public SafeGameSettingsEditor()
         : this(
             () => DateTimeOffset.UtcNow,
-            IsAncestorsRunning,
+            GameProcessProbe.IsAncestorsRunning,
             GameEditingGuard.IsExpectedNativeUserDataDirectory,
             new GameContextVerifier(ReadOnlyAncestorsInspector.CreateDefault()))
     {
@@ -90,16 +90,4 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         return verifier.Verify(captured);
     }
 
-    private static bool IsAncestorsRunning()
-    {
-        try
-        {
-            return Process.GetProcessesByName("Ancestors-Win64-Shipping").Length > 0 ||
-                   Process.GetProcessesByName("Ancestors").Length > 0;
-        }
-        catch (InvalidOperationException)
-        {
-            return true;
-        }
-    }
 }

@@ -70,7 +70,7 @@ internal sealed class SettingsChangePlanner(
         }
 
         DateTimeOffset createdAt = _utcNow();
-        string operationId = $"{createdAt:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}"[..32];
+        string operationId = $"{createdAt:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}";
         GameInstallationSnapshot installation = snapshot.Installation!;
         return new SettingsChangePlan(
             operationId,
@@ -122,7 +122,7 @@ internal sealed class SettingsChangePlanner(
             ValidateWritableTarget(fullPath);
 
             bool existed = File.Exists(fullPath);
-            byte[] original = existed ? File.ReadAllBytes(fullPath) : [];
+            byte[] original = existed ? ReadStableBounded(fullPath, MaximumIniSizeBytes) : [];
             if (original.Length > MaximumIniSizeBytes)
             {
                 throw new InvalidOperationException($"{fileName} is unexpectedly large and will not be changed.");
@@ -248,24 +248,24 @@ internal sealed class SettingsChangePlanner(
             return;
         }
 
-        ConfigurationFileChangePlan vignette = VignettePakEditor.CreatePlan(snapshot, request.Value);
-        if (!vignette.Existed && !vignette.ResultExists)
+        IReadOnlyList<ConfigurationFileChangePlan> vignettePlans =
+            VignettePakEditor.CreatePlans(snapshot, request.Value, out decimal currentPercent);
+        if (vignettePlans.Count == 0)
         {
             return;
         }
 
-        string before = snapshot.Vignette?.Percent?.ToString(
-            System.Globalization.CultureInfo.InvariantCulture) ?? "100";
+        string before = currentPercent.ToString(System.Globalization.CultureInfo.InvariantCulture);
         string after = request.Value ?? "100";
         if (!string.Equals(before, after, StringComparison.Ordinal))
         {
             previews.Add(new SettingChangePreview(
                 request.DisplayName,
-                vignette.FileName,
+                vignettePlans[0].FileName,
                 request.Key,
                 before,
                 after));
-            filePlans.Add(vignette);
+            filePlans.AddRange(vignettePlans);
         }
     }
 }

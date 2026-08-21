@@ -84,6 +84,57 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     }
 
     [Fact]
+    public void UndoingRemoveToolChangesRestoresTheManagedStateAndKeepsRemovalAvailable()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        const string original = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        File.WriteAllText(engineIni, original);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        Assert.True(editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
+        Assert.True(editor.Apply(editor.CreateRemoveToolChangesPlan(snapshot)).Succeeded);
+        Assert.Equal(original, File.ReadAllText(engineIni));
+
+        SettingsOperationResult undoRemoval = editor.RevertLast(snapshot);
+
+        Assert.True(undoRemoval.Succeeded, undoRemoval.Message);
+        Assert.Contains("r.ViewDistanceScale=1.2", File.ReadAllText(engineIni), StringComparison.Ordinal);
+        Assert.True(editor.CanRemoveToolChanges(snapshot));
+        Assert.True(editor.Apply(editor.CreateRemoveToolChangesPlan(snapshot)).Succeeded);
+        Assert.Equal(original, File.ReadAllText(engineIni));
+    }
+
+    [Fact]
+    public void FurtherApplyRefusesACorruptedOriginalBaselineBackup()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+        Assert.True(editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("first", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
+        string baselineBackup = Path.Combine(
+            ConfigurationFileOperations.GetToolChangesRoot(userData),
+            "files",
+            "0-Engine.ini.before");
+        File.WriteAllText(baselineBackup, "tampered");
+
+        SettingsOperationResult result = editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("second", "View distance", "r.ViewDistanceScale", "1.3")]));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("failed validation", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("r.ViewDistanceScale=1.2", File.ReadAllText(engineIni), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RemoveToolChangesIsUnavailableWithoutCapturedBaseline()
     {
         string userData = CreateUserData();

@@ -46,6 +46,8 @@ internal static class AncestorsSystemSaveCodec
         {
             throw new InvalidDataException("System.sav contains an invalid brightness value.");
         }
+        ValidateStoredResolution(fullscreenWidth, fullscreenHeight);
+        ValidateStoredResolution(windowedWidth, windowedHeight);
 
         return new SystemGraphicsSettingsSnapshot(
             fullscreenWidth,
@@ -338,6 +340,14 @@ internal static class AncestorsSystemSaveCodec
         return (
             int.Parse(parts[0], CultureInfo.InvariantCulture),
             int.Parse(parts[1], CultureInfo.InvariantCulture));
+    }
+
+    private static void ValidateStoredResolution(int width, int height)
+    {
+        if (width is < 320 or > 16384 || height is < 200 or > 8640)
+        {
+            throw new InvalidDataException("System.sav contains an implausible resolution.");
+        }
     }
 
     private sealed record SaveLayout(

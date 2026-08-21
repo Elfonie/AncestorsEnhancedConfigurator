@@ -123,8 +123,9 @@ internal static class PakV5Archive
     private static byte[] ReadFile(Stream stream, string fileName, int maximumSize)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maximumSize);
-        PakEntry entry = FindEntry(stream, fileName)
+        LocatedPakEntry located = FindEntry(stream, fileName)
             ?? throw new InvalidDataException($"{fileName} was not found in the PAK.");
+        PakEntry entry = located.Entry;
         if (entry.Size > maximumSize || entry.UncompressedSize > maximumSize)
         {
             throw new InvalidDataException($"{fileName} is unexpectedly large.");
@@ -137,6 +138,10 @@ internal static class PakV5Archive
         {
             throw new InvalidDataException("The PAK entry header does not match its index.");
         }
+        if (stream.Position > located.IndexOffset)
+        {
+            throw new InvalidDataException("The PAK entry header overlaps the index.");
+        }
 
         if (entry.Encrypted)
         {
@@ -145,6 +150,11 @@ internal static class PakV5Archive
 
         if (entry.CompressionMethod == 0)
         {
+            long payloadEnd = CheckedAdd(stream.Position, entry.Size, "PAK entry payload");
+            if (payloadEnd > located.IndexOffset)
+            {
+                throw new InvalidDataException("The PAK entry payload overlaps the index or footer.");
+            }
             byte[] content = ReadExact(stream, entry.Size);
             VerifyHash(content, entry.Hash, "PAK entry");
             return content;
@@ -162,7 +172,7 @@ internal static class PakV5Archive
 
         // Validate the block layout before reading anything: blocks must cover the
         // entry, never overlap, never run backwards, and stay inside the entry area.
-        ValidateBlockLayout(entry);
+        ValidateBlockLayout(entry, located.IndexOffset);
 
         using var result = new MemoryStream((int)entry.UncompressedSize);
         using var compressedContent = new MemoryStream((int)entry.Size);
@@ -225,7 +235,7 @@ internal static class PakV5Archive
         return copied;
     }
 
-    private static void ValidateBlockLayout(PakEntry entry)
+    private static void ValidateBlockLayout(PakEntry entry, long indexOffset)
     {
         long previousEnd = -1;
         foreach (PakBlock block in entry.Blocks)
@@ -238,6 +248,11 @@ internal static class PakV5Archive
             if (entry.Size >= 0 && block.End > entry.Size)
             {
                 throw new InvalidDataException("A PAK compression block lies outside the entry area.");
+            }
+            long absoluteEnd = CheckedAdd(entry.Offset, block.End, "PAK compression block");
+            if (absoluteEnd > indexOffset)
+            {
+                throw new InvalidDataException("A PAK compression block overlaps the index or footer.");
             }
 
             // Ends are exclusive (block length is End - Start), so directly adjacent
@@ -257,7 +272,7 @@ internal static class PakV5Archive
         }
     }
 
-    private static PakEntry? FindEntry(Stream stream, string fileName)
+    private static LocatedPakEntry? FindEntry(Stream stream, string fileName)
     {
         PakFooter footer = ReadFooter(stream);
         stream.Position = footer.IndexOffset;
@@ -273,17 +288,27 @@ internal static class PakV5Archive
             throw new InvalidDataException("The PAK file count is invalid.");
         }
 
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        PakEntry? match = null;
         for (int indexNumber = 0; indexNumber < count; indexNumber++)
         {
             string name = ReadString(reader);
             PakEntry entry = ReadEntry(reader);
+            if (!names.Add(name))
+            {
+                throw new InvalidDataException($"The PAK index contains duplicate path {name}.");
+            }
             if (string.Equals(name, fileName, StringComparison.Ordinal))
             {
-                return entry;
+                match = entry;
             }
         }
 
-        return null;
+        if (index.Position != index.Length)
+        {
+            throw new InvalidDataException("The PAK index contains trailing data.");
+        }
+        return match is null ? null : new LocatedPakEntry(match, footer.IndexOffset);
     }
 
     private static PakFooter ReadFooter(Stream stream)
@@ -444,6 +469,18 @@ internal static class PakV5Archive
         return bytes;
     }
 
+    private static long CheckedAdd(long left, long right, string label)
+    {
+        try
+        {
+            return checked(left + right);
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidDataException($"The {label} range is invalid.");
+        }
+    }
+
     private static void VerifyHash(byte[] content, byte[] expected, string label)
     {
         if (!SHA1.HashData(content).AsSpan().SequenceEqual(expected))
@@ -453,6 +490,8 @@ internal static class PakV5Archive
     }
 
     private sealed record PakFooter(long IndexOffset, long IndexSize, byte[] IndexHash);
+
+    private sealed record LocatedPakEntry(PakEntry Entry, long IndexOffset);
 
     private sealed record PakBlock(long Start, long End);
 

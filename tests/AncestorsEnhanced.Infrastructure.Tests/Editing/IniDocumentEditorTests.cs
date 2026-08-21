@@ -53,6 +53,27 @@ public sealed class IniDocumentEditorTests
             result);
     }
 
+    [Fact]
+    public void ApplyPreservesMixedLineEndingsOnUntouchedLines()
+    {
+        const string original =
+            "; crlf\r\n" +
+            "[SystemSettings]\n" +
+            "r.ViewDistanceScale=1.0\r" +
+            "Keep=Yes\r\n";
+
+        string result = IniDocumentEditor.Apply(
+            original,
+            [Change("r.ViewDistanceScale", "1.2")]);
+
+        Assert.Equal(
+            "; crlf\r\n" +
+            "[SystemSettings]\n" +
+            "r.ViewDistanceScale=1.2\r" +
+            "Keep=Yes\r\n",
+            result);
+    }
+
     private static SettingChangeRequest Change(string key, string? value) =>
         new(key, "Engine.ini", "SystemSettings", key, value);
 }

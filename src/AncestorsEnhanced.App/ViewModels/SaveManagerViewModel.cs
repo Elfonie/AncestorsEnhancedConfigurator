@@ -13,8 +13,12 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private readonly Action<Action> _dispatchToUi;
     private bool _loadingSettings;
     private readonly SemaphoreSlim _settingsWriteLock = new(1, 1);
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
     private Task? _pendingSettingsWrite;
+    private Task? _watchdogRefreshTask;
+    private int _watchdogRefreshVersion;
     private int _settingsVersion;
+    private bool _disposed;
 
     private const string ToolSettingsFileName = "AncestorsEnhanced_ToolSettings.json";
     private static readonly System.Text.Json.JsonSerializerOptions JsonSettings =
@@ -281,21 +285,50 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
         GC.SuppressFinalize(this);
-        try
-        {
-            _pendingSettingsWrite?.Wait(TimeSpan.FromSeconds(2));
-        }
-        catch (AggregateException)
-        {
-        }
-
-        _settingsWriteLock.Dispose();
         if (_watchdog is not null)
         {
             _watchdog.CheckpointCreated -= OnWatchdogCheckpointCreated;
             _watchdog.WatcherError -= OnWatcherError;
             _watchdog.StopWatch();
+        }
+        _lifetimeCancellation.Cancel();
+        try
+        {
+            Task[] pending = new Task?[] { _pendingSettingsWrite, _watchdogRefreshTask }
+                .OfType<Task>()
+                .ToArray();
+            if (pending.Length > 0)
+            {
+                _ = Task.WaitAll(pending, TimeSpan.FromSeconds(2));
+            }
+        }
+        catch (AggregateException)
+        {
+        }
+
+        Task? settingsWrite = _pendingSettingsWrite;
+        if (settingsWrite is null || settingsWrite.IsCompleted)
+        {
+            _settingsWriteLock.Dispose();
+            _lifetimeCancellation.Dispose();
+        }
+        else
+        {
+            _ = settingsWrite.ContinueWith(
+                _ =>
+                {
+                    _settingsWriteLock.Dispose();
+                    _lifetimeCancellation.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
     }
 
@@ -378,6 +411,10 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     private void SaveSettings()
     {
+        if (_disposed)
+        {
+            return;
+        }
         var settings = new ToolSettings
         {
             IsWatchdogEnabled = IsWatchdogEnabled,
@@ -399,7 +436,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            await _settingsWriteLock.WaitAsync();
+            await _settingsWriteLock.WaitAsync(_lifetimeCancellation.Token);
             try
             {
                 // A delayed older task must never overwrite a newer snapshot. The
@@ -426,6 +463,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 _settingsWriteLock.Release();
             }
         }
+        catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+        {
+        }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             ReportStatus("Could not save tool settings: " + exception.Message, "#E04D42");
@@ -434,6 +474,10 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     private void ReportStatus(string message, string accent)
     {
+        if (_disposed)
+        {
+            return;
+        }
         void Update()
         {
             StatusMessage = message;
@@ -459,7 +503,14 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         // Der Watchdog feuert vom Thread-Pool; UI-Änderungen gehören auf den UI-Thread.
         // In Tests ohne UI-Loop läuft der Aufruf synchron über CheckAccess.
-        void Refresh() => _ = RefreshAfterWatchdogAsync();
+        void Refresh()
+        {
+            Interlocked.Increment(ref _watchdogRefreshVersion);
+            if (_watchdogRefreshTask is null || _watchdogRefreshTask.IsCompleted)
+            {
+                _watchdogRefreshTask = RefreshAfterWatchdogAsync(_lifetimeCancellation.Token);
+            }
+        }
 
         if (Dispatcher.UIThread.CheckAccess())
         {
@@ -471,13 +522,22 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private async Task RefreshAfterWatchdogAsync()
+    private async Task RefreshAfterWatchdogAsync(CancellationToken token)
     {
         try
         {
-            // An automatic checkpoint must not activate the full-window busy overlay.
-            SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
-            Refresh(snapshot);
+            int observed;
+            do
+            {
+                observed = Volatile.Read(ref _watchdogRefreshVersion);
+                SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect, token);
+                token.ThrowIfCancellationRequested();
+                Refresh(snapshot);
+            }
+            while (observed != Volatile.Read(ref _watchdogRefreshVersion));
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
         }
         catch (Exception exception)
         {

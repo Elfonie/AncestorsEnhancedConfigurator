@@ -2,6 +2,7 @@ using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.SystemSave;
+using AncestorsEnhanced.Infrastructure.Platform;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
@@ -17,6 +18,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
     private readonly ISaveGameCheatInjector _injector;
     private readonly string _userDataDirectory;
     private readonly Func<bool>? _revalidate;
+    private readonly int _maxCheckpointsPerSlot;
 
     /// <summary>Binds to a verified game context; the user-data path comes from the context (F078).</summary>
     public SaveGameCheatService(VerifiedGameContext context, GameContextVerifier verifier)
@@ -27,13 +29,15 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
     public SaveGameCheatService(
         ISaveGameCheatInjector injector,
         string userDataDirectory,
-        Func<bool>? revalidate = null)
+        Func<bool>? revalidate = null,
+        SaveGameManagerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(injector);
         ArgumentNullException.ThrowIfNull(userDataDirectory);
         _injector = injector;
         _userDataDirectory = userDataDirectory;
         _revalidate = revalidate;
+        _maxCheckpointsPerSlot = (options ?? new SaveGameManagerOptions()).MaxCheckpointsPerSlot;
     }
 
     public CheatApplyResult Apply(CheatKind kind, string slotNumber)
@@ -46,7 +50,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
         }
 
         SaveGameGuard.ValidateSlot(_userDataDirectory, slot);
-        if (IsAncestorsRunning())
+        if (GameProcessProbe.IsAncestorsRunning())
         {
             return new CheatApplyResult(false, "Close Ancestors before applying a cheat.");
         }
@@ -60,6 +64,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
             }
 
             byte[] compressed = ReadSaveWithRetries(slotPath);
+            string sourceSha256 = AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.Sha256(compressed);
             byte[] decompressed = SnappyBlockCodec.Decode(compressed);
 
             CheatInjectionResult injected = _injector.TryInject(
@@ -115,13 +120,26 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
             var store = new SaveGameCheckpointStore(
                 () => DateTimeOffset.UtcNow,
-                maxCheckpointsPerSlot: 50);
+                _maxCheckpointsPerSlot);
             string checkpointId = AncestorsEnhanced.Infrastructure.Editing.MutationCoordinator.Run(() =>
             {
                 // Revalidate inside the global mutation lock, immediately before the store write (F063-1c).
                 if (_revalidate is not null && !_revalidate())
                 {
                     throw new InvalidOperationException("The game context changed; the cheat cannot be applied safely. Refresh and try again.");
+                }
+
+                if (GameProcessProbe.IsAncestorsRunning())
+                {
+                    throw new InvalidOperationException("Close Ancestors before applying a cheat.");
+                }
+                byte[] current = ReadSaveWithRetries(slotPath);
+                if (!string.Equals(
+                        AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.Sha256(current),
+                        sourceSha256,
+                        StringComparison.Ordinal))
+                {
+                    throw new IOException("The live save changed while the cheat was being prepared. Nothing was applied.");
                 }
 
                 return store.Create(_userDataDirectory, slot, recompressed, $"Cheat:{DisplayName(kind)}");
@@ -292,19 +310,6 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
         }
 
         return true;
-    }
-
-    private static bool IsAncestorsRunning()
-    {
-        try
-        {
-            return System.Diagnostics.Process.GetProcessesByName("Ancestors-Win64-Shipping").Length > 0 ||
-                   System.Diagnostics.Process.GetProcessesByName("Ancestors").Length > 0;
-        }
-        catch (InvalidOperationException)
-        {
-            return true;
-        }
     }
 
     private static byte[] ReadSaveWithRetries(string slotPath) =>

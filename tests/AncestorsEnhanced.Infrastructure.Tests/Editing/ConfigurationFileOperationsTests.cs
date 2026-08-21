@@ -50,4 +50,46 @@ public sealed class ConfigurationFileOperationsTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void CompareAndReplaceDoesNotOverwriteUnexpectedNewFile()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"aec-cas-new-{Guid.NewGuid():N}.ini");
+        try
+        {
+            File.WriteAllBytes(path, [9, 9, 9]);
+
+            Assert.Throws<IOException>(() => ConfigurationFileOperations.CompareAndReplace(
+                path,
+                [4, 5, 6],
+                expectedSha256: null,
+                expectedExists: false));
+
+            Assert.Equal([9, 9, 9], File.ReadAllBytes(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void CompareAndDeletePreservesUnexpectedContent()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"aec-cas-delete-{Guid.NewGuid():N}.ini");
+        try
+        {
+            File.WriteAllBytes(path, [9, 9, 9]);
+
+            Assert.Throws<IOException>(() => ConfigurationFileOperations.CompareAndDelete(
+                path,
+                ConfigurationFileOperations.Sha256([1, 2, 3])));
+
+            Assert.Equal([9, 9, 9], File.ReadAllBytes(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

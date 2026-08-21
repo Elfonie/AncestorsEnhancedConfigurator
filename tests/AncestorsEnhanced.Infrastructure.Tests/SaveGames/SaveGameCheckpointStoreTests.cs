@@ -15,7 +15,7 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         string userData = CreateUserData();
         var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
         Directory.CreateDirectory(Path.Combine(userData, "SaveGames", "Savegame0.sav.mod"));
-        byte[] content = [1, 2, 3, 4, 5];
+        byte[] content = TestSaveFactory.Create(1, 2, 3, 4, 5);
         File.WriteAllBytes(Path.Combine(userData, "SaveGames", "Savegame0.sav"), content);
 
         string checkpointId = store.Create(userData, 0, content);
@@ -29,7 +29,7 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
     public void CreateEnforcesTheCheckpointCapByDeletingTheOldest()
     {
         string userData = CreateUserData();
-        byte[] content = [1, 2, 3];
+        byte[] content = TestSaveFactory.Create(1, 2, 3);
         File.WriteAllBytes(Path.Combine(userData, "SaveGames", "Savegame0.sav"), content);
         DateTimeOffset first = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset second = new(2026, 8, 1, 12, 0, 1, TimeSpan.Zero);
@@ -53,7 +53,7 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
     public void ReadRefusesACorruptedStoredFile()
     {
         string userData = CreateUserData();
-        byte[] content = [9, 9, 9];
+        byte[] content = TestSaveFactory.Create(9, 9, 9);
         var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
 
         string checkpointId = store.Create(userData, 0, content);
@@ -69,7 +69,7 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         string userData = CreateUserData();
         var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
 
-        string checkpointId = store.Create(userData, 0, [1, 2, 3]);
+        string checkpointId = store.Create(userData, 0, TestSaveFactory.Create(1, 2, 3));
 
         string slotRoot = SaveGamePaths.GetSlotRoot(userData, 0);
         Assert.DoesNotContain(Directory.EnumerateDirectories(slotRoot), dir =>
@@ -85,7 +85,7 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         Directory.CreateDirectory(Path.Combine(slotRoot, ".orphaned.tmp"));
 
         var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
-        string checkpointId = store.Create(userData, 0, [1, 2, 3]);
+        string checkpointId = store.Create(userData, 0, TestSaveFactory.Create(1, 2, 3));
 
         Assert.Single(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
         Assert.True(File.Exists(SaveGamePaths.GetCheckpointPath(userData, 0, checkpointId)));
@@ -109,7 +109,7 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
     {
         string userData = CreateUserData();
         var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
-        string valid = store.Create(userData, 0, [1, 2, 3]);
+        string valid = store.Create(userData, 0, TestSaveFactory.Create(1, 2, 3));
         string broken = Path.Combine(
             SaveGamePaths.GetSlotRoot(userData, 0), "20260801-120001-000-bbbbbbbbbbbb");
         Directory.CreateDirectory(broken);

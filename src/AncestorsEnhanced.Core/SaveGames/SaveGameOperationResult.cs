@@ -17,4 +17,5 @@ public sealed record SaveGameOperationResult(
     bool Succeeded,
     string Message,
     string? CreatedCheckpointId = null,
-    SaveOperationCommitState CommitState = SaveOperationCommitState.NotCommitted);
+    SaveOperationCommitState CommitState = SaveOperationCommitState.NotCommitted,
+    bool IsTransientFailure = false);

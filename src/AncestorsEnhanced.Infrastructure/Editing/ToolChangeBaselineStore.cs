@@ -9,13 +9,16 @@ internal static class ToolChangeBaselineStore
 {
     private const string ManifestName = "baseline.json";
     private const string FilesDirectoryName = "files";
+    private const int ManifestVersion = 2;
+    private const int MaximumManifestSize = 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public static bool CanCreateRemovalPlan(GameInspectionSnapshot snapshot)
     {
         try
         {
-            return Read(snapshot) is not null;
+            _ = CreateRemovalPlan(snapshot, DateTimeOffset.UtcNow);
+            return true;
         }
         catch (Exception exception) when (IsExpected(exception))
         {
@@ -46,7 +49,7 @@ internal static class ToolChangeBaselineStore
                 file.FileName,
                 file.Target);
             bool exists = File.Exists(path);
-            byte[] current = exists ? File.ReadAllBytes(path) : [];
+            byte[] current = exists ? ReadStableBounded(path, 64L * 1024 * 1024) : [];
             if (exists != file.ToolStateExists || !string.Equals(Sha256(current), file.ToolStateSha256, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
@@ -54,6 +57,11 @@ internal static class ToolChangeBaselineStore
             }
 
             byte[] original = file.OriginalExists ? ReadOriginal(snapshot.UserDataDirectory!, file) : [];
+            if (exists == file.OriginalExists &&
+                string.Equals(Sha256(current), file.OriginalSha256, StringComparison.Ordinal))
+            {
+                continue;
+            }
             files.Add(new ConfigurationFileChangePlan(
                 file.FileName,
                 path,
@@ -71,8 +79,13 @@ internal static class ToolChangeBaselineStore
                 file.OriginalExists ? "Original state" : "Remove file created by tool"));
         }
 
+        if (files.Count == 0)
+        {
+            throw new InvalidOperationException("No active tool changes were found.");
+        }
+
         return new SettingsChangePlan(
-            $"remove-tool-changes-{createdAtUtc:yyyyMMddHHmmssfff}",
+            $"remove-tool-changes-{createdAtUtc:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}",
             createdAtUtc,
             context.BuildId ?? string.Empty,
             context.UserDataDirectory,
@@ -94,9 +107,13 @@ internal static class ToolChangeBaselineStore
         string root = GetToolChangesRoot(plan.UserDataDirectory);
         ValidateConfigurationPath(plan.UserDataDirectory, root);
         BaselineManifest manifest = Read(plan.UserDataDirectory) ?? new BaselineManifest(
-            Version: 1,
+            Version: ManifestVersion,
             ContextFingerprint: plan.ContextFingerprint ?? string.Empty,
             Files: []);
+        if (manifest.Version == 1)
+        {
+            manifest = MigrateLegacy(plan.UserDataDirectory, manifest);
+        }
         if (!string.Equals(manifest.ContextFingerprint, plan.ContextFingerprint ?? string.Empty, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("The existing tool-change baseline belongs to a different game context.");
@@ -116,10 +133,14 @@ internal static class ToolChangeBaselineStore
                     throw new InvalidOperationException(
                         $"{file.FileName} changed outside the Configurator. Refresh and resolve that change before editing it again.");
                 }
+                if (existing.OriginalExists)
+                {
+                    _ = ReadOriginal(plan.UserDataDirectory, existing);
+                }
                 continue;
             }
 
-            string backupName = file.Existed ? $"{tracked.Count:D3}.before" : string.Empty;
+            string backupName = file.Existed ? GetBackupName(file.Target, file.FileName) : string.Empty;
             if (file.Existed)
             {
                 Directory.CreateDirectory(Path.Combine(root, FilesDirectoryName));
@@ -135,17 +156,11 @@ internal static class ToolChangeBaselineStore
                 file.OriginalSha256));
         }
 
-        Write(plan.UserDataDirectory, manifest with { Files = tracked });
+        Write(plan.UserDataDirectory, manifest with { Version = ManifestVersion, Files = tracked });
     }
 
     public static void MarkApplied(SettingsChangePlan plan)
     {
-        if (plan.IsToolChangeRemoval)
-        {
-            Delete(plan.UserDataDirectory);
-            return;
-        }
-
         BaselineManifest manifest = Read(plan.UserDataDirectory)
             ?? throw new IOException("The tool-change baseline disappeared during the update.");
         List<BaselineFile> files = [.. manifest.Files];
@@ -164,7 +179,41 @@ internal static class ToolChangeBaselineStore
                 ToolStateSha256 = Sha256(change.UpdatedContent),
             };
         }
-        Write(plan.UserDataDirectory, manifest with { Files = files });
+        Write(plan.UserDataDirectory, manifest with { Version = ManifestVersion, Files = files });
+    }
+
+    public static void RollbackApplied(SettingsChangePlan plan)
+    {
+        BaselineManifest? manifest = Read(plan.UserDataDirectory);
+        if (manifest is null)
+        {
+            return;
+        }
+
+        List<BaselineFile> files = [.. manifest.Files];
+        foreach (ConfigurationFileChangePlan change in plan.Files)
+        {
+            int index = files.FindIndex(file => file.Target == change.Target &&
+                string.Equals(file.FileName, change.FileName, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                continue;
+            }
+            files[index] = files[index] with
+            {
+                ToolStateExists = change.Existed,
+                ToolStateSha256 = change.OriginalSha256,
+            };
+        }
+
+        if (files.All(IsAtOriginalState))
+        {
+            Delete(plan.UserDataDirectory);
+        }
+        else
+        {
+            Write(plan.UserDataDirectory, manifest with { Files = files });
+        }
     }
 
     public static void MarkReverted(VerifiedGameContext context, OperationManifest operation)
@@ -205,9 +254,7 @@ internal static class ToolChangeBaselineStore
             };
         }
 
-        if (files.All(file =>
-                file.ToolStateExists == file.OriginalExists &&
-                string.Equals(file.ToolStateSha256, file.OriginalSha256, StringComparison.Ordinal)))
+        if (files.All(IsAtOriginalState))
         {
             Delete(context.UserDataDirectory);
             return;
@@ -230,18 +277,29 @@ internal static class ToolChangeBaselineStore
         {
             return null;
         }
-        BaselineManifest? manifest = JsonSerializer.Deserialize<BaselineManifest>(File.ReadAllText(path), JsonOptions);
-        return manifest is { Version: 1 } && manifest.Files.Count > 0 ? manifest : null;
+        BaselineManifest? manifest = JsonSerializer.Deserialize<BaselineManifest>(
+            ReadStableBounded(path, MaximumManifestSize), JsonOptions);
+        return manifest is not null && IsValid(manifest) ? manifest : null;
     }
 
     private static byte[] ReadOriginal(string userDataDirectory, BaselineFile file)
     {
-        string path = Path.Combine(GetToolChangesRoot(userDataDirectory), FilesDirectoryName, file.BackupName);
+        string filesRoot = Path.GetFullPath(Path.Combine(GetToolChangesRoot(userDataDirectory), FilesDirectoryName));
+        string backupName = file.BackupName.Length == 10 &&
+            file.BackupName.EndsWith(".before", StringComparison.Ordinal) &&
+            file.BackupName.AsSpan(0, 3).ToArray().All(char.IsAsciiDigit)
+                ? file.BackupName
+                : GetBackupName(file.Target, file.FileName);
+        string path = Path.GetFullPath(Path.Combine(filesRoot, backupName));
+        if (!string.Equals(Path.GetDirectoryName(path), filesRoot, PathComparison))
+        {
+            throw new IOException($"The baseline backup path for {file.FileName} is invalid.");
+        }
         if (!File.Exists(path) || File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint))
         {
             throw new IOException($"The baseline backup for {file.FileName} is missing.");
         }
-        byte[] original = File.ReadAllBytes(path);
+        byte[] original = ReadStableBounded(path, 64L * 1024 * 1024);
         if (!string.Equals(Sha256(original), file.OriginalSha256, StringComparison.Ordinal))
         {
             throw new IOException($"The baseline backup for {file.FileName} failed validation.");
@@ -264,9 +322,105 @@ internal static class ToolChangeBaselineStore
         ValidateConfigurationPath(userDataDirectory, root);
         if (Directory.Exists(root) && !File.GetAttributes(root).HasFlag(FileAttributes.ReparsePoint))
         {
-            Directory.Delete(root, recursive: true);
+            DeleteDirectorySafely(userDataDirectory, root);
         }
     }
+
+    private static bool IsAtOriginalState(BaselineFile file) =>
+        file.ToolStateExists == file.OriginalExists &&
+        string.Equals(file.ToolStateSha256, file.OriginalSha256, StringComparison.Ordinal);
+
+    private static BaselineManifest MigrateLegacy(string userDataDirectory, BaselineManifest manifest)
+    {
+        string filesRoot = Path.Combine(GetToolChangesRoot(userDataDirectory), FilesDirectoryName);
+        List<BaselineFile> files = [];
+        foreach (BaselineFile file in manifest.Files)
+        {
+            if (!file.OriginalExists)
+            {
+                files.Add(file with { BackupName = string.Empty });
+                continue;
+            }
+
+            byte[] original = ReadOriginal(userDataDirectory, file);
+            string backupName = GetBackupName(file.Target, file.FileName);
+            WriteBytesAtomically(Path.Combine(filesRoot, backupName), original);
+            files.Add(file with { BackupName = backupName });
+        }
+
+        BaselineManifest migrated = manifest with { Version = ManifestVersion, Files = files };
+        Write(userDataDirectory, migrated);
+        return migrated;
+    }
+
+    private static string GetBackupName(SettingFileTarget target, string fileName)
+    {
+        ValidateTargetFileName(target, fileName);
+        return $"{(int)target}-{fileName}.before";
+    }
+
+    private static bool IsValid(BaselineManifest manifest)
+    {
+        if (manifest.Version is not (1 or ManifestVersion) ||
+            string.IsNullOrWhiteSpace(manifest.ContextFingerprint) ||
+            manifest.ContextFingerprint.Length > 256 ||
+            manifest.Files.Count is < 1 or > 16)
+        {
+            return false;
+        }
+
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (BaselineFile file in manifest.Files)
+        {
+            try
+            {
+                ValidateTargetFileName(file.Target, file.FileName);
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+
+            if (!keys.Add($"{(int)file.Target}:{file.FileName}") ||
+                !IsSha256(file.OriginalSha256) ||
+                !IsSha256(file.ToolStateSha256) ||
+                (file.OriginalExists && manifest.Version == ManifestVersion && !string.Equals(
+                    file.BackupName, GetBackupName(file.Target, file.FileName), StringComparison.Ordinal)) ||
+                (file.OriginalExists && manifest.Version == 1 && !IsLegacyBackupName(file.BackupName)) ||
+                (!file.OriginalExists && !string.IsNullOrEmpty(file.BackupName)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void ValidateTargetFileName(SettingFileTarget target, string fileName)
+    {
+        switch (target)
+        {
+            case SettingFileTarget.Ini:
+                ValidateFileName(fileName);
+                break;
+            case SettingFileTarget.Pak:
+                ValidatePakFileName(fileName);
+                break;
+            case SettingFileTarget.SystemSave:
+                ValidateSystemSaveFileName(fileName);
+                break;
+            default:
+                throw new InvalidOperationException("The baseline target is invalid.");
+        }
+    }
+
+    private static bool IsSha256(string value) =>
+        value.Length == 64 && value.All(character => char.IsAsciiHexDigit(character));
+
+    private static bool IsLegacyBackupName(string value) =>
+        value.Length == 10 &&
+        value.EndsWith(".before", StringComparison.Ordinal) &&
+        value.AsSpan(0, 3).ToArray().All(char.IsAsciiDigit);
 
     private static bool IsExpected(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or

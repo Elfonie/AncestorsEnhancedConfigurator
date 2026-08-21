@@ -1,6 +1,7 @@
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Parsing;
+using AncestorsEnhanced.Infrastructure.Editing;
 
 namespace AncestorsEnhanced.Infrastructure.Inspection;
 
@@ -50,7 +51,9 @@ internal sealed class IniFileInspector(IReadOnlyFileSystem fileSystem)
         {
             return Snapshot(
                 metadata,
-                IniSnapshotParser.Parse(fileSystem.ReadAllText(metadata.FullPath)),
+                IniSnapshotParser.Parse(
+                    EncodedTextFile.Decode(ConfigurationFileOperations.ReadStableBounded(
+                        metadata.FullPath, InspectionLimits.TextFile)).Text),
                 null);
         }
         catch (Exception exception) when (InspectionErrors.IsExpected(exception))

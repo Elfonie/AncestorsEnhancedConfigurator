@@ -6,28 +6,92 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-latest, ubuntu-latest ]
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: 10.0.302
           global-json-file: global.json
 
       - name: Restore
-        run: dotnet restore AncestorsEnhanced.slnx
+        run: dotnet restore AncestorsEnhanced.slnx --locked-mode
         continue-on-error: false
 
       - name: Build
         run: dotnet build AncestorsEnhanced.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test AncestorsEnhanced.slnx -c Release --no-build
+        run: dotnet test AncestorsEnhanced.slnx -c Release --no-build --no-restore
+
+      - name: Package vulnerability gate
+        shell: pwsh
+        run: |
+          $json = dotnet list AncestorsEnhanced.slnx package --vulnerable --include-transitive --format json
+          if ($LASTEXITCODE -ne 0) { throw 'Package vulnerability scan failed.' }
+          $report = $json | ConvertFrom-Json
+          $vulnerable = @(
+            foreach ($project in $report.projects) {
+              foreach ($framework in @($project.frameworks)) {
+                foreach ($package in @($framework.topLevelPackages) + @($framework.transitivePackages)) {
+                  if ($null -ne $package -and $null -ne $package.vulnerabilities -and @($package.vulnerabilities).Count -gt 0) { $package }
+                }
+              }
+            }
+          )
+          if ($vulnerable.Count -gt 0) {
+            $vulnerable | ConvertTo-Json -Depth 10 | Write-Output
+            throw 'Vulnerable NuGet packages were found.'
+          }
+
+      - name: Publish
+        run: dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -c Release -r ${{ matrix.rid }} --no-restore -p:PublishSingleFile=true -p:SelfContained=true -o artifacts/${{ matrix.rid }}
+
+      - name: Smoke test Windows artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $stdout = Join-Path $env:RUNNER_TEMP 'ancestors-version.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'ancestors-version-error.txt'
+          $process = Start-Process ./artifacts/win-x64/AncestorsEnhanced.App.exe -ArgumentList '--version' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          $output = (Get-Content -Raw $stdout).Trim()
+          if ($process.ExitCode -ne 0 -or $output -ne 'Ancestors Enhanced Configurator 0.9.0') { throw "Windows publish smoke test failed: $output" }
+
+      - name: Smoke test Linux artifact
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          chmod +x ./artifacts/linux-x64/AncestorsEnhanced.App
+          output="$(./artifacts/linux-x64/AncestorsEnhanced.App --version)"
+          test "$output" = "Ancestors Enhanced Configurator 0.9.0"
+
+      - name: Create checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem -File -Recurse "artifacts/${{ matrix.rid }}" |
+            Sort-Object FullName |
+            ForEach-Object { "$(Get-FileHash -Algorithm SHA256 $_.FullName | Select-Object -ExpandProperty Hash)  $($_.FullName.Substring((Resolve-Path "artifacts/${{ matrix.rid }}").Path.Length + 1).Replace('\','/'))" } |
+            Set-Content -Encoding ascii "artifacts/${{ matrix.rid }}/SHA256SUMS.txt"
+
+      - name: Upload publish artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: AncestorsEnhanced-${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}
+          if-no-files-found: error

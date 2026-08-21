@@ -3,6 +3,7 @@ using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.SystemSave;
+using AncestorsEnhanced.Infrastructure.Platform;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
@@ -23,7 +24,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         : this(
             context.UserDataDirectory,
             () => DateTimeOffset.UtcNow,
-            IsAncestorsRunning,
+            GameProcessProbe.IsAncestorsRunning,
             options ?? new SaveGameManagerOptions(),
             () => verifier.Verify(context))
     {
@@ -36,7 +37,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         : this(
             userDataDirectory,
             () => DateTimeOffset.UtcNow,
-            IsAncestorsRunning,
+            GameProcessProbe.IsAncestorsRunning,
             options ?? new SaveGameManagerOptions(),
             revalidate)
     {
@@ -74,7 +75,25 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         try
         {
             var slots = Enumerable.Range(0, SaveGamePaths.SlotCount)
-                .Select(ReadSlot)
+                .Select(slot =>
+                {
+                    try
+                    {
+                        return ReadSlot(slot);
+                    }
+                    catch (Exception exception) when (IsExpectedException(exception))
+                    {
+                        return new SaveGameSlotSnapshot(
+                            slot.ToString(CultureInfo.InvariantCulture),
+                            SaveGamePaths.GetSlotFileName(slot),
+                            SaveGamePaths.GetSlotPath(_userDataDirectory, slot),
+                            false,
+                            null,
+                            null,
+                            [],
+                            exception.Message);
+                    }
+                })
                 .ToArray();
             return new SaveGamesSnapshot(_utcNow(), _userDataDirectory, slots);
         }
@@ -113,7 +132,10 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             }
             catch (InvalidDataException)
             {
-                return Failure($"Slot {slot + 1} is currently being written or is corrupt; skipped backup.");
+                return new SaveGameOperationResult(
+                    false,
+                    $"Slot {slot + 1} is currently being written or is corrupt; skipped backup.",
+                    IsTransientFailure: true);
             }
             IReadOnlyList<SaveGameCheckpoint> latest = SaveGameCheckpointStore.ListCheckpoints(_userDataDirectory, slot);
             // A restore can legitimately make the live slot equal to an older manual
@@ -147,6 +169,13 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 true,
                 $"Checkpoint saved for slot {slot + 1}.",
                 checkpointId);
+        }
+        catch (IOException exception)
+        {
+            return new SaveGameOperationResult(
+                false,
+                $"No checkpoint was created: {exception.Message}",
+                IsTransientFailure: true);
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {
@@ -256,7 +285,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 return Failure("The checkpoint could not be found.");
             }
 
-            Directory.Delete(checkpointDirectory, recursive: true);
+            DeleteDirectorySafely(SaveGamePaths.GetSlotRoot(_userDataDirectory, slot), checkpointDirectory);
             return new SaveGameOperationResult(true, $"Checkpoint deleted from slot {slot + 1}.");
         }
         catch (Exception exception) when (IsExpectedException(exception))
@@ -303,19 +332,6 @@ public sealed class SafeSaveGameManager : ISaveGameManager
 
     private static SaveGameOperationResult Failure(string message) =>
         new(false, message);
-
-    private static bool IsAncestorsRunning()
-    {
-        try
-        {
-            return System.Diagnostics.Process.GetProcessesByName("Ancestors-Win64-Shipping").Length > 0 ||
-                   System.Diagnostics.Process.GetProcessesByName("Ancestors").Length > 0;
-        }
-        catch (InvalidOperationException)
-        {
-            return true;
-        }
-    }
 
     private static bool IsIdentical(byte[] first, byte[] second)
     {

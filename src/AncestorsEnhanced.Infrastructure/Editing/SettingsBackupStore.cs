@@ -13,6 +13,8 @@ internal static class SettingsBackupStore
     private const int MaxRetainedOperations = 50;
     private const string AppliedMarkerName = "applied";
     private const string RevertedMarkerName = "reverted";
+    private const string AbortedMarkerName = "aborted";
+    private const int MaximumManifestSize = 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public static string Prepare(SettingsChangePlan plan)
@@ -21,6 +23,10 @@ internal static class SettingsBackupStore
             plan.UserDataDirectory,
             GetBackupRoot(plan.UserDataDirectory));
         string directory = GetOperationDirectory(plan.UserDataDirectory, plan.OperationId);
+        if (Directory.Exists(directory) || File.Exists(directory))
+        {
+            throw new IOException("The settings operation identifier already exists.");
+        }
         Directory.CreateDirectory(directory);
         WriteManifest(directory, CreateManifest(plan));
 
@@ -31,7 +37,7 @@ internal static class SettingsBackupStore
                 backupPath,
                 file.OriginalContent);
             if (!string.Equals(
-                    Sha256(File.ReadAllBytes(backupPath)),
+                    Sha256(ReadStableBounded(backupPath, 64L * 1024 * 1024)),
                     file.OriginalSha256,
                     StringComparison.Ordinal))
             {
@@ -55,6 +61,11 @@ internal static class SettingsBackupStore
         WriteBytesAtomically(
             Path.Combine(directory, RevertedMarkerName),
             Encoding.UTF8.GetBytes(revertedAtUtc.ToString("O")));
+
+    public static void MarkAborted(string directory, DateTimeOffset abortedAtUtc) =>
+        WriteBytesAtomically(
+            Path.Combine(directory, AbortedMarkerName),
+            Encoding.UTF8.GetBytes(abortedAtUtc.ToString("O")));
 
     public static StoredSettingsOperation? FindLast(VerifiedGameContext context)
     {
@@ -103,7 +114,7 @@ internal static class SettingsBackupStore
                     // it makes this candidate ineligible and an older valid one is considered.
                     bool backupOk = !file.Existed ||
                         (IsNormalFile(backupPath) &&
-                         string.Equals(Sha256(File.ReadAllBytes(backupPath)), file.OriginalSha256, StringComparison.Ordinal));
+                         string.Equals(Sha256(ReadStableBounded(backupPath, 64L * 1024 * 1024)), file.OriginalSha256, StringComparison.Ordinal));
                     return string.Equals(file.BackupFileName, expectedBackup, PathComparison) &&
                         backupOk;
                 });
@@ -123,7 +134,7 @@ internal static class SettingsBackupStore
                         file.Target);
                     return file.ResultExists
                         ? File.Exists(path) && string.Equals(
-                            Sha256(File.ReadAllBytes(path)),
+                            Sha256(ReadStableBounded(path, 64L * 1024 * 1024)),
                             file.ResultSha256,
                             StringComparison.Ordinal)
                         : !File.Exists(path);
@@ -207,20 +218,24 @@ internal static class SettingsBackupStore
             .EnumerateDirectories(backupRoot)
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToList();
-        int overflow = operations.Count - MaxRetainedOperations;
-        for (int index = 0; index < overflow; index++)
+        int remaining = operations.Count;
+        foreach (string candidate in operations)
         {
+            if (remaining <= MaxRetainedOperations)
+            {
+                break;
+            }
             try
             {
                 // Never prune directories that are currently applied but not reverted;
                 // the list is ordered oldest first and older applied operations are
                 // still needed for an Undo, so only remove entries that are either
                 // already reverted or were never applied.
-                string candidate = operations[index];
                 if (File.Exists(Path.Combine(candidate, RevertedMarkerName)) ||
                     !File.Exists(Path.Combine(candidate, AppliedMarkerName)))
                 {
-                    Directory.Delete(candidate, recursive: true);
+                    DeleteDirectorySafely(backupRoot, candidate);
+                    remaining--;
                 }
             }
             catch (Exception exception) when (
@@ -257,7 +272,7 @@ internal static class SettingsBackupStore
     {
         string path = Path.Combine(directory, ManifestFileName);
         OperationManifest? manifest = IsNormalFile(path)
-            ? JsonSerializer.Deserialize<OperationManifest>(File.ReadAllText(path, Encoding.UTF8))
+            ? JsonSerializer.Deserialize<OperationManifest>(ReadStableBounded(path, MaximumManifestSize))
             : null;
         return manifest?.Version == 1
             ? manifest with

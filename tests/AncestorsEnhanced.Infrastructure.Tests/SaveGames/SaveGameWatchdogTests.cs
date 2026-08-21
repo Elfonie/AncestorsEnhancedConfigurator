@@ -28,13 +28,13 @@ public sealed class SaveGameWatchdogTests : IDisposable
     {
         string userData = CreateUserData();
         string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
-        File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1, 2, 3));
         var watchdog = new SaveGameWatchdog(userData);
 
         watchdog.Start();
         try
         {
-            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([4, 5, 6, 7]));
+            File.WriteAllBytes(slotPath, TestSaveFactory.Create(4, 5, 6, 7));
             WaitFor(() => SaveGameCheckpointStore.ListCheckpoints(userData, 0).Count == 1);
             Assert.Single(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
         }
@@ -62,7 +62,7 @@ public sealed class SaveGameWatchdogTests : IDisposable
     {
         string userData = CreateUserData();
         string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
-        File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1, 2, 3));
         var watchdog = new SaveGameWatchdog(userData);
         int events = 0;
         watchdog.CheckpointCreated += (_, _) => events++;
@@ -71,7 +71,7 @@ public sealed class SaveGameWatchdogTests : IDisposable
         try
         {
             // First change creates a checkpoint.
-            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([4, 5, 6, 7]));
+            File.WriteAllBytes(slotPath, TestSaveFactory.Create(4, 5, 6, 7));
             WaitFor(() => SaveGameCheckpointStore.ListCheckpoints(userData, 0).Count == 1);
 
             // Writing back the identical content must not create a backup or raise an event.
@@ -95,16 +95,16 @@ public sealed class SaveGameWatchdogTests : IDisposable
     {
         string userData = CreateUserData();
         string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
-        File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1, 2, 3));
         var watchdog = new SaveGameWatchdog(userData) { Cooldown = TimeSpan.FromMinutes(5) };
 
         watchdog.Start();
         try
         {
-            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([4, 5, 6, 7]));
+            File.WriteAllBytes(slotPath, TestSaveFactory.Create(4, 5, 6, 7));
             WaitFor(() => SaveGameCheckpointStore.ListCheckpoints(userData, 0).Count == 1);
             Thread.Sleep(100);
-            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([8, 9, 10, 11]));
+            File.WriteAllBytes(slotPath, TestSaveFactory.Create(8, 9, 10, 11));
             Thread.Sleep(700);
 
             Assert.Single(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
@@ -120,8 +120,8 @@ public sealed class SaveGameWatchdogTests : IDisposable
     {
         string userData = CreateUserData();
         string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
-        byte[] original = SnappyBlockCodec.EncodeLiteral([1, 2, 3]);
-        byte[] changed = SnappyBlockCodec.EncodeLiteral([8, 9, 10, 11]);
+        byte[] original = TestSaveFactory.Create(1, 2, 3);
+        byte[] changed = TestSaveFactory.Create(8, 9, 10, 11);
         File.WriteAllBytes(slotPath, original);
         var manager = new SafeSaveGameManager(
             userData,
@@ -160,14 +160,14 @@ public sealed class SaveGameWatchdogTests : IDisposable
     {
         string userData = CreateUserData();
         string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
-        File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([1, 2, 3]));
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1, 2, 3));
         Queue<SaveGameOperationResult> outcomes = new(
         [
-            new(false, "Slot is currently being written or corrupt; skipped backup."),
+            new(false, "Slot is currently being written or corrupt; skipped backup.", IsTransientFailure: true),
             new(true, "Checkpoint saved.", "first"),
-            new(false, "Slot is currently being written or corrupt; skipped backup."),
-            new(false, "Slot is currently being written or corrupt; skipped backup."),
-            new(false, "Slot is currently being written or corrupt; skipped backup."),
+            new(false, "Slot is currently being written or corrupt; skipped backup.", IsTransientFailure: true),
+            new(false, "Slot is currently being written or corrupt; skipped backup.", IsTransientFailure: true),
+            new(false, "Slot is currently being written or corrupt; skipped backup.", IsTransientFailure: true),
             new(true, "Checkpoint saved.", "second"),
         ]);
         var watchdog = new SaveGameWatchdog(userData, _ => outcomes.Dequeue()) { Cooldown = TimeSpan.Zero };
@@ -176,10 +176,10 @@ public sealed class SaveGameWatchdogTests : IDisposable
         watchdog.Start();
         try
         {
-            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([4, 5, 6]));
+            File.WriteAllBytes(slotPath, TestSaveFactory.Create(4, 5, 6));
             WaitFor(() => Volatile.Read(ref successes) == 1);
 
-            File.WriteAllBytes(slotPath, SnappyBlockCodec.EncodeLiteral([7, 8, 9]));
+            File.WriteAllBytes(slotPath, TestSaveFactory.Create(7, 8, 9));
             WaitFor(() => Volatile.Read(ref successes) == 2);
             Assert.Empty(outcomes);
         }
@@ -187,6 +187,56 @@ public sealed class SaveGameWatchdogTests : IDisposable
         {
             watchdog.StopWatch();
         }
+    }
+
+    [Fact]
+    public async Task StopAndRestartDoNotLoseOrDuplicateWorkerGenerations()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1));
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        int calls = 0;
+        var watchdog = new SaveGameWatchdog(userData, _ =>
+        {
+            int call = Interlocked.Increment(ref calls);
+            if (call == 1)
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(5));
+            }
+            return new SaveGameOperationResult(true, "Checkpoint saved.", $"cp-{call}");
+        }) { Cooldown = TimeSpan.FromDays(1) };
+
+        watchdog.Start();
+        watchdog.BeginSlotMutation(0).Dispose();
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+        Task stopping = Task.Run(watchdog.StopWatch);
+        await Task.Delay(100);
+        release.Set();
+        await stopping.WaitAsync(TimeSpan.FromSeconds(5));
+
+        watchdog.Start();
+        watchdog.BeginSlotMutation(0).Dispose();
+        WaitFor(() => Volatile.Read(ref calls) == 2);
+        await Task.Delay(300);
+        watchdog.StopWatch();
+
+        Assert.Equal(2, Volatile.Read(ref calls));
+    }
+
+    [Fact]
+    public void DisposeIsIdempotent()
+    {
+        string userData = CreateUserData();
+        var watchdog = new SaveGameWatchdog(userData);
+        watchdog.Start();
+
+        watchdog.Dispose();
+        watchdog.Dispose();
+
+        Assert.False(watchdog.IsRunning);
     }
 
     private string CreateUserData()

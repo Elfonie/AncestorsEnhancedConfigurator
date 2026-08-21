@@ -26,7 +26,9 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         Title = int.TryParse(slot.SlotNumber, NumberStyles.Integer, CultureInfo.InvariantCulture, out int slotIndex)
             ? string.Create(CultureInfo.CurrentCulture, $"Slot {slotIndex + 1}")
             : slot.SlotNumber;
-        Status = slot.Exists
+        Status = slot.ErrorMessage is not null
+            ? $"Could not inspect this slot: {slot.ErrorMessage}"
+            : slot.Exists
             ? string.Create(CultureInfo.CurrentCulture, $"{FormatSize(slot.SizeBytes ?? 0)} \u00b7 last write {slot.LastWriteTimeUtc?.ToLocalTime():g}")
             : "No save in this slot";
         CheckpointCount = slot.Checkpoints.Count == 1

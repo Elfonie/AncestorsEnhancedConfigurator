@@ -7,14 +7,13 @@ namespace AncestorsEnhanced.App.Tests.ViewModels;
 public sealed class CheatViewModelTests
 {
     [Fact]
-    public void ExposesAllSlotsAndDefaultsToSlotZero()
+    public void StartsWithoutInventingUnavailableSlots()
     {
         var viewModel = new CheatViewModel(new FakeCheatService());
 
-        Assert.Equal(5, viewModel.Slots.Count);
-        Assert.Equal("Slot 1", viewModel.Slots[0].Label);
-        Assert.Equal(0, viewModel.SelectedSlot!.Number);
-        Assert.True(viewModel.CanApply);
+        Assert.Empty(viewModel.Slots);
+        Assert.Null(viewModel.SelectedSlot);
+        Assert.False(viewModel.CanApply);
     }
 
     [Fact]
@@ -37,7 +36,7 @@ public sealed class CheatViewModelTests
     public async Task MaxNeuronalEnergyDelegatesToService()
     {
         var service = new FakeCheatService();
-        var viewModel = new CheatViewModel(service);
+        var viewModel = Ready(new CheatViewModel(service));
 
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
@@ -49,7 +48,7 @@ public sealed class CheatViewModelTests
     public async Task HealClanDelegatesToService()
     {
         var service = new FakeCheatService();
-        var viewModel = new CheatViewModel(service);
+        var viewModel = Ready(new CheatViewModel(service));
 
         await viewModel.HealClanCommand.ExecuteAsync(null);
 
@@ -60,7 +59,7 @@ public sealed class CheatViewModelTests
     public async Task FailedCheatReportsFailureAccent()
     {
         var service = new FakeCheatService { Fail = true };
-        var viewModel = new CheatViewModel(service);
+        var viewModel = Ready(new CheatViewModel(service));
 
         await viewModel.MaxNeedsCommand.ExecuteAsync(null);
 
@@ -73,9 +72,9 @@ public sealed class CheatViewModelTests
     {
         var service = new FakeCheatService();
         var restored = new List<(string Slot, string Id)>();
-        var viewModel = new CheatViewModel(
+        var viewModel = Ready(new CheatViewModel(
             service,
-            (slot, id) => { restored.Add((slot, id)); return Task.FromResult(new SaveGameOperationResult(true, "Loaded.")); });
+            (slot, id) => { restored.Add((slot, id)); return Task.FromResult(new SaveGameOperationResult(true, "Loaded.")); }));
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
         Assert.True(viewModel.CanRestoreLastCheckpoint);
@@ -91,9 +90,9 @@ public sealed class CheatViewModelTests
     [Fact]
     public async Task RestoreFailureDoesNotClaimSuccess()
     {
-        var viewModel = new CheatViewModel(
+        var viewModel = Ready(new CheatViewModel(
             new FakeCheatService(),
-            (slot, id) => Task.FromResult(new SaveGameOperationResult(false, "Close Ancestors before restoring.")));
+            (slot, id) => Task.FromResult(new SaveGameOperationResult(false, "Close Ancestors before restoring."))));
         await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
         await viewModel.RestoreLastCheckpointCommand.ExecuteAsync(null);
@@ -118,6 +117,12 @@ public sealed class CheatViewModelTests
             () => Task.CompletedTask,
             _ => () => Task.CompletedTask,
             _ => () => Task.CompletedTask);
+    }
+
+    private static CheatViewModel Ready(CheatViewModel viewModel)
+    {
+        viewModel.UpdateSlotAvailability([Slot("0", saved: true)]);
+        return viewModel;
     }
     private sealed class FakeCheatService : ISaveGameCheatService
     {

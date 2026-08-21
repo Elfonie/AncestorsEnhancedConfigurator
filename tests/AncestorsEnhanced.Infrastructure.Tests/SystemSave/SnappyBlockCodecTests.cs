@@ -58,4 +58,12 @@ public sealed class SnappyBlockCodecTests
         Assert.Throws<InvalidDataException>(() => SnappyBlockCodec.Decode(malformed));
     }
 
+    [Fact]
+    public void FifthVarintByteCannotOverflowUInt32()
+    {
+        byte[] malformed = [0x80, 0x80, 0x80, 0x80, 0x10];
+
+        Assert.Throws<InvalidDataException>(() => SnappyBlockCodec.Decode(malformed));
+    }
+
 }

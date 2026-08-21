@@ -3,6 +3,7 @@ using AncestorsEnhanced.Core.SaveGames;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using AncestorsEnhanced.Infrastructure.Platform;
 
 namespace AncestorsEnhanced.App.ViewModels;
 
@@ -18,10 +19,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
     private string? _lastCheckpointId;
 
     [ObservableProperty]
-    public partial IReadOnlyList<CheatSlotChoice> Slots { get; set; } =
-        Enumerable.Range(0, 5)
-            .Select(number => new CheatSlotChoice(number, $"Slot {number+1}"))
-            .ToArray();
+    public partial IReadOnlyList<CheatSlotChoice> Slots { get; set; } = [];
 
     [ObservableProperty]
     public partial CheatSlotChoice? SelectedSlot { get; set; }
@@ -86,7 +84,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         ArgumentNullException.ThrowIfNull(service);
         _service = service;
         _restoreCheckpoint = restoreCheckpoint;
-        SelectedSlot = Slots[0];
+        SelectedSlot = null;
     }
 
     public void Start()
@@ -132,6 +130,12 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        CheatSlotChoice? selectedSlot = SelectedSlot;
+        if (selectedSlot is null)
+        {
+            return;
+        }
+
         IsBusy = true;
         StatusMessage = "Applying...";
         StatusAccent = "#FF5A00";
@@ -140,7 +144,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         CheatApplyResult result;
         try
         {
-            string slot = (SelectedSlot?.Number ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string slot = selectedSlot.Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
             result = await Task.Run(() => _service.Apply(kind, slot));
         }
         catch (Exception exception)
@@ -155,7 +159,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
         if (result.Succeeded && result.CheckpointId is not null)
         {
-            _lastCheckpointSlot = (SelectedSlot?.Number ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _lastCheckpointSlot = selectedSlot.Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
             _lastCheckpointId = result.CheckpointId;
             StatusMessage = "Cheat checkpoint created. Restore it now to use it in the game.";
             StatusAccent = "#B4D941";
@@ -169,7 +173,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         NotifyState();
     }
 
-    public bool CanRestoreLastCheckpoint => _lastCheckpointId is not null && !IsBusy && !IsGameRunning;
+    public bool CanRestoreLastCheckpoint =>
+        _restoreCheckpoint is not null && _lastCheckpointId is not null && !IsBusy && !IsGameRunning;
 
     [RelayCommand]
     private async Task RestoreLastCheckpointAsync()
@@ -222,12 +227,12 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
-            bool lastRunning = IsAncestorsRunning();
+            bool lastRunning = GameProcessProbe.IsAncestorsRunning();
             await PublishGameRunningAsync(lastRunning);
 
             while (await timer.WaitForNextTickAsync(token))
             {
-                bool running = IsAncestorsRunning();
+                bool running = GameProcessProbe.IsAncestorsRunning();
                 if (running != lastRunning)
                 {
                     lastRunning = running;
@@ -249,19 +254,6 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
 
         await Dispatcher.UIThread.InvokeAsync(() => IsGameRunning = running);
-    }
-
-    private static bool IsAncestorsRunning()
-    {
-        try
-        {
-            return System.Diagnostics.Process.GetProcessesByName("Ancestors-Win64-Shipping").Length > 0 ||
-                   System.Diagnostics.Process.GetProcessesByName("Ancestors").Length > 0;
-        }
-        catch (InvalidOperationException)
-        {
-            return true;
-        }
     }
 
     private void NotifyState()

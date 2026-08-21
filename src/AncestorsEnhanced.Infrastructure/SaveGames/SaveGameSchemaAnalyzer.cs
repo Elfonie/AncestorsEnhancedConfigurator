@@ -16,9 +16,10 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     // Structs whose payload is serialized data (not a nested tagged-property list).
-    private const int MaxNodeCount = 1_000_000;
+    private const int MaxNodeCount = 100_000;
     private const int MaxParseDepth = 128;
     private const int MaxStringLength = 65_536;
+    private const int MaxStringBytes = 8 * 1024 * 1024;
 
     private static readonly HashSet<string> BinaryStructs = new(StringComparer.Ordinal)
     {
@@ -48,7 +49,8 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
         ArgumentNullException.ThrowIfNull(decompressed);
         var root = new SaveGameSchemaNode("<save>", null);
         int nodeCount = 0;
-        ParsePropertyList(decompressed, 0, decompressed.Length, root, depth: 0, ref nodeCount);
+        int stringBytes = 0;
+        ParsePropertyList(decompressed, 0, decompressed.Length, root, depth: 0, ref nodeCount, ref stringBytes);
         return root;
     }
 
@@ -58,7 +60,8 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
         int limit,
         SaveGameSchemaNode parent,
         int depth,
-        ref int nodeCount)
+        ref int nodeCount,
+        ref int stringBytes)
     {
         if (depth > MaxParseDepth)
         {
@@ -77,7 +80,7 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
                     $"A save exceeds the maximum node count of {MaxNodeCount}.");
             }
 
-            string name = ReadString(data, ref offset, limit);
+            string name = ReadString(data, ref offset, limit, ref stringBytes);
             if (name == "None")
             {
                 parent.Children.Add(new SaveGameSchemaNode(name, null)
@@ -88,7 +91,7 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
                 return offset;
             }
 
-            string type = ReadString(data, ref offset, limit);
+            string type = ReadString(data, ref offset, limit, ref stringBytes);
             long longSize = ReadInt64(data, ref offset, limit);
             if (longSize is < 0 or > int.MaxValue)
             {
@@ -102,23 +105,23 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
             switch (type)
             {
                 case "StructProperty":
-                    structType = ReadString(data, ref offset, limit);
+                    structType = ReadString(data, ref offset, limit, ref stringBytes);
                     Advance(ref offset, 16, limit);
                     break;
                 case "EnumProperty":
                 case "ByteProperty":
-                    enumType = ReadString(data, ref offset, limit);
+                    enumType = ReadString(data, ref offset, limit, ref stringBytes);
                     break;
                 case "BoolProperty":
                     Advance(ref offset, 1, limit);
                     break;
                 case "ArrayProperty":
                 case "SetProperty":
-                    elementType = ReadString(data, ref offset, limit);
+                    elementType = ReadString(data, ref offset, limit, ref stringBytes);
                     break;
                 case "MapProperty":
-                    _ = ReadString(data, ref offset, limit);
-                    _ = ReadString(data, ref offset, limit);
+                    _ = ReadString(data, ref offset, limit, ref stringBytes);
+                    _ = ReadString(data, ref offset, limit, ref stringBytes);
                     break;
             }
 
@@ -148,9 +151,11 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
             parent.Children.Add(node);
 
             bool isBinaryStruct = structType is not null && BinaryStructs.Contains(structType);
-            if (type == "StructProperty" && valueLength > 0 && depth < 40 && !isBinaryStruct)
+            if (type == "StructProperty" && valueLength > 0 && !isBinaryStruct)
             {
-                ParsePropertyList(data, valueOffset, valueOffset + valueLength, node, depth + 1, ref nodeCount);
+                ParsePropertyList(
+                    data, valueOffset, valueOffset + valueLength, node, depth + 1,
+                    ref nodeCount, ref stringBytes);
             }
         }
 
@@ -190,17 +195,20 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
 
     internal static IEnumerable<SaveGameSchemaNode> Flatten(SaveGameSchemaNode node)
     {
-        yield return node;
-        foreach (SaveGameSchemaNode child in node.Children)
+        var stack = new Stack<SaveGameSchemaNode>();
+        stack.Push(node);
+        while (stack.Count > 0)
         {
-            foreach (SaveGameSchemaNode descendant in Flatten(child))
+            SaveGameSchemaNode current = stack.Pop();
+            yield return current;
+            for (int index = current.Children.Count - 1; index >= 0; index--)
             {
-                yield return descendant;
+                stack.Push(current.Children[index]);
             }
         }
     }
 
-    private static string ReadString(byte[] data, ref int offset, int limit)
+    private static string ReadString(byte[] data, ref int offset, int limit, ref int stringBytes)
     {
         int start = offset;
         int length = ReadInt32(data, ref offset, limit);
@@ -215,6 +223,11 @@ public sealed class SaveGameSchemaAnalyzer : ISaveGameSchemaAnalyzer
             throw new InvalidDataException(
                 $"A save string exceeds the maximum length of {MaxStringLength} at offset 0x{start:X}.");
         }
+        if (length > MaxStringBytes - stringBytes)
+        {
+            throw new InvalidDataException("A save contains too much string data.");
+        }
+        stringBytes += length;
 
         string value = StrictUtf8.GetString(data, offset, length - 1);
         offset += length;

@@ -634,7 +634,7 @@
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <StackPanel Spacing="2">
               <TextBlock Text="Cheats" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
-              <TextBlock Text="Cheats are created as separate checkpoints. Restoring one replaces the live save after creating a safety checkpoint; INI tweaks are written directly to the game config." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              <TextBlock Text="Cheats are created as separate checkpoints. Restoring one replaces the live save after creating a safety checkpoint." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
 
@@ -653,6 +653,7 @@
               </StackPanel>
               <ComboBox Grid.Column="1" ItemsSource="{Binding Cheat.Slots}"
                         SelectedItem="{Binding Cheat.SelectedSlot}"
+                        IsEnabled="{Binding !Cheat.IsBusy}"
                         VerticalAlignment="Center"
                         Width="180" MinWidth="180">
                 <ComboBox.ItemTemplate>

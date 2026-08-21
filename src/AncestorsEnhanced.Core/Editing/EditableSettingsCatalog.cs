@@ -155,6 +155,15 @@ public static class EditableSettingsCatalog
             return null;
         }
 
+        IReadOnlyList<SettingChoice>? choices = template.Choices;
+        if (template.IsDirect && template.Kind == SettingEditorKind.Choice &&
+            currentOverride is not null &&
+            choices?.Any(choice => string.Equals(choice.Value, currentOverride, StringComparison.Ordinal)) == false &&
+            IsPlausibleResolution(currentOverride))
+        {
+            choices = [.. choices, new SettingChoice(currentOverride, currentOverride)];
+        }
+
         var editor = new SettingEditSnapshot(
             template.FileName,
             template.Section,
@@ -165,13 +174,13 @@ public static class EditableSettingsCatalog
             template.Minimum,
             template.Maximum,
             template.Increment,
-            template.Choices,
+            choices,
             template.Target,
             template.Unit,
             template.IsDirect);
         editor = editor with
         {
-            CanSetCustomValue = currentOverride is null || IsValidValue(editor, currentOverride),
+            CanSetCustomValue = template.IsDirect || currentOverride is null || IsValidValue(editor, currentOverride),
         };
         return editor.IsDirect && !editor.CanSetCustomValue ? null : editor;
     }
@@ -418,4 +427,13 @@ public static class EditableSettingsCatalog
 
     private static string Invariant(decimal value) =>
         value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static bool IsPlausibleResolution(string value)
+    {
+        string[] parts = value.Split('x');
+        return parts.Length == 2 &&
+            int.TryParse(parts[0], out int width) &&
+            int.TryParse(parts[1], out int height) &&
+            width is >= 320 and <= 16384 && height is >= 200 and <= 8640;
+    }
 }

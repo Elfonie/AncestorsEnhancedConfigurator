@@ -32,7 +32,8 @@ internal static class ConfigurationFileOperations
 
     public static string GetOperationDirectory(string userDataDirectory, string operationId)
     {
-        if (operationId.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
+        if (string.IsNullOrWhiteSpace(operationId) ||
+            operationId.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
         {
             throw new InvalidOperationException("The operation identifier is invalid.");
         }
@@ -169,11 +170,16 @@ internal static class ConfigurationFileOperations
 
     public static void WriteBytesAtomically(string path, byte[] content)
     {
-        ValidateWritableTarget(path);
         string directory = Path.GetDirectoryName(path)
             ?? throw new InvalidOperationException("The target directory is missing.");
         Directory.CreateDirectory(directory);
+        ValidateConfigurationPath(directory, directory);
+        ValidateWritableTarget(path);
         string temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        FileAttributes? attributes = File.Exists(path) ? File.GetAttributes(path) : null;
+        UnixFileMode? unixMode = File.Exists(path) && !OperatingSystem.IsWindows()
+            ? File.GetUnixFileMode(path)
+            : null;
 
         try
         {
@@ -190,10 +196,25 @@ internal static class ConfigurationFileOperations
             }
 
             File.Move(temporaryPath, path, overwrite: File.Exists(path));
+            if (attributes is not null)
+            {
+                File.SetAttributes(path, attributes.Value & ~FileAttributes.ReparsePoint);
+            }
+            if (!OperatingSystem.IsWindows() && unixMode is not null)
+            {
+                File.SetUnixFileMode(path, unixMode.Value);
+            }
         }
         finally
         {
-            File.Delete(temporaryPath);
+            try
+            {
+                File.Delete(temporaryPath);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 
@@ -211,24 +232,67 @@ internal static class ConfigurationFileOperations
         string? expectedSha256,
         bool expectedExists)
     {
-        bool currentExists = File.Exists(path);
-        if (currentExists != expectedExists)
+        string directory = Path.GetDirectoryName(path)
+            ?? throw new InvalidOperationException("The target directory is missing.");
+        Directory.CreateDirectory(directory);
+        ValidateWritableTarget(path);
+        string temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.new");
+        string capturedPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.cas");
+        bool committed = false;
+        try
         {
-            throw new IOException(
-                $"The target file changed after the preview (expected {(expectedExists ? "present" : "absent")}). Refresh and try again.");
-        }
-
-        if (expectedExists)
-        {
-            string currentSha = Sha256(File.ReadAllBytes(path));
-            if (!string.Equals(currentSha, expectedSha256, StringComparison.Ordinal))
+            WriteBytesAtomically(temporaryPath, content);
+            if (!expectedExists)
             {
-                throw new IOException(
-                    "The target file changed after the preview. Refresh and try again.");
+                File.Move(temporaryPath, path, overwrite: false);
+                return;
             }
-        }
 
-        WriteBytesAtomically(path, content);
+            if (!File.Exists(path))
+            {
+                throw new IOException("The target file no longer exists. Refresh and try again.");
+            }
+
+            FileAttributes attributes = File.GetAttributes(path);
+            UnixFileMode? unixMode = !OperatingSystem.IsWindows() ? File.GetUnixFileMode(path) : null;
+            File.Move(path, capturedPath, overwrite: false);
+            ValidateWritableTarget(capturedPath);
+            string capturedSha = Sha256(ReadStableBounded(capturedPath, 64L * 1024 * 1024));
+            if (!string.Equals(capturedSha, expectedSha256, StringComparison.Ordinal))
+            {
+                RestoreCapturedFile(path, capturedPath);
+                throw new IOException("The target file changed after the preview. Refresh and try again.");
+            }
+
+            File.SetAttributes(temporaryPath, attributes & ~FileAttributes.ReparsePoint);
+            if (!OperatingSystem.IsWindows() && unixMode is not null)
+            {
+                File.SetUnixFileMode(temporaryPath, unixMode.Value);
+            }
+            try
+            {
+                File.Move(temporaryPath, path, overwrite: false);
+                committed = true;
+            }
+            catch
+            {
+                RestoreCapturedFile(path, capturedPath);
+                throw;
+            }
+            TryDeleteFile(capturedPath);
+        }
+        catch
+        {
+            if (!committed && File.Exists(capturedPath) && !File.Exists(path))
+            {
+                RestoreCapturedFile(path, capturedPath);
+            }
+            throw;
+        }
+        finally
+        {
+            TryDeleteFile(temporaryPath);
+        }
     }
 
     /// <summary>
@@ -243,13 +307,39 @@ internal static class ConfigurationFileOperations
             throw new IOException("The target file no longer exists. Refresh and try again.");
         }
 
-        string currentSha = Sha256(File.ReadAllBytes(path));
-        if (!string.Equals(currentSha, expectedSha256, StringComparison.Ordinal))
+        ValidateWritableTarget(path);
+        string directory = Path.GetDirectoryName(path)
+            ?? throw new InvalidOperationException("The target directory is missing.");
+        string capturedPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.cas");
+        File.Move(path, capturedPath, overwrite: false);
+        try
         {
-            throw new IOException("The target file changed after the preview. Refresh and try again.");
-        }
+            ValidateWritableTarget(capturedPath);
+            string currentSha = Sha256(ReadStableBounded(capturedPath, 64L * 1024 * 1024));
+            if (!string.Equals(currentSha, expectedSha256, StringComparison.Ordinal))
+            {
+                RestoreCapturedFile(path, capturedPath);
+                throw new IOException("The target file changed after the preview. Refresh and try again.");
+            }
 
-        File.Delete(path);
+            try
+            {
+                File.Delete(capturedPath);
+            }
+            catch
+            {
+                RestoreCapturedFile(path, capturedPath);
+                throw;
+            }
+        }
+        catch
+        {
+            if (File.Exists(capturedPath) && !File.Exists(path))
+            {
+                RestoreCapturedFile(path, capturedPath);
+            }
+            throw;
+        }
     }
 
     /// <summary>
@@ -263,62 +353,19 @@ internal static class ConfigurationFileOperations
         const int maxStableAttempts = 4;
         for (int attempt = 0; attempt < maxStableAttempts; attempt++)
         {
-            long lengthBefore;
-            DateTime lastWriteBefore;
             try
             {
-                var info = new FileInfo(path);
-                lengthBefore = info.Exists ? info.Length : -1;
-                lastWriteBefore = info.Exists ? info.LastWriteTimeUtc : DateTime.MinValue;
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-            {
-                throw;
-            }
-
-            if (lengthBefore < 0)
-            {
-                throw new FileNotFoundException("The target file does not exist.", path);
-            }
-
-            if (maxSizeBytes > 0 && lengthBefore > maxSizeBytes)
-            {
-                throw new IOException("The target file is unexpectedly large.");
-            }
-
-            byte[] content;
-            try
-            {
-                using var stream = new FileStream(
-                    path,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite);
-                using var memory = new MemoryStream();
-                stream.CopyTo(memory);
-                content = memory.ToArray();
+                byte[] first = ReadBoundedVersion(path, maxSizeBytes);
+                byte[] second = ReadBoundedVersion(path, maxSizeBytes);
+                if (first.AsSpan().SequenceEqual(second))
+                {
+                    return second;
+                }
             }
             catch (IOException) when (attempt < maxStableAttempts - 1)
             {
                 Thread.Sleep(150);
                 continue;
-            }
-
-            try
-            {
-                var after = new FileInfo(path);
-                if (after.Exists &&
-                    after.Length == lengthBefore &&
-                    after.LastWriteTimeUtc == lastWriteBefore)
-                {
-                    return content;
-                }
-            }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-            {
-                // Missing/raced metadata is treated as instability; retry below.
             }
 
             if (attempt < maxStableAttempts - 1)
@@ -328,6 +375,118 @@ internal static class ConfigurationFileOperations
         }
 
         throw new IOException("The save file is being written and could not be read as a stable version.");
+    }
+
+    private static byte[] ReadBoundedVersion(string path, long maxSizeBytes)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 81920,
+            FileOptions.SequentialScan);
+        long length = stream.Length;
+        if (maxSizeBytes > 0 && length > maxSizeBytes)
+        {
+            throw new IOException("The target file is unexpectedly large.");
+        }
+        if (length >= int.MaxValue)
+        {
+            throw new IOException("The target file is unexpectedly large.");
+        }
+
+        int budget = maxSizeBytes > 0
+            ? maxSizeBytes >= int.MaxValue
+                ? int.MaxValue
+                : checked((int)maxSizeBytes + 1)
+            : checked((int)length + 1);
+        using var memory = new MemoryStream((int)Math.Min(length, budget));
+        byte[] buffer = new byte[Math.Min(81920, Math.Max(1, budget))];
+        while (memory.Length < budget)
+        {
+            int read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, budget - memory.Length));
+            if (read == 0)
+            {
+                break;
+            }
+            memory.Write(buffer, 0, read);
+        }
+
+        if (maxSizeBytes > 0 && memory.Length > maxSizeBytes)
+        {
+            throw new IOException("The target file is unexpectedly large.");
+        }
+        if (stream.ReadByte() >= 0 || stream.Length != length || memory.Length != length)
+        {
+            throw new IOException("The target file changed while it was being read.");
+        }
+
+        return memory.ToArray();
+    }
+
+    private static void RestoreCapturedFile(string path, string capturedPath)
+    {
+        if (!File.Exists(capturedPath))
+        {
+            return;
+        }
+        if (File.Exists(path))
+        {
+            throw new IOException(
+                $"A concurrent file appeared at the target. The captured bytes were preserved at {capturedPath}.");
+        }
+        File.Move(capturedPath, path, overwrite: false);
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    public static void DeleteDirectorySafely(string allowedRoot, string targetDirectory)
+    {
+        string root = Path.GetFullPath(allowedRoot);
+        string target = Path.GetFullPath(targetDirectory);
+        string relative = Path.GetRelativePath(root, target);
+        if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) ||
+            relative.Equals("..", StringComparison.Ordinal) ||
+            relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The directory to delete is outside the allowed root.");
+        }
+
+        ValidateConfigurationPath(root, target);
+        DeleteTree(target);
+    }
+
+    private static void DeleteTree(string directory)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+        if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
+        {
+            throw new InvalidOperationException("A linked directory will not be deleted.");
+        }
+
+        foreach (string file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            ValidateWritableTarget(file);
+            File.Delete(file);
+        }
+        foreach (string child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            DeleteTree(child);
+        }
+        Directory.Delete(directory, recursive: false);
     }
 
     public static string Sha256(byte[] content) =>

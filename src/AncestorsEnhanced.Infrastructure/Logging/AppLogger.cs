@@ -11,6 +11,7 @@ namespace AncestorsEnhanced.Infrastructure.Logging;
 /// </summary>
 public sealed class AppLogger : IDisposable
 {
+    private const long MaximumLogSize = 2 * 1024 * 1024;
     private readonly object _sync = new();
     private readonly string _logPath;
     private StreamWriter? _writer;
@@ -60,15 +61,18 @@ public sealed class AppLogger : IDisposable
             try
             {
                 StreamWriter writer = _writer ??= OpenWriter();
+                string safeMessage = message.Replace('\r', ' ').Replace('\n', ' ');
                 string line = string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {message}");
+                    $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {safeMessage}");
                 writer.WriteLine(line);
                 writer.Flush();
             }
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException)
             {
+                try { _writer?.Dispose(); } catch { }
+                _writer = null;
             }
         }
     }
@@ -78,11 +82,16 @@ public sealed class AppLogger : IDisposable
         string directory = Path.GetDirectoryName(_logPath)
             ?? throw new InvalidOperationException("The log directory is missing.");
         Directory.CreateDirectory(directory);
+        if (File.Exists(_logPath) && new FileInfo(_logPath).Length >= MaximumLogSize)
+        {
+            string previous = _logPath + ".1";
+            File.Move(_logPath, previous, overwrite: true);
+        }
         var stream = new FileStream(
             _logPath,
             FileMode.Append,
             FileAccess.Write,
-            FileShare.Read);
+            FileShare.ReadWrite);
         return new StreamWriter(stream, new UTF8Encoding(false))
         {
             AutoFlush = true,

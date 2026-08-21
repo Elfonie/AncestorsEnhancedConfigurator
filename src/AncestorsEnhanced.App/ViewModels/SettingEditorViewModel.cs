@@ -136,7 +136,9 @@ public partial class SettingEditorViewModel : ViewModelBase
         }
 
         SelectedChoice = Choices.FirstOrDefault(choice =>
-            string.Equals(choice.Value, startingValue, StringComparison.Ordinal));
+            string.Equals(choice.Value, startingValue, StringComparison.Ordinal))
+            ?? Choices.FirstOrDefault(choice =>
+                string.Equals(choice.Value, _snapshot.DefaultValue, StringComparison.Ordinal));
         NotifyStateChanged();
     }
 

@@ -13,6 +13,9 @@ internal static class ValveKeyValueParser
     }
 
     private const int MaximumDepth = 64;
+    private const int MaximumTokens = 100_000;
+    private const int MaximumTokenLength = 65_536;
+    private const int MaximumTokenCharacters = 4 * 1024 * 1024;
 
     private static ValveKeyValueObject ParseObject(TokenReader reader, bool requiresClosingBrace) => ParseObject(reader, requiresClosingBrace, depth: 0);
 
@@ -85,6 +88,8 @@ internal static class ValveKeyValueParser
     private sealed class TokenReader(string content)
     {
         private int _position;
+        private int _tokenCount;
+        private int _tokenCharacters;
 
         public bool TryRead(out Token token)
         {
@@ -93,6 +98,10 @@ internal static class ValveKeyValueParser
             {
                 token = default;
                 return false;
+            }
+            if (++_tokenCount > MaximumTokens)
+            {
+                throw new FormatException("Valve KeyValues contains too many tokens.");
             }
 
             char current = content[_position];
@@ -105,7 +114,14 @@ internal static class ValveKeyValueParser
                 return true;
             }
 
-            token = new Token(TokenKind.Text, current == '"' ? ReadQuotedText() : ReadBareText());
+            string value = current == '"' ? ReadQuotedText() : ReadBareText();
+            if (value.Length > MaximumTokenLength ||
+                value.Length > MaximumTokenCharacters - _tokenCharacters)
+            {
+                throw new FormatException("Valve KeyValues contains too much text.");
+            }
+            _tokenCharacters += value.Length;
+            token = new Token(TokenKind.Text, value);
             return true;
         }
 

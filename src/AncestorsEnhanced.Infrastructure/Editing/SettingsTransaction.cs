@@ -71,7 +71,7 @@ internal sealed class SettingsTransaction(
             }
 
 
-            string operationDirectory = SettingsBackupStore.Prepare(plan);
+            string? operationDirectory = null;
             SettingsOperationResult? appliedResult = MutationCoordinator.Run(() =>
             {
                 // Revalidate inside the global mutation lock, immediately before the writes (F063-1c).
@@ -79,6 +79,7 @@ internal sealed class SettingsTransaction(
                 {
                     return Failure("The game context changed since this change was previewed. Refresh and try again.");
                 }
+                operationDirectory = SettingsBackupStore.Prepare(plan);
                 List<ConfigurationFileChangePlan> applied = [];
                 try
                 {
@@ -105,7 +106,7 @@ internal sealed class SettingsTransaction(
                         applied.Add(file);
                         bool valid = file.ResultExists
                             ? File.Exists(file.FullPath) && string.Equals(
-                                Sha256(File.ReadAllBytes(file.FullPath)),
+                                Sha256(ReadStableBounded(file.FullPath, 64L * 1024 * 1024)),
                                 Sha256(file.UpdatedContent),
                                 StringComparison.Ordinal)
                             : !File.Exists(file.FullPath);
@@ -115,12 +116,27 @@ internal sealed class SettingsTransaction(
                         }
                     }
 
-                    SettingsBackupStore.MarkApplied(operationDirectory, plan.CreatedAtUtc);
                     ToolChangeBaselineStore.MarkApplied(plan);
+                    SettingsBackupStore.MarkApplied(operationDirectory, plan.CreatedAtUtc);
                 }
                 catch
                 {
                     List<string> rollbackFailures = RestoreFilesBestEffort(applied);
+                    try
+                    {
+                        ToolChangeBaselineStore.RollbackApplied(plan);
+                    }
+                    catch (Exception exception) when (IsExpectedWriteException(exception))
+                    {
+                        rollbackFailures.Add("tool-change baseline");
+                    }
+                    try
+                    {
+                        SettingsBackupStore.MarkAborted(operationDirectory, _utcNow());
+                    }
+                    catch (Exception exception) when (IsExpectedWriteException(exception))
+                    {
+                    }
                     if (rollbackFailures.Count > 0)
                     {
                         return SettingsOperationResult.PartialRollbackRequired(
@@ -141,7 +157,7 @@ internal sealed class SettingsTransaction(
 
             return SettingsOperationResult.Applied(
                 $"Applied {plan.Changes.Count} change{(plan.Changes.Count == 1 ? string.Empty : "s")}. A backup was created.",
-                SettingsBackupStore.GetManifestPath(operationDirectory));
+                SettingsBackupStore.GetManifestPath(operationDirectory!));
         }
         catch (Exception exception) when (IsExpectedWriteException(exception))
         {
@@ -235,116 +251,94 @@ internal sealed class SettingsTransaction(
                 {
                     return Failure("The game context changed; the backup cannot be restored safely. Refresh and try again.");
                 }
-            List<(ManifestFile File, byte[] Current)> restored = [];
-            try
-            {
-                foreach (ManifestFile file in operation.Manifest.Files)
+                List<(ManifestFile File, byte[] Current)> restored = [];
+                try
                 {
-                    string targetPath = GetTargetPath(
-                        userDataDirectory,
-                        installDirectory,
-                        file.FileName,
-                        file.Target);
-                    byte[] current = File.Exists(targetPath) ? File.ReadAllBytes(targetPath) : [];
-                    restored.Add((file, current));
-                    // CAS immediately before the restore: the live file must still match
-                    // the state this tool produced when it applied the change (the
-                    // Result state). If anyone modified it since, abort without
-                    // overwriting those new changes (F067/F127).
-                    byte[]? original = file.Existed ? ReadOriginal(operation, file) : null;
-                    if (file.ResultExists)
+                    foreach (ManifestFile file in operation.Manifest.Files)
                     {
-                        if (file.Existed)
+                        string targetPath = GetTargetPath(
+                            userDataDirectory,
+                            installDirectory,
+                            file.FileName,
+                            file.Target);
+                        byte[] current = File.Exists(targetPath) ? ReadStableBounded(targetPath, 64L * 1024 * 1024) : [];
+                        restored.Add((file, current));
+                        // CAS immediately before the restore: the live file must still match
+                        // the state this tool produced when it applied the change (the
+                        // Result state). If anyone modified it since, abort without
+                        // overwriting those new changes (F067/F127).
+                        byte[]? original = file.Existed ? ReadOriginal(operation, file) : null;
+                        if (file.ResultExists)
                         {
-                            CompareAndReplace(
-                                targetPath,
-                                original!,
-                                file.ResultSha256,
-                                expectedExists: true);
+                            if (file.Existed)
+                            {
+                                CompareAndReplace(
+                                    targetPath,
+                                    original!,
+                                    file.ResultSha256,
+                                    expectedExists: true);
+                            }
+                            else
+                            {
+                                CompareAndDelete(targetPath, file.ResultSha256);
+                            }
                         }
                         else
                         {
-                            CompareAndDelete(targetPath, file.ResultSha256);
+                            if (file.Existed)
+                            {
+                                // The live file is absent (Result deleted it), but the
+                                // original existed: write the original back.
+                                CompareAndReplace(
+                                    targetPath,
+                                    original!,
+                                    expectedSha256: null,
+                                    expectedExists: false);
+                            }
                         }
-                    }
-                    else
-                    {
-                        if (file.Existed)
+
+                        if (file.Existed &&
+                            !string.Equals(
+                                Sha256(ReadStableBounded(targetPath, 64L * 1024 * 1024)),
+                                file.OriginalSha256,
+                                StringComparison.Ordinal))
                         {
-                            // The live file is absent (Result deleted it), but the
-                            // original existed: write the original back.
-                            CompareAndReplace(
-                                targetPath,
-                                original!,
-                                expectedSha256: null,
-                                expectedExists: false);
+                            throw new IOException($"Validation failed after restoring {file.FileName}.");
                         }
                     }
-
-                    if (file.Existed &&
-                        !string.Equals(
-                            Sha256(File.ReadAllBytes(targetPath)),
-                            file.OriginalSha256,
-                            StringComparison.Ordinal))
-                    {
-                        throw new IOException($"Validation failed after restoring {file.FileName}.");
-                    }
                 }
-            }
-            catch
-            {
-                List<string> restoreFailures = RestoreCurrentFilesBestEffort(userDataDirectory, installDirectory, restored);
-                if (restoreFailures.Count > 0)
+                catch
                 {
-                    return SettingsOperationResult.PartialRollbackRequired(
-                        "Not all files could be restored automatically. Restore them manually from the backup folder:\n" +
-                        string.Join(System.Environment.NewLine, restoreFailures) + "\nBackup folder: " + operation.Directory,
-                        operation.Directory);
+                    List<string> restoreFailures = RestoreCurrentFilesBestEffort(userDataDirectory, installDirectory, restored);
+                    if (restoreFailures.Count > 0)
+                    {
+                        return SettingsOperationResult.PartialRollbackRequired(
+                            "Not all files could be restored automatically. Restore them manually from the backup folder:\n" +
+                            string.Join(System.Environment.NewLine, restoreFailures) + "\nBackup folder: " + operation.Directory,
+                            operation.Directory);
+                    }
+
+                    throw;
                 }
 
-                throw;
-            }
+                try
+                {
+                    ToolChangeBaselineStore.MarkReverted(verifiable!, operation.Manifest);
+                    SettingsBackupStore.MarkReverted(operation.Directory, _utcNow());
+                }
+                catch (Exception exception) when (IsExpectedWriteException(exception))
+                {
+                    return SettingsOperationResult.RolledBack(
+                        "The configuration was restored, but its history marker could not be written: " + exception.Message);
+                }
 
-            try
-            {
-                ToolChangeBaselineStore.MarkReverted(verifiable!, operation.Manifest);
-                SettingsBackupStore.MarkReverted(operation.Directory, _utcNow());
-            }
-            catch (Exception exception) when (IsExpectedWriteException(exception))
-            {
                 return SettingsOperationResult.RolledBack(
-                    "The configuration was restored, but its history marker could not be written: " + exception.Message);
-            }
-
-            return SettingsOperationResult.RolledBack(
-                "The last configurator change was restored from its backup.");
+                    "The last configurator change was restored from its backup.");
             });
         }
         catch (Exception exception) when (IsExpectedWriteException(exception))
         {
             return Failure($"Nothing was restored: {exception.Message}");
-        }
-    }
-
-    private static void RestoreCurrentFiles(
-        StoredSettingsOperation operation,
-        IEnumerable<(ManifestFile File, byte[] Current)> restored)
-    {
-        foreach ((ManifestFile file, byte[] current) in restored)
-        {
-            string targetPath = GetTargetPath(
-                operation.Manifest.UserDataDirectory,
-                operation.Manifest.InstallDirectory,
-                file.FileName,
-                file.Target);
-            if (file.ResultExists)
-            {
-                WriteBytesAtomically(targetPath, current);
-            }
-            else
-            {
-                File.Delete(targetPath);
-            }
         }
     }
 
@@ -365,7 +359,7 @@ internal sealed class SettingsTransaction(
                     file.Target);
 
                 string? currentHash = File.Exists(targetPath)
-                    ? Sha256(File.ReadAllBytes(targetPath))
+                    ? Sha256(ReadStableBounded(targetPath, 64L * 1024 * 1024))
                     : null;
 
                 // If the file is already back in its Result state (the state before this
@@ -418,7 +412,7 @@ internal sealed class SettingsTransaction(
             return false;
         }
 
-        byte[] current = file.Existed ? File.ReadAllBytes(file.FullPath) : [];
+        byte[] current = file.Existed ? ReadStableBounded(file.FullPath, 64L * 1024 * 1024) : [];
         return string.Equals(Sha256(current), file.OriginalSha256, StringComparison.Ordinal);
     }
 
@@ -429,8 +423,8 @@ internal sealed class SettingsTransaction(
             throw new IOException($"The backup for {file.FileName} is missing.");
         }
 
-        byte[] original = File.ReadAllBytes(
-            Path.Combine(operation.Directory, file.BackupFileName));
+        byte[] original = ReadStableBounded(
+            Path.Combine(operation.Directory, file.BackupFileName), 64L * 1024 * 1024);
         if (!string.Equals(Sha256(original), file.OriginalSha256, StringComparison.Ordinal))
         {
             throw new IOException($"The backup for {file.FileName} failed validation.");
@@ -442,25 +436,6 @@ internal sealed class SettingsTransaction(
     private static string Fingerprint(SettingsChangePlan plan) =>
         Sha256(JsonSerializer.SerializeToUtf8Bytes(plan));
 
-    private static void RestoreFiles(IEnumerable<ConfigurationFileChangePlan> files)
-    {
-        foreach (ConfigurationFileChangePlan file in files.Reverse())
-        {
-            if (file.Existed)
-            {
-                WriteBytesAtomically(file.FullPath, file.OriginalContent);
-            }
-            else
-            {
-                File.Delete(file.FullPath);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Restores every touched file best-effort. Returns the names of files that could
-    /// not be restored (empty list means the rollback was complete).
-    /// </summary>
     /// <summary>
     /// Restores every already-applied file back to its original state, but only when the
     /// current file still matches the result state this apply wrote. A foreign concurrent
@@ -492,7 +467,7 @@ internal sealed class SettingsTransaction(
                     // foreign re-created file is never overwritten (F066).
                     CompareAndReplace(file.FullPath, file.OriginalContent, expectedSha256: null, expectedExists: false);
                 }
-                }
+            }
             catch (Exception exception) when (IsExpectedWriteException(exception))
             {
                 failures.Add(file.FileName);

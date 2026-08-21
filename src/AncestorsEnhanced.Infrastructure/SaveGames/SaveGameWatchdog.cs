@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Core.Inspection;
@@ -17,14 +18,17 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     private readonly Func<int, SaveGameOperationResult> _createCheckpoint;
     private readonly string _userDataDirectory;
     private readonly Lock _gate = new();
-    private readonly Dictionary<int, Task> _running = new();
+    private readonly object _lifecycleGate = new();
+    private readonly Dictionary<int, WorkerState> _running = new();
     private readonly Dictionary<int, bool> _pending = new();
-    private readonly Dictionary<int, DateTimeOffset> _lastBackupTimes = new();
+    private readonly Dictionary<int, long> _lastBackupTicks = new();
     private readonly Dictionary<int, int> _retryAttempts = new();
     private readonly Dictionary<int, int> _activeMutations = new();
     private TimeSpan _cooldown = TimeSpan.FromMinutes(5);
     private CancellationTokenSource _stopCancellation = new();
     private bool _stopped;
+    private bool _disposed;
+    private long _generation;
     private FileSystemWatcher? _watcher;
 
     /// <summary>Binds to a verified game context; the user-data path comes from the context (F078).</summary>
@@ -51,7 +55,16 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     public event EventHandler<string>? WatcherError;
 
-    public bool IsRunning => _watcher is not null;
+    public bool IsRunning
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _watcher is not null;
+            }
+        }
+    }
 
     public TimeSpan Cooldown
     {
@@ -64,6 +77,10 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         }
         set
         {
+            if (value < TimeSpan.Zero || value > TimeSpan.FromDays(1))
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), "Cooldown must be between zero and 24 hours.");
+            }
             lock (_gate)
             {
                 _cooldown = value;
@@ -73,88 +90,101 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     public void Start()
     {
-        SaveGameGuard.ValidateUserData(_userDataDirectory);
-        lock (_gate)
+        lock (_lifecycleGate)
         {
-            if (_watcher is not null)
+            SaveGameGuard.ValidateUserData(_userDataDirectory);
+            lock (_gate)
             {
-                return;
-            }
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (_watcher is not null)
+                {
+                    return;
+                }
+                if (_running.Values.Any(worker => !worker.Task.IsCompleted))
+                {
+                    throw new InvalidOperationException("The save watcher is still stopping.");
+                }
+                _running.Clear();
 
-            _stopped = false;
-            if (_stopCancellation.IsCancellationRequested)
-            {
                 _stopCancellation.Dispose();
                 _stopCancellation = new CancellationTokenSource();
-            }
-            string saveDirectory = SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory);
-            if (!Directory.Exists(saveDirectory))
-            {
-                Directory.CreateDirectory(saveDirectory);
-            }
+                _generation++;
+                _stopped = false;
+                string saveDirectory = SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory);
+                if (!Directory.Exists(saveDirectory))
+                {
+                    Directory.CreateDirectory(saveDirectory);
+                }
 
-            var watcher = new FileSystemWatcher(saveDirectory)
-            {
-                Filter = "Savegame*.sav",
-                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size |
-                             NotifyFilters.FileName | NotifyFilters.CreationTime,
-            };
-            // Register handlers BEFORE enabling events so no change event can be lost
-            // between construction and the first raise.
-            watcher.Changed += OnChanged;
-            watcher.Created += OnChanged;
-            watcher.Renamed += OnRenamed;
-            watcher.Error += OnWatcherError;
-            watcher.EnableRaisingEvents = true;
-            _watcher = watcher;
+                var watcher = new FileSystemWatcher(saveDirectory)
+                {
+                    Filter = "Savegame*.sav",
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size |
+                                 NotifyFilters.FileName | NotifyFilters.CreationTime,
+                };
+                watcher.Changed += OnChanged;
+                watcher.Created += OnChanged;
+                watcher.Renamed += OnRenamed;
+                watcher.Error += OnWatcherError;
+                watcher.EnableRaisingEvents = true;
+                _watcher = watcher;
+            }
         }
     }
 
     public void StopWatch()
     {
-        Dictionary<int, Task> snapshot;
-        lock (_gate)
+        lock (_lifecycleGate)
         {
-            if (_watcher is not null)
+            WorkerState[] snapshot;
+            long stoppingGeneration;
+            lock (_gate)
             {
-                _watcher.EnableRaisingEvents = false;
-                _watcher.Changed -= OnChanged;
-                _watcher.Created -= OnChanged;
-                _watcher.Renamed -= OnRenamed;
-                _watcher.Error -= OnWatcherError;
-                _watcher.Dispose();
-                _watcher = null;
+                if (_watcher is not null)
+                {
+                    _watcher.EnableRaisingEvents = false;
+                    _watcher.Changed -= OnChanged;
+                    _watcher.Created -= OnChanged;
+                    _watcher.Renamed -= OnRenamed;
+                    _watcher.Error -= OnWatcherError;
+                    _watcher.Dispose();
+                    _watcher = null;
+                }
+
+                _stopped = true;
+                stoppingGeneration = _generation;
+                _stopCancellation.Cancel();
+                _pending.Clear();
+                _lastBackupTicks.Clear();
+                _retryAttempts.Clear();
+                _activeMutations.Clear();
+                snapshot = _running.Values
+                    .Where(worker => worker.Generation == stoppingGeneration)
+                    .ToArray();
             }
 
-            _stopped = true;
-            _stopCancellation.Cancel();
-            _pending.Clear();
-            _lastBackupTimes.Clear();
-            _retryAttempts.Clear();
-            _activeMutations.Clear();
-            snapshot = new Dictionary<int, Task>(_running);
-        }
-
-        // Wait for in-flight backup tasks so a stop never races a running create (F002).
-        Task[] tasks = snapshot.Values.ToArray();
-        if (tasks.Length > 0)
-        {
-            // Wait completely for in-flight backup tasks so a stop never races a
-            // running create (F002). The tasks exit quickly once _stopped is set.
-            try
+            Task[] tasks = snapshot.Select(worker => worker.Task).ToArray();
+            if (tasks.Length > 0)
             {
-                Task.WaitAll(tasks);
+                try
+                {
+                    _ = Task.WaitAll(tasks, TimeSpan.FromSeconds(5));
+                }
+                catch (AggregateException)
+                {
+                }
             }
-            catch (AggregateException)
-            {
-                // The backing tasks swallow expected exceptions themselves; a leftover
-                // exception on an unobserved task is harmless here.
-            }
-        }
 
-        lock (_gate)
-        {
-            _running.Clear();
+            lock (_gate)
+            {
+                foreach ((int slot, WorkerState worker) in _running.ToArray())
+                {
+                    if (worker.Generation == stoppingGeneration && worker.Task.IsCompleted)
+                    {
+                        _running.Remove(slot);
+                    }
+                }
+            }
         }
     }
 
@@ -179,7 +209,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             Task? task;
             lock (_gate)
             {
-                task = _running.Count == 0 ? null : _running.Values.First();
+                task = _running.Count == 0 ? null : _running.Values.First().Task;
             }
 
             if (task is null)
@@ -210,7 +240,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     private void OnWatcherError(object sender, ErrorEventArgs args)
     {
         string message = args.GetException()?.Message ?? "Unknown filesystem watcher error";
-        WatcherError?.Invoke(this, message);
+        PublishWatcherError(message);
         RestartWatcher();
     }
 
@@ -231,6 +261,10 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
+                _watcher.Dispose();
+                _watcher = null;
+                PublishWatcherError($"The save watcher could not be restarted: {exception.Message}");
+                return;
             }
         }
 
@@ -247,8 +281,16 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     public void Dispose()
     {
-        StopWatch();
-        _stopCancellation.Dispose();
+        lock (_lifecycleGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            StopWatch();
+            _disposed = true;
+            _stopCancellation.Dispose();
+        }
     }
 
     private void OnChanged(object sender, FileSystemEventArgs args)
@@ -275,18 +317,18 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         }
     }
 
-    private async Task BackupSlotAsync(int slot)
+    private async Task BackupSlotAsync(int slot, long generation, CancellationToken stopToken)
     {
         try
         {
-            await Task.Delay(500, _stopCancellation.Token).ConfigureAwait(false);
+            await Task.Delay(500, stopToken).ConfigureAwait(false);
 
             while (true)
             {
                 TimeSpan? wait = null;
                 lock (_gate)
                 {
-                    if (_stopped)
+                    if (_stopped || generation != _generation)
                     {
                         return;
                     }
@@ -300,10 +342,17 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     {
                         wait = TimeSpan.FromMilliseconds(100);
                     }
-                    else if (_lastBackupTimes.TryGetValue(slot, out DateTimeOffset last) &&
-                             DateTimeOffset.UtcNow < last + _cooldown)
+                    else if (_lastBackupTicks.TryGetValue(slot, out long last))
                     {
-                        wait = last + _cooldown - DateTimeOffset.UtcNow;
+                        TimeSpan elapsed = Stopwatch.GetElapsedTime(last);
+                        if (elapsed < _cooldown)
+                        {
+                            wait = _cooldown - elapsed;
+                        }
+                        else
+                        {
+                            _pending[slot] = false;
+                        }
                     }
                     else
                     {
@@ -315,7 +364,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
                 if (wait is not null)
                 {
-                    await Task.Delay(wait.Value, _stopCancellation.Token).ConfigureAwait(false);
+                    await Task.Delay(wait.Value, stopToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -331,22 +380,24 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
                     if (result.CreatedCheckpointId is not null)
                     {
-                        RecordBackupTime(slot);
-                        CheckpointCreated?.Invoke(this, slot.ToString(CultureInfo.InvariantCulture));
+                        if (RecordBackupTime(slot, generation))
+                        {
+                            PublishCheckpointCreated(slot.ToString(CultureInfo.InvariantCulture));
+                        }
                     }
                 }
                 else if (!result.Succeeded)
                 {
-                    TimeSpan? retryDelay = RegisterFailure(slot, result.Message);
+                    TimeSpan? retryDelay = RegisterFailure(slot, result);
                     if (retryDelay is not null)
                     {
-                        await Task.Delay(retryDelay.Value, _stopCancellation.Token).ConfigureAwait(false);
+                        await Task.Delay(retryDelay.Value, stopToken).ConfigureAwait(false);
                         continue;
                     }
                 }
             }
         }
-        catch (OperationCanceledException) when (_stopCancellation.IsCancellationRequested)
+        catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
         {
             // StopWatch deliberately interrupts debounce/cooldown waits.
         }
@@ -354,21 +405,24 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             exception is IOException or UnauthorizedAccessException or InvalidOperationException or
                 ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException)
         {
-            WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot + 1}: {exception.Message}");
+            PublishWatcherError($"Auto-backup failed for slot {slot + 1}: {exception.Message}");
         }
         catch (Exception exception)
         {
-            WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot + 1}: {exception.Message}");
+            PublishWatcherError($"Auto-backup failed for slot {slot + 1}: {exception.Message}");
         }
         finally
         {
             lock (_gate)
             {
-                _running.Remove(slot);
+                if (_running.TryGetValue(slot, out WorkerState? worker) && worker.Generation == generation)
+                {
+                    _running.Remove(slot);
+                }
                 // The final empty check and worker removal must be one state
                 // transition. An event that arrives during worker shutdown either sees
                 // this worker or causes its replacement, never a stranded dirty slot.
-                if (!_stopped && _pending.TryGetValue(slot, out bool dirty) && dirty)
+                if (!_stopped && generation == _generation && _pending.TryGetValue(slot, out bool dirty) && dirty)
                 {
                     EnsureWorkerLocked(slot);
                 }
@@ -376,14 +430,14 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         }
     }
 
-    private TimeSpan? RegisterFailure(int slot, string message)
+    private TimeSpan? RegisterFailure(int slot, SaveGameOperationResult result)
     {
         lock (_gate)
         {
-            if (!IsTransientBackupFailure(message))
+            if (!result.IsTransientFailure)
             {
                 _retryAttempts.Remove(slot);
-                WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot + 1}: {message}");
+                PublishWatcherError($"Auto-backup failed for slot {slot + 1}: {result.Message}");
                 return null;
             }
 
@@ -392,7 +446,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             if (attempt > 3)
             {
                 _retryAttempts.Remove(slot);
-                WatcherError?.Invoke(this, $"Auto-backup failed for slot {slot + 1} after {attempt - 1} retries: {message}");
+                PublishWatcherError($"Auto-backup failed for slot {slot + 1} after {attempt - 1} retries: {result.Message}");
                 return null;
             }
 
@@ -400,12 +454,6 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             return TimeSpan.FromMilliseconds(250 * attempt);
         }
     }
-
-    private static bool IsTransientBackupFailure(string message) =>
-        message.Contains("being written", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("currently being written", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("corrupt; skipped backup", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("could not be read as a stable version", StringComparison.OrdinalIgnoreCase);
 
     private void EndSlotMutation(int slot)
     {
@@ -433,15 +481,23 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     {
         if (!_running.ContainsKey(slot))
         {
-            _running[slot] = BackupSlotAsync(slot);
+            long generation = _generation;
+            Task task = BackupSlotAsync(slot, generation, _stopCancellation.Token);
+            _running[slot] = new WorkerState(generation, task);
         }
     }
 
-    private void RecordBackupTime(int slot)
+    private bool RecordBackupTime(int slot, long generation)
     {
         lock (_gate)
         {
-            _lastBackupTimes[slot] = DateTimeOffset.UtcNow;
+            if (_stopped || generation != _generation)
+            {
+                return false;
+            }
+
+            _lastBackupTicks[slot] = Stopwatch.GetTimestamp();
+            return true;
         }
     }
 
@@ -471,4 +527,28 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
         public void Dispose() => Interlocked.Exchange(ref _owner, null)?.EndSlotMutation(slot);
     }
+
+    private void PublishCheckpointCreated(string slot)
+    {
+        foreach (EventHandler<string> handler in CheckpointCreated?.GetInvocationList().Cast<EventHandler<string>>() ?? [])
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { handler(this, slot); } catch { }
+            });
+        }
+    }
+
+    private void PublishWatcherError(string message)
+    {
+        foreach (EventHandler<string> handler in WatcherError?.GetInvocationList().Cast<EventHandler<string>>() ?? [])
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { handler(this, message); } catch { }
+            });
+        }
+    }
+
+    private sealed record WorkerState(long Generation, Task Task);
 }

@@ -481,6 +481,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             result = await Task.Run(() => _settingsEditor.RevertLast(_snapshot));
         }
+        catch (Exception exception)
+        {
+            ShowMessage($"Nothing was restored: {exception.Message}", "#E04D42");
+            return;
+        }
         finally
         {
             IsBusy = false;
@@ -547,6 +552,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     private CancellationTokenSource? _searchDebounceSource;
+    private Task? _searchDebounceTask;
 
 
 
@@ -554,13 +560,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     {
 
-        _searchDebounceSource?.Cancel();
-
+        CancellationTokenSource? previous = _searchDebounceSource;
+        previous?.Cancel();
+        previous?.Dispose();
         _searchDebounceSource = new CancellationTokenSource();
 
         CancellationToken token = _searchDebounceSource.Token;
 
-        _ = DebouncedSearchApplyAsync(token);
+        _searchDebounceTask = DebouncedSearchApplyAsync(token);
 
     }
 
@@ -652,9 +659,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             {
                 SetDetection("Ancestors detected with problems", "#D6BC84", "#D6BC84");
             }
-            else if (snapshot.IsGameDetected)
+            else if (_verifiedGameContext is not null)
             {
                 SetDetection("Ancestors is ready", "#B4D941", "#B4D941");
+            }
+            else if (snapshot.IsGameDetected)
+            {
+                SetDetection("Ancestors detected but not supported for editing", "#D6BC84", "#D6BC84");
             }
             else
             {
@@ -1019,7 +1030,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         string identity = installation.BuildId is not null
             ? "Build " + installation.BuildId
             : installation.ContentSignature is not null
-                ? "Content signature verified"
+                ? "Recognized PAK index signature"
                 : "Build unknown";
         return $"{store}  {installation.Host}{layer}  {identity}";
     }
@@ -1028,6 +1039,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         GC.SuppressFinalize(this);
         _searchDebounceSource?.Cancel();
+        try
+        {
+            _searchDebounceTask?.Wait(TimeSpan.FromMilliseconds(300));
+        }
+        catch (AggregateException)
+        {
+        }
+        _searchDebounceSource?.Dispose();
+        _searchDebounceSource = null;
+        _searchDebounceTask = null;
         SaveManager?.Dispose();
         SaveManager = null;
         Cheat?.Dispose();

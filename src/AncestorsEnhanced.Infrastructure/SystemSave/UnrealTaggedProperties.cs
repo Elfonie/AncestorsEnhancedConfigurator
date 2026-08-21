@@ -21,23 +21,30 @@ internal sealed record TaggedProperty(
 internal static class UnrealTaggedProperties
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+    private const int MaximumPropertyCount = 100_000;
+    private const int MaximumStringBytes = 4 * 1024 * 1024;
 
     public static IReadOnlyList<TaggedProperty> Read(byte[] data, int start, int length)
     {
         int limit = checked(start + length);
         int offset = start;
         List<TaggedProperty> properties = [];
+        int stringBytes = 0;
         while (offset < limit)
         {
+            if (properties.Count >= MaximumPropertyCount)
+            {
+                throw new InvalidDataException("System.sav contains too many properties.");
+            }
             int propertyStart = offset;
-            string name = ReadString(data, ref offset, limit);
+            string name = ReadString(data, ref offset, limit, ref stringBytes);
             if (name == "None")
             {
                 properties.Add(new TaggedProperty(name, null, propertyStart, -1, offset, 0, offset));
                 return properties;
             }
 
-            string type = ReadString(data, ref offset, limit);
+            string type = ReadString(data, ref offset, limit, ref stringBytes);
             int sizeOffset = offset;
             long longSize = ReadInt64(data, ref offset, limit);
             if (longSize is < 0 or > int.MaxValue)
@@ -52,12 +59,12 @@ internal static class UnrealTaggedProperties
             switch (type)
             {
                 case "StructProperty":
-                    structType = ReadString(data, ref offset, limit);
+                    structType = ReadString(data, ref offset, limit, ref stringBytes);
                     Advance(ref offset, 16, limit);
                     break;
                 case "EnumProperty":
                 case "ByteProperty":
-                    enumType = ReadString(data, ref offset, limit);
+                    enumType = ReadString(data, ref offset, limit, ref stringBytes);
                     break;
                 case "BoolProperty":
                     booleanOffset = offset;
@@ -65,11 +72,11 @@ internal static class UnrealTaggedProperties
                     break;
                 case "ArrayProperty":
                 case "SetProperty":
-                    _ = ReadString(data, ref offset, limit);
+                    _ = ReadString(data, ref offset, limit, ref stringBytes);
                     break;
                 case "MapProperty":
-                    _ = ReadString(data, ref offset, limit);
-                    _ = ReadString(data, ref offset, limit);
+                    _ = ReadString(data, ref offset, limit, ref stringBytes);
+                    _ = ReadString(data, ref offset, limit, ref stringBytes);
                     break;
             }
 
@@ -116,13 +123,13 @@ internal static class UnrealTaggedProperties
         string type)
     {
         TaggedProperty[] matches = [.. properties.Where(property =>
-                string.Equals(property.Name, name, StringComparison.Ordinal) &&
-                string.Equals(property.Type, type, StringComparison.Ordinal))
+                string.Equals(property.Name, name, StringComparison.Ordinal))
             .Take(2)];
         return matches.Length switch
         {
             0 => null,
-            1 => matches[0],
+            1 when string.Equals(matches[0].Type, type, StringComparison.Ordinal) => matches[0],
+            1 => throw new InvalidDataException($"System.sav contains {name} with an unexpected type."),
             _ => throw new InvalidDataException($"System.sav contains {name} more than once."),
         };
     }
@@ -130,7 +137,8 @@ internal static class UnrealTaggedProperties
     public static string ReadValueString(byte[] data, TaggedProperty property)
     {
         int offset = property.ValueOffset;
-        string value = ReadString(data, ref offset, property.End);
+        int stringBytes = 0;
+        string value = ReadString(data, ref offset, property.End, ref stringBytes);
         if (offset != property.End)
         {
             throw new InvalidDataException($"Property {property.Name} contains unexpected trailing data.");
@@ -258,7 +266,7 @@ internal static class UnrealTaggedProperties
         return result;
     }
 
-    private static string ReadString(byte[] data, ref int offset, int limit)
+    private static string ReadString(byte[] data, ref int offset, int limit, ref int stringBytes)
     {
         int start = offset;
         int length = ReadInt32(data, ref offset, limit);
@@ -267,6 +275,11 @@ internal static class UnrealTaggedProperties
             throw new InvalidDataException(
                 $"System.sav contains an invalid Unreal string at offset 0x{start:X}.");
         }
+        if (length > MaximumStringBytes - stringBytes)
+        {
+            throw new InvalidDataException("System.sav contains too much string data.");
+        }
+        stringBytes += length;
 
         string value = StrictUtf8.GetString(data, offset, length - 1);
         offset += length;
