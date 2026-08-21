@@ -239,6 +239,26 @@ public sealed class SaveGameWatchdogTests : IDisposable
         Assert.False(watchdog.IsRunning);
     }
 
+    [Fact]
+    public async Task SlotMutationDoesNotStartWorkerBeforeWatchdogIsEnabled()
+    {
+        string userData = CreateUserData();
+        int calls = 0;
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ =>
+            {
+                Interlocked.Increment(ref calls);
+                return new SaveGameOperationResult(true, "Checkpoint saved.", "cp-1");
+            });
+
+        watchdog.BeginSlotMutation(0).Dispose();
+        await Task.Delay(750);
+
+        Assert.False(watchdog.IsRunning);
+        Assert.Equal(0, Volatile.Read(ref calls));
+    }
+
     private string CreateUserData()
     {
         string userData = Path.Combine(_temporaryDirectory, "Saved");
@@ -268,4 +288,3 @@ public sealed class SaveGameWatchdogTests : IDisposable
         }
     }
 }
-

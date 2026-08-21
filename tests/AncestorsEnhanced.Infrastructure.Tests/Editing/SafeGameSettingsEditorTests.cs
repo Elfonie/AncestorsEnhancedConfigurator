@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Editing;
@@ -58,6 +59,24 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     }
 
     [Fact]
+    public void StartupRecoveryRestoresAnInterruptedConfigurationWrite()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string captured = Path.Combine(
+            Path.GetDirectoryName(engineIni)!,
+            $".Engine.ini.{Guid.NewGuid():N}.cas");
+        File.WriteAllBytes(captured, [1, 2, 3]);
+
+        bool recovered = CreateEditor(gameRunning: false)
+            .RecoverInterruptedChanges(CreateSnapshot(userData));
+
+        Assert.True(recovered);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(engineIni));
+        Assert.False(File.Exists(captured));
+    }
+
+    [Fact]
     public void RemoveToolChangesRestoresCapturedBaselineAndDeletesItsMarker()
     {
         string userData = CreateUserData();
@@ -98,6 +117,44 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
             [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
         Assert.True(editor.Apply(editor.CreateRemoveToolChangesPlan(snapshot)).Succeeded);
         Assert.Equal(original, File.ReadAllText(engineIni));
+
+        SettingsOperationResult undoRemoval = editor.RevertLast(snapshot);
+
+        Assert.True(undoRemoval.Succeeded, undoRemoval.Message);
+        Assert.Contains("r.ViewDistanceScale=1.2", File.ReadAllText(engineIni), StringComparison.Ordinal);
+        Assert.True(editor.CanRemoveToolChanges(snapshot));
+        Assert.True(editor.Apply(editor.CreateRemoveToolChangesPlan(snapshot)).Succeeded);
+        Assert.Equal(original, File.ReadAllText(engineIni));
+    }
+
+    [Fact]
+    public void LegacyBaselineSurvivesRemoveUndoAndSecondRemove()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        const string original = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        File.WriteAllText(engineIni, original);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        Assert.True(editor.Apply(editor.CreatePlan(
+            snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
+
+        string baselineRoot = ConfigurationFileOperations.GetToolChangesRoot(userData);
+        string filesRoot = Path.Combine(baselineRoot, "files");
+        File.Move(
+            Path.Combine(filesRoot, "0-Engine.ini.before"),
+            Path.Combine(filesRoot, "000.before"));
+        string manifestPath = Path.Combine(baselineRoot, "baseline.json");
+        JsonObject manifest = JsonNode.Parse(File.ReadAllText(manifestPath))!.AsObject();
+        manifest["Version"] = 1;
+        manifest["Files"]![0]!["BackupName"] = "000.before";
+        File.WriteAllText(manifestPath, manifest.ToJsonString());
+
+        Assert.True(editor.Apply(editor.CreateRemoveToolChangesPlan(snapshot)).Succeeded);
+        Assert.Equal(original, File.ReadAllText(engineIni));
+        Assert.True(File.Exists(Path.Combine(filesRoot, "0-Engine.ini.before")));
 
         SettingsOperationResult undoRemoval = editor.RevertLast(snapshot);
 

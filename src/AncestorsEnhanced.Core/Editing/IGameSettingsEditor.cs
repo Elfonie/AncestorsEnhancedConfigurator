@@ -4,6 +4,8 @@ namespace AncestorsEnhanced.Core.Editing;
 
 public interface IGameSettingsEditor
 {
+    bool RecoverInterruptedChanges(GameInspectionSnapshot snapshot) => false;
+
     SettingsChangePlan CreatePlan(
         GameInspectionSnapshot snapshot,
         IReadOnlyList<SettingChangeRequest> requests);

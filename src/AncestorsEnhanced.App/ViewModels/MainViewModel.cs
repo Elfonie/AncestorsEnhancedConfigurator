@@ -650,6 +650,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         try
         {
             GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
+            if (await Task.Run(() => _settingsEditor.RecoverInterruptedChanges(snapshot)))
+            {
+                snapshot = await Task.Run(_inspector.Inspect);
+            }
             bool canKeepChildState = _verifiedGameContext?.Matches(snapshot) == true &&
                 SaveManager is not null && Cheat is not null;
             _saveGamesRefreshFailed = false;

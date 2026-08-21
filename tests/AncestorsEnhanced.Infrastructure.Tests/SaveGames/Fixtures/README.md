@@ -36,8 +36,8 @@ fail-closed (the cheat reports "no supported fields" and changes nothing).
    - `slot0.sav`, `slot1.sav`, ... (`slot0.sav` is the reference used by the gate tests).
 2. **One System.sav** (`System.sav`) used to lock the System.sav settings gate.
 3. **One in-game validation run report**: start the game after applying each cheat,
-   confirm the value actually took effect (neuronal energy, needs/health values, free
-   camera toggle) and record the result.
+   confirm the value actually took effect (neuronal energy and needs/health values)
+   and record the result.
 
 ## What the gate then proves
 

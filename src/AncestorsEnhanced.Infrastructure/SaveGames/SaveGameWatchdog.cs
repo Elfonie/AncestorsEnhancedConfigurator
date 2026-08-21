@@ -26,7 +26,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     private readonly Dictionary<int, int> _activeMutations = new();
     private TimeSpan _cooldown = TimeSpan.FromMinutes(5);
     private CancellationTokenSource _stopCancellation = new();
-    private bool _stopped;
+    private bool _stopped = true;
     private bool _disposed;
     private long _generation;
     private FileSystemWatcher? _watcher;
@@ -467,6 +467,10 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             if (count == 1)
             {
                 _activeMutations.Remove(slot);
+                if (_stopped)
+                {
+                    return;
+                }
                 // Reconcile after restore even if a watcher event was missed.
                 _pending[slot] = true;
                 EnsureWorkerLocked(slot);
@@ -479,7 +483,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     private void EnsureWorkerLocked(int slot)
     {
-        if (!_running.ContainsKey(slot))
+        if (!_stopped && !_running.ContainsKey(slot))
         {
             long generation = _generation;
             Task task = BackupSlotAsync(slot, generation, _stopCancellation.Token);

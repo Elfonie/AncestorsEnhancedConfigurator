@@ -413,6 +413,39 @@ public sealed class SaveManagerViewModelTests
         Assert.Equal(1440, viewModel.CooldownMinutes);
     }
 
+    [Fact]
+    public void DisposeDrainsTheCompleteSettingsWriteQueue()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        try
+        {
+            var viewModel = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog: null);
+            for (int index = 0; index < 100; index++)
+            {
+                viewModel.CooldownMinutes = index % 2 == 0 ? 5 : 10;
+            }
+
+            viewModel.Dispose();
+            viewModel.Dispose();
+
+            Assert.Empty(Directory.EnumerateFiles(userData, "*.tmp"));
+            string settingsPath = Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json");
+            if (File.Exists(settingsPath))
+            {
+                using System.Text.Json.JsonDocument _ = System.Text.Json.JsonDocument.Parse(
+                    File.ReadAllBytes(settingsPath));
+            }
+        }
+        finally
+        {
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout, string failureMessage)
     {
         DateTime deadline = DateTime.UtcNow + timeout;

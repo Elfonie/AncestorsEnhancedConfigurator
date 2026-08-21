@@ -141,7 +141,7 @@ internal sealed class SaveGameCheckpointStore(
 
         return Directory
             .EnumerateDirectories(slotRoot)
-            .Select(path => TryReadCheckpoint(path, slotNumber))
+            .Select(path => TryReadCheckpointMetadata(path, slotNumber))
             .OfType<SaveGameCheckpoint>()
             .OrderByDescending(checkpoint => checkpoint.CreatedAtUtc)
             .ToArray();
@@ -150,26 +150,21 @@ internal sealed class SaveGameCheckpointStore(
     private static void EnforceCap(string slotRoot, int maxCheckpointsPerSlot)
     {
         string[] directories = Directory.EnumerateDirectories(slotRoot).ToArray();
-        foreach (string invalid in directories.Where(path => TryReadCheckpoint(path, slotNumber: 0) is null))
-        {
-            TryDeleteDirectory(invalid);
-        }
-        List<(string Path, DateTimeOffset CreatedAtUtc)> checkpoints = directories
-            .Select(path => TryReadCheckpoint(path, slotNumber: 0))
-            .OfType<SaveGameCheckpoint>()
-            .Select(checkpoint => (Path: Path.Combine(slotRoot, checkpoint.Id), checkpoint.CreatedAtUtc))
-            .OrderBy(entry => entry.CreatedAtUtc)
-            .ThenBy(entry => entry.Path, StringComparer.Ordinal)
+        List<string> checkpoints = directories
+            .Where(path => TryReadCheckpointMetadata(path, slotNumber: 0) is not null)
+            // Checkpoint IDs begin with a fixed-width UTC timestamp. Ordering by the
+            // immutable directory name avoids trusting mutable manifest timestamps.
+            .OrderBy(path => Path.GetFileName(path), StringComparer.Ordinal)
             .ToList();
 
         int overflow = checkpoints.Count - maxCheckpointsPerSlot;
         for (int index = 0; index < overflow; index++)
         {
-            TryDeleteDirectory(checkpoints[index].Path);
+            TryDeleteDirectory(checkpoints[index]);
         }
     }
 
-    private static SaveGameCheckpoint? TryReadCheckpoint(string path, int slotNumber)
+    private static SaveGameCheckpoint? TryReadCheckpointMetadata(string path, int slotNumber)
     {
         try
         {
@@ -184,13 +179,12 @@ internal sealed class SaveGameCheckpointStore(
                 return null;
             }
             string savePath = Path.Combine(path, "save.sav");
-            byte[] content = ReadStableBounded(savePath, MaximumSaveSize);
-            if (manifest.SizeBytes != content.Length ||
-                !string.Equals(manifest.Sha256, Sha256(content), StringComparison.Ordinal))
+            if (!File.Exists(savePath) ||
+                File.GetAttributes(savePath).HasFlag(FileAttributes.ReparsePoint) ||
+                new FileInfo(savePath).Length != manifest.SizeBytes)
             {
                 return null;
             }
-            ValidateSave(content);
             return new SaveGameCheckpoint(
                     Path.GetFileName(path), manifest.CreatedAtUtc,
                     slotNumber.ToString(CultureInfo.InvariantCulture), manifest.SizeBytes,

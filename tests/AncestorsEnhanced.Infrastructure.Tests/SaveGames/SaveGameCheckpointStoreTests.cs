@@ -121,6 +121,43 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         Assert.Equal(valid, only.Id);
     }
 
+    [Fact]
+    public void RetentionNeverDeletesAnUnverifiableCheckpointDirectory()
+    {
+        string userData = CreateUserData();
+        string slotRoot = SaveGamePaths.GetSlotRoot(userData, 0);
+        string broken = Path.Combine(
+            slotRoot, "20260801-115959-000-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        Directory.CreateDirectory(broken);
+        File.WriteAllText(Path.Combine(broken, "checkpoint.json"), "{ not-json");
+        var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 1);
+
+        _ = store.Create(userData, 0, TestSaveFactory.Create(1, 2, 3));
+
+        Assert.True(Directory.Exists(broken));
+        Assert.Single(SaveGameCheckpointStore.ListCheckpoints(userData, 0));
+    }
+
+    [Fact]
+    public void ListingUsesMetadataWhileRestoreStillValidatesTheFullSave()
+    {
+        string userData = CreateUserData();
+        byte[] content = TestSaveFactory.Create(4, 5, 6);
+        var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
+        string checkpointId = store.Create(userData, 0, content);
+        string checkpointPath = SaveGamePaths.GetCheckpointPath(userData, 0, checkpointId);
+        byte[] corrupted = File.ReadAllBytes(checkpointPath);
+        corrupted[^1] ^= 0x01;
+        File.WriteAllBytes(checkpointPath, corrupted);
+
+        SaveGameCheckpoint listed = Assert.Single(
+            SaveGameCheckpointStore.ListCheckpoints(userData, 0));
+
+        Assert.Equal(checkpointId, listed.Id);
+        Assert.Throws<InvalidDataException>(() =>
+            SaveGameCheckpointStore.Read(userData, 0, checkpointId));
+    }
+
     private static readonly DateTimeOffset FixedTime = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
 
     private string CreateUserData()

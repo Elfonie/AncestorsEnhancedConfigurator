@@ -10,6 +10,7 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
     private readonly SettingsChangePlanner _planner;
     private readonly SettingsTransaction _transaction;
     private readonly Func<bool> _isGameRunning;
+    private readonly GameContextVerifier? _verifier;
 
     public SafeGameSettingsEditor()
         : this(
@@ -42,6 +43,7 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
         GameContextVerifier? verifier)
     {
         _isGameRunning = isGameRunning;
+        _verifier = verifier;
         _planner = new SettingsChangePlanner(utcNow, isExpectedUserDataDirectory);
         _transaction = new SettingsTransaction(
             utcNow,
@@ -49,6 +51,25 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
             isExpectedUserDataDirectory,
             verifier is null ? (_ => true) : plan => Revalidate(verifier, plan),
             verifier is null ? (_ => true) : snapshot => RevalidateSnapshot(verifier, snapshot));
+    }
+
+    public bool RecoverInterruptedChanges(GameInspectionSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (_isGameRunning())
+        {
+            return false;
+        }
+
+        VerifiedGameContext? context = VerifiedGameContext.TryCreateFromSnapshot(snapshot);
+        if (context is null || (_verifier is not null && !_verifier.Verify(context)))
+        {
+            return false;
+        }
+
+        return ConfigurationFileOperations.RecoverInterruptedOperations(
+            context.UserDataDirectory,
+            context.InstallDirectory);
     }
 
     public SettingsChangePlan CreatePlan(

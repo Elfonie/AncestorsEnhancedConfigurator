@@ -235,9 +235,11 @@ internal static class ConfigurationFileOperations
         string directory = Path.GetDirectoryName(path)
             ?? throw new InvalidOperationException("The target directory is missing.");
         Directory.CreateDirectory(directory);
+        _ = RecoverInterruptedTarget(path);
         ValidateWritableTarget(path);
-        string temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.new");
-        string capturedPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.cas");
+        string operationId = Guid.NewGuid().ToString("N");
+        string temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{operationId}.new");
+        string capturedPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{operationId}.cas");
         bool committed = false;
         try
         {
@@ -302,6 +304,7 @@ internal static class ConfigurationFileOperations
     /// </summary>
     public static void CompareAndDelete(string path, string expectedSha256)
     {
+        _ = RecoverInterruptedTarget(path);
         if (!File.Exists(path))
         {
             throw new IOException("The target file no longer exists. Refresh and try again.");
@@ -448,6 +451,89 @@ internal static class ConfigurationFileOperations
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
         }
+    }
+
+    public static bool RecoverInterruptedOperations(
+        string userDataDirectory,
+        string? installDirectory)
+    {
+        var targets = new List<string>
+        {
+            GetTargetPath(GetConfigurationDirectory(userDataDirectory), "Engine.ini"),
+            GetTargetPath(GetConfigurationDirectory(userDataDirectory), "Game.ini"),
+            GetTargetPath(GetConfigurationDirectory(userDataDirectory), "Input.ini"),
+            GetTargetPath(userDataDirectory, installDirectory, "System.sav", SettingFileTarget.SystemSave),
+        };
+        if (!string.IsNullOrWhiteSpace(installDirectory))
+        {
+            targets.Add(GetTargetPath(
+                userDataDirectory,
+                installDirectory,
+                "AncestorsEnhanced-Vignette_P.pak",
+                SettingFileTarget.Pak));
+            targets.Add(GetTargetPath(
+                userDataDirectory,
+                installDirectory,
+                "pakchunk99-WindowsNoEditor_P.pak",
+                SettingFileTarget.Pak));
+        }
+
+        bool recovered = false;
+        foreach (string target in targets)
+        {
+            recovered |= RecoverInterruptedTarget(target);
+        }
+        return recovered;
+    }
+
+    internal static bool RecoverInterruptedTarget(string path)
+    {
+        string? directory = Path.GetDirectoryName(path);
+        if (directory is null || !Directory.Exists(directory))
+        {
+            return false;
+        }
+
+        string targetName = Path.GetFileName(path);
+        string prefix = $".{targetName}.";
+        string[] captured = Directory.EnumerateFiles(directory, $".{targetName}.*.cas")
+            .Where(candidate => IsCapturedName(Path.GetFileName(candidate), prefix))
+            .ToArray();
+        if (captured.Length == 0)
+        {
+            return false;
+        }
+        if (captured.Length > 1)
+        {
+            throw new IOException($"Multiple interrupted writes were found for {targetName}. No automatic recovery was attempted.");
+        }
+        if (File.Exists(path))
+        {
+            throw new IOException(
+                $"An interrupted write and a current {targetName} both exist. Neither file was changed.");
+        }
+
+        string capturedPath = captured[0];
+        ValidateWritableTarget(capturedPath);
+        ValidateWritableTarget(path);
+        File.Move(capturedPath, path, overwrite: false);
+        TryDeleteFile(Path.ChangeExtension(capturedPath, ".new"));
+        return true;
+    }
+
+    private static bool IsCapturedName(string fileName, string prefix)
+    {
+        const string Suffix = ".cas";
+        if (!fileName.StartsWith(prefix, StringComparison.Ordinal) ||
+            !fileName.EndsWith(Suffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> operationId = fileName.AsSpan(
+            prefix.Length,
+            fileName.Length - prefix.Length - Suffix.Length);
+        return operationId.Length == 32 && operationId.ToArray().All(char.IsAsciiHexDigit);
     }
 
     public static void DeleteDirectorySafely(string allowedRoot, string targetDirectory)

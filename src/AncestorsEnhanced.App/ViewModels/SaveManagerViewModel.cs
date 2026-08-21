@@ -12,9 +12,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private readonly string _userDataDirectory;
     private readonly Action<Action> _dispatchToUi;
     private bool _loadingSettings;
-    private readonly SemaphoreSlim _settingsWriteLock = new(1, 1);
+    private readonly object _settingsWriteGate = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
-    private Task? _pendingSettingsWrite;
+    private Task _settingsWriteTail = Task.CompletedTask;
     private Task? _watchdogRefreshTask;
     private int _watchdogRefreshVersion;
     private int _settingsVersion;
@@ -285,11 +285,16 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
+        Task settingsWrite;
+        lock (_settingsWriteGate)
         {
-            return;
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            settingsWrite = _settingsWriteTail;
         }
-        _disposed = true;
         GC.SuppressFinalize(this);
         if (_watchdog is not null)
         {
@@ -298,32 +303,29 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             _watchdog.StopWatch();
         }
         _lifetimeCancellation.Cancel();
+        Task allPending;
         try
         {
-            Task[] pending = new Task?[] { _pendingSettingsWrite, _watchdogRefreshTask }
+            Task[] pending = new Task?[] { settingsWrite, _watchdogRefreshTask }
                 .OfType<Task>()
                 .ToArray();
-            if (pending.Length > 0)
-            {
-                _ = Task.WaitAll(pending, TimeSpan.FromSeconds(2));
-            }
+            allPending = Task.WhenAll(pending);
+            _ = allPending.Wait(TimeSpan.FromSeconds(2));
         }
         catch (AggregateException)
         {
+            allPending = Task.CompletedTask;
         }
 
-        Task? settingsWrite = _pendingSettingsWrite;
-        if (settingsWrite is null || settingsWrite.IsCompleted)
+        if (allPending.IsCompleted)
         {
-            _settingsWriteLock.Dispose();
             _lifetimeCancellation.Dispose();
         }
         else
         {
-            _ = settingsWrite.ContinueWith(
+            _ = allPending.ContinueWith(
                 _ =>
                 {
-                    _settingsWriteLock.Dispose();
                     _lifetimeCancellation.Dispose();
                 },
                 CancellationToken.None,
@@ -411,10 +413,6 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     private void SaveSettings()
     {
-        if (_disposed)
-        {
-            return;
-        }
         var settings = new ToolSettings
         {
             IsWatchdogEnabled = IsWatchdogEnabled,
@@ -429,38 +427,50 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
         string path = ToolSettingsPath();
         int version = Interlocked.Increment(ref _settingsVersion);
-        _pendingSettingsWrite = WriteSettingsAsync(path, settings, version);
+        lock (_settingsWriteGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _settingsWriteTail = _settingsWriteTail.ContinueWith(
+                _ => WriteSettings(path, settings, version),
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
+        }
     }
 
-    private async Task WriteSettingsAsync(string path, ToolSettings settings, int version)
+    private void WriteSettings(string path, ToolSettings settings, int version)
     {
         try
         {
-            await _settingsWriteLock.WaitAsync(_lifetimeCancellation.Token);
+            _lifetimeCancellation.Token.ThrowIfCancellationRequested();
+            // A delayed older item must never overwrite a newer snapshot. The tail
+            // task represents the complete queue, so Dispose always waits for every
+            // item rather than only the most recently started task.
+            if (version != Volatile.Read(ref _settingsVersion))
+            {
+                return;
+            }
+
+            byte[] payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(settings, JsonSettings);
+            string temp = path + $".{Guid.NewGuid():N}.tmp";
             try
             {
-                // A delayed older task must never overwrite a newer snapshot. The
-                // latest queued task remains the one Dispose waits for (F011).
-                if (version != Volatile.Read(ref _settingsVersion))
-                {
-                    return;
-                }
-
-                byte[] payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(settings, JsonSettings);
-                // Atomic replace: write a temp file then move it over the target,
-                // so a crash never leaves a truncated settings file.
-                string temp = path + ".tmp";
                 File.WriteAllBytes(temp, payload);
                 File.Move(temp, path, overwrite: true);
             }
-            catch (Exception exception) when (
-                exception is IOException or UnauthorizedAccessException)
-            {
-                ReportStatus("Could not save tool settings: " + exception.Message, "#E04D42");
-            }
             finally
             {
-                _settingsWriteLock.Release();
+                try
+                {
+                    File.Delete(temp);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                }
             }
         }
         catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)

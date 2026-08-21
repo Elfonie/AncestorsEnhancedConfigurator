@@ -92,4 +92,55 @@ public sealed class ConfigurationFileOperationsTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void RecoveryRestoresCapturedFileWhenCrashLeftTargetMissing()
+    {
+        string directory = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), $"aec-cas-recovery-{Guid.NewGuid():N}")).FullName;
+        try
+        {
+            string target = Path.Combine(directory, "Engine.ini");
+            string operation = Guid.NewGuid().ToString("N");
+            string captured = Path.Combine(directory, $".Engine.ini.{operation}.cas");
+            string temporary = Path.Combine(directory, $".Engine.ini.{operation}.new");
+            File.WriteAllBytes(captured, [1, 2, 3]);
+            File.WriteAllBytes(temporary, [4, 5, 6]);
+
+            bool recovered = ConfigurationFileOperations.RecoverInterruptedTarget(target);
+
+            Assert.True(recovered);
+            Assert.Equal([1, 2, 3], File.ReadAllBytes(target));
+            Assert.False(File.Exists(captured));
+            Assert.False(File.Exists(temporary));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RecoveryNeverOverwritesCurrentFileWithCapturedBytes()
+    {
+        string directory = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), $"aec-cas-ambiguous-{Guid.NewGuid():N}")).FullName;
+        try
+        {
+            string target = Path.Combine(directory, "Engine.ini");
+            string captured = Path.Combine(directory, $".Engine.ini.{Guid.NewGuid():N}.cas");
+            File.WriteAllBytes(target, [9, 9, 9]);
+            File.WriteAllBytes(captured, [1, 2, 3]);
+
+            Assert.Throws<IOException>(() =>
+                ConfigurationFileOperations.RecoverInterruptedTarget(target));
+
+            Assert.Equal([9, 9, 9], File.ReadAllBytes(target));
+            Assert.Equal([1, 2, 3], File.ReadAllBytes(captured));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }

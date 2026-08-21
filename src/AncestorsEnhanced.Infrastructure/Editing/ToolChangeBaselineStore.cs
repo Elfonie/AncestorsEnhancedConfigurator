@@ -99,14 +99,15 @@ internal static class ToolChangeBaselineStore
 
     public static void CaptureBeforeApply(SettingsChangePlan plan)
     {
-        if (plan.IsToolChangeRemoval)
-        {
-            return;
-        }
-
         string root = GetToolChangesRoot(plan.UserDataDirectory);
         ValidateConfigurationPath(plan.UserDataDirectory, root);
-        BaselineManifest manifest = Read(plan.UserDataDirectory) ?? new BaselineManifest(
+        BaselineManifest? existingManifest = Read(plan.UserDataDirectory);
+        if (plan.IsToolChangeRemoval && existingManifest is null)
+        {
+            throw new IOException("The tool-change baseline disappeared before removal.");
+        }
+
+        BaselineManifest manifest = existingManifest ?? new BaselineManifest(
             Version: ManifestVersion,
             ContextFingerprint: plan.ContextFingerprint ?? string.Empty,
             Files: []);
@@ -117,6 +118,10 @@ internal static class ToolChangeBaselineStore
         if (!string.Equals(manifest.ContextFingerprint, plan.ContextFingerprint ?? string.Empty, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("The existing tool-change baseline belongs to a different game context.");
+        }
+        if (plan.IsToolChangeRemoval)
+        {
+            return;
         }
 
         List<BaselineFile> tracked = [.. manifest.Files];

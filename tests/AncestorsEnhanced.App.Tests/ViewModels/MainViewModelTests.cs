@@ -25,6 +25,20 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task StartupReinspectsAfterRecoveringAnInterruptedWrite()
+    {
+        var inspector = new CountingInspector(CreateSnapshot());
+        var editor = new RecordingEditor { RecoverInterrupted = true };
+        var viewModel = new MainViewModel(inspector, editor);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(1, editor.RecoveryCount);
+        Assert.Equal(2, inspector.Count);
+        Assert.Equal("Ancestors is ready", viewModel.DetectionStatus);
+    }
+
+    [Fact]
     public async Task InspectionFailureProducesAClearEmptyState()
     {
         var viewModel = new MainViewModel(new ThrowingInspector(), new RecordingEditor());
@@ -337,6 +351,16 @@ public sealed class MainViewModelTests
         public int ApplyCount { get; private set; }
 
         public int DiscardCount { get; private set; }
+
+        public bool RecoverInterrupted { get; init; }
+
+        public int RecoveryCount { get; private set; }
+
+        public bool RecoverInterruptedChanges(GameInspectionSnapshot snapshot)
+        {
+            RecoveryCount++;
+            return RecoverInterrupted;
+        }
 
         public SettingsChangePlan CreatePlan(
             GameInspectionSnapshot snapshot,
