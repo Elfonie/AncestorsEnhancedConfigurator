@@ -65,6 +65,67 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     }
 
     [Fact]
+    public void LoadKeepsRecoveryJournalWhenFinalizationFailsAfterReplacingExistingSave()
+    {
+        byte[] checkpointContent = TestSaveFactory.Create(1, 2, 3);
+        byte[] liveContent = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, checkpointContent);
+        string checkpointId = CreateManager(userData, gameRunning: false)
+            .CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, liveContent);
+        var manager = new SafeSaveGameManager(
+            userData,
+            () => FixedTime,
+            () => false,
+            new SaveGameManagerOptions(MaxCheckpointsPerSlot: 50),
+            afterRestoreCommit: () => throw new IOException("Injected post-commit failure."));
+
+        SaveGameOperationResult result = manager.LoadCheckpoint("0", checkpointId);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal(SaveOperationCommitState.CommittedWithWarning, result.CommitState);
+        Assert.Equal(checkpointContent, File.ReadAllBytes(slotPath));
+        Assert.True(File.Exists(RestoreJournalPath(userData, 0)));
+
+        SaveGamesSnapshot recovered = CreateManager(userData, gameRunning: false).Inspect();
+
+        Assert.Equal(checkpointContent, File.ReadAllBytes(slotPath));
+        Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
+        Assert.Contains("Recovered", recovered.RecoveryMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadKeepsRecoveryJournalWhenFinalizationFailsAfterFillingEmptySlot()
+    {
+        byte[] checkpointContent = TestSaveFactory.Create(1, 2, 3);
+        string userData = CreateUserDataWithSave(0, checkpointContent);
+        string checkpointId = CreateManager(userData, gameRunning: false)
+            .CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.Delete(slotPath);
+        var manager = new SafeSaveGameManager(
+            userData,
+            () => FixedTime,
+            () => false,
+            new SaveGameManagerOptions(MaxCheckpointsPerSlot: 50),
+            afterRestoreCommit: () => throw new IOException("Injected post-commit failure."));
+
+        SaveGameOperationResult result = manager.LoadCheckpoint("0", checkpointId);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal(SaveOperationCommitState.CommittedWithWarning, result.CommitState);
+        Assert.Equal(checkpointContent, File.ReadAllBytes(slotPath));
+        Assert.True(File.Exists(RestoreJournalPath(userData, 0)));
+
+        SaveGamesSnapshot recovered = CreateManager(userData, gameRunning: false).Inspect();
+
+        Assert.Equal(checkpointContent, File.ReadAllBytes(slotPath));
+        Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
+        Assert.Contains("Recovered", recovered.RecoveryMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InspectRestoresOriginalSaveWhenRestoreCrashedAfterCasCapture()
     {
         byte[] result = TestSaveFactory.Create(1, 2, 3);

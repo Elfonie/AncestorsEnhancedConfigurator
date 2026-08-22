@@ -22,6 +22,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private VerifiedGameContext? _verifiedGameContext;
     private bool _saveGamesRefreshFailed;
     private bool _lastRefreshRecoveredOperation;
+    private string? _lastSaveRecoveryMessage;
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
         new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
@@ -231,14 +232,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         if (await RefreshFromDiskAsync())
         {
             ShowMessage(
-                _lastRefreshRecoveredOperation
-                    ? _saveGamesRefreshFailed
-                        ? "An interrupted tool operation was recovered, but save games could not be refreshed."
-                        : "An interrupted tool operation was recovered safely."
-                    : _saveGamesRefreshFailed
-                    ? "Configuration loaded, but save games could not be refreshed."
-                    : "Configuration loaded. No files were changed.",
-                _saveGamesRefreshFailed ? "#D6BC84" : _lastRefreshRecoveredOperation ? "#B4D941" : "#7A877A");
+                GetRefreshMessage(isReload: false),
+                _saveGamesRefreshFailed
+                    ? "#D6BC84"
+                    : _lastRefreshRecoveredOperation || _lastSaveRecoveryMessage is not null
+                        ? "#B4D941"
+                        : "#7A877A");
         }
     }
 
@@ -259,13 +258,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         if (await RefreshFromDiskAsync())
         {
             ShowMessage(
-                _lastRefreshRecoveredOperation
-                    ? _saveGamesRefreshFailed
-                        ? "An interrupted tool operation was recovered, but save games could not be refreshed."
-                        : "An interrupted tool operation was recovered safely and the configuration was reloaded."
-                    : _saveGamesRefreshFailed
-                    ? "Configuration reloaded, but save games could not be refreshed."
-                    : "Configuration reloaded from disk.",
+                GetRefreshMessage(isReload: true),
                 _saveGamesRefreshFailed ? "#D6BC84" : "#B4D941");
         }
     }
@@ -672,6 +665,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         CloseReview();
         _lastRefreshRecoveredOperation = false;
+        _lastSaveRecoveryMessage = null;
         IsBusy = true;
         DetectionStatus = "Scanning game files";
         ShowMessage("Reading the installation and settings...", "#FF5A00");
@@ -725,6 +719,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             if (canKeepChildState)
             {
                 _saveGamesRefreshFailed = !await SaveManager!.RefreshSilentlyAsync();
+                if (!_saveGamesRefreshFailed)
+                {
+                    _lastSaveRecoveryMessage = SaveManager.LastRecoveryMessage;
+                }
             }
             else
             {
@@ -735,6 +733,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 Cheat = CreateCheat();
                 Cheat?.Start();
                 _saveGamesRefreshFailed = _verifiedGameContext is not null && SaveManager is null;
+                _lastSaveRecoveryMessage = SaveManager?.LastRecoveryMessage;
             }
             if (Cheat is not null && SaveManager is not null)
             {
@@ -785,6 +784,43 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     private static VerifiedGameContext? VerifyGameContext(GameInspectionSnapshot snapshot) =>
         VerifiedGameContext.TryCreateFromSnapshot(snapshot);
+
+    private string GetRefreshMessage(bool isReload)
+    {
+        if (_lastRefreshRecoveredOperation && _lastSaveRecoveryMessage is not null)
+        {
+            return isReload
+                ? "Interrupted settings and save operations were recovered safely and the configuration was reloaded."
+                : "Interrupted settings and save operations were recovered safely.";
+        }
+
+        if (_lastRefreshRecoveredOperation)
+        {
+            return _saveGamesRefreshFailed
+                ? "An interrupted tool operation was recovered, but save games could not be refreshed."
+                : isReload
+                    ? "An interrupted tool operation was recovered safely and the configuration was reloaded."
+                    : "An interrupted tool operation was recovered safely.";
+        }
+
+        if (_lastSaveRecoveryMessage is not null)
+        {
+            return isReload
+                ? $"{_lastSaveRecoveryMessage} Configuration reloaded from disk."
+                : _lastSaveRecoveryMessage;
+        }
+
+        if (_saveGamesRefreshFailed)
+        {
+            return isReload
+                ? "Configuration reloaded, but save games could not be refreshed."
+                : "Configuration loaded, but save games could not be refreshed.";
+        }
+
+        return isReload
+            ? "Configuration reloaded from disk."
+            : "Configuration loaded. No files were changed.";
+    }
 
     private bool IsCurrentContextVerified() =>
         _verifiedGameContext is not null && _gameContextVerifier.Verify(_verifiedGameContext);
@@ -1108,5 +1144,3 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         Cheat = null;
     }
 }
-
-

@@ -16,6 +16,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
     private readonly string _userDataDirectory;
     private readonly Func<bool>? _revalidate;
     private readonly Action? _beforeRestoreCommit;
+    private readonly Action? _afterRestoreCommit;
 
     public SafeSaveGameManager(
         VerifiedGameContext context,
@@ -49,7 +50,8 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         Func<bool> isGameRunning,
         SaveGameManagerOptions options,
         Func<bool>? revalidate = null,
-        Action? beforeRestoreCommit = null)
+        Action? beforeRestoreCommit = null,
+        Action? afterRestoreCommit = null)
     {
         _userDataDirectory = userDataDirectory;
         _utcNow = utcNow;
@@ -57,6 +59,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         _store = new SaveGameCheckpointStore(utcNow, options.MaxCheckpointsPerSlot);
         _revalidate = revalidate;
         _beforeRestoreCommit = beforeRestoreCommit;
+        _afterRestoreCommit = afterRestoreCommit;
     }
 
     private SaveGameOperationResult? RevalidateFailure(string action)
@@ -274,13 +277,28 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             try
             {
                 CompareAndReplace(slotPath, checkpoint, expectedSha256, expectedExists);
-                SaveRestoreJournalStore.Complete(_userDataDirectory, restore);
             }
             catch
             {
                 SaveRestoreJournalStore.CancelFailedCommit(_userDataDirectory, restore);
                 throw;
             }
+
+            try
+            {
+                _afterRestoreCommit?.Invoke();
+                SaveRestoreJournalStore.Complete(_userDataDirectory, restore);
+            }
+            catch (Exception warning) when (IsExpectedException(warning))
+            {
+                return new SaveGameOperationResult(
+                    true,
+                    $"The save was loaded, but restore finalization did not complete: {warning.Message} " +
+                    "Recovery will be retried the next time save games are loaded.",
+                    safetyCheckpointId,
+                    SaveOperationCommitState.CommittedWithWarning);
+            }
+
             try
             {
                 File.SetLastWriteTimeUtc(slotPath, _utcNow().UtcDateTime);

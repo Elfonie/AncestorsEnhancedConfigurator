@@ -120,6 +120,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public bool HasNoSlots => !HasSlots;
 
+    public string? LastRecoveryMessage { get; private set; }
+
     public bool CanCreate => CanMutate;
 
     public bool CanMutate => !IsBusy && !(_mutationGate?.IsBusy ?? false);
@@ -155,6 +157,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public void Refresh(SaveGamesSnapshot snapshot)
     {
+        LastRecoveryMessage = snapshot.RecoveryMessage;
         var expandedSlots = Slots
             .Where(slot => slot.IsShowingAllCheckpoints)
             .Select(slot => slot.SlotNumber)
@@ -199,6 +202,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {
+            LastRecoveryMessage = null;
             StatusMessage = $"Could not reload save games: {exception.Message}";
             StatusAccent = "#E04D42";
             return false;

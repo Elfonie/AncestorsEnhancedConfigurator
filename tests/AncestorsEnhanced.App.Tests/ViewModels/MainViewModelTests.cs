@@ -2,6 +2,7 @@ using System.Globalization;
 using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.SaveGames;
 
 namespace AncestorsEnhanced.App.Tests.ViewModels;
 
@@ -37,6 +38,27 @@ public sealed class MainViewModelTests
         Assert.Equal(2, inspector.Count);
         Assert.Equal("Ancestors is ready", viewModel.DetectionStatus);
         Assert.Equal("An interrupted tool operation was recovered safely.", viewModel.OperationMessage);
+    }
+
+    [Fact]
+    public async Task StartupReportsSaveRecoveryInTheGlobalMessage()
+    {
+        const string RecoveryMessage = "Recovered an interrupted save restore safely.";
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            _ => new RecoverySaveGameManager(RecoveryMessage));
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(RecoveryMessage, viewModel.OperationMessage);
+        Assert.Equal("#B4D941", viewModel.OperationAccent);
+        Assert.DoesNotContain("No files were changed", viewModel.OperationMessage, StringComparison.Ordinal);
+
+        await viewModel.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Contains(RecoveryMessage, viewModel.OperationMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("No files were changed", viewModel.OperationMessage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -434,6 +456,21 @@ public sealed class MainViewModelTests
     private sealed class ThrowingInspector : IReadOnlyGameInspector
     {
         public GameInspectionSnapshot Inspect() => throw new IOException("test failure");
+    }
+
+    private sealed class RecoverySaveGameManager(string recoveryMessage) : ISaveGameManager
+    {
+        public SaveGamesSnapshot Inspect() =>
+            new(DateTimeOffset.UnixEpoch, "user-data", [], recoveryMessage);
+
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual") =>
+            new(false, "not used");
+
+        public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
+            new(false, "not used");
+
+        public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+            new(false, "not used");
     }
 
     private sealed class RecordingEditor : IGameSettingsEditor

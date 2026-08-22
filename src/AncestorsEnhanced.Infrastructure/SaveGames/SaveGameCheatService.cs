@@ -156,10 +156,12 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
         }
     }
 
-    private static string DisplayName(CheatKind kind) => kind switch
+    internal static string DisplayName(CheatKind kind) => kind switch
     {
+        CheatKind.MaxNeuronalEnergy => "Max Neuronal Energy",
+        CheatKind.MaxNeeds => "Max Stamina and Energy",
         CheatKind.HealCurrentApe => "Heal Current Ape",
-        _ => kind.ToString(),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown cheat kind."),
     };
 
     private static bool IsByteRoundTripFaithful(byte[] deferred, byte[] roundTripped) =>

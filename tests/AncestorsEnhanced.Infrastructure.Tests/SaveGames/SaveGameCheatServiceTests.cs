@@ -14,6 +14,22 @@ public sealed class SaveGameCheatServiceTests : IDisposable
         Path.GetTempPath(),
         $"aec-cheat-service-{Guid.NewGuid():N}");
 
+    [Theory]
+    [InlineData(CheatKind.MaxNeuronalEnergy, "Max Neuronal Energy")]
+    [InlineData(CheatKind.MaxNeeds, "Max Stamina and Energy")]
+    [InlineData(CheatKind.HealCurrentApe, "Heal Current Ape")]
+    public void CheatKindsHaveUserFacingDisplayNames(CheatKind kind, string expected)
+    {
+        Assert.Equal(expected, SaveGameCheatService.DisplayName(kind));
+    }
+
+    [Fact]
+    public void UnknownCheatKindHasNoFallbackDisplayName()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            SaveGameCheatService.DisplayName((CheatKind)int.MaxValue));
+    }
+
     [Fact]
     public void MaxNeuronalEnergyAppliesAndStoresAnIntegralCheckpoint()
     {
