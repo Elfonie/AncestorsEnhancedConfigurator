@@ -18,7 +18,7 @@ internal static class GameEditingGuard
 
         // For Proton (Linux) installs the user-data path must live inside the concrete
         // Steam library that owns this installation, rather than matching any compatible
-        // prefix anywhere on disk (F014).
+        // prefix anywhere on disk.
         if (snapshot.Installation is { CompatibilityLayer: CompatibilityLayerKind.Proton } proton &&
             !string.IsNullOrWhiteSpace(proton.LibraryRoot) &&
             !string.IsNullOrWhiteSpace(snapshot.UserDataDirectory))

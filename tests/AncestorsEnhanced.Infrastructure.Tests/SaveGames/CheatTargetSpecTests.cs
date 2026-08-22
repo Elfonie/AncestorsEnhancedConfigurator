@@ -7,8 +7,8 @@ using Xunit;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
 
-/// <summary>F027 - structural cheat targeting by exact schema path + type, never by name alone.</summary>
-public sealed class F027CheatTargetSpecTests
+/// <summary>Structural cheat targeting by exact schema path and type, never by name alone.</summary>
+public sealed class CheatTargetSpecTests
 {
     [Fact]
     public void SpecMatchesEnforcesTypeAndElementType()
@@ -43,7 +43,7 @@ public sealed class F027CheatTargetSpecTests
 
         CheatInjectionResult result = injector.TryInject(
             decompressed,
-            CheatKind.HealClan,
+            CheatKind.HealCurrentApe,
             out byte[]? modified);
 
         Assert.True(result.Succeeded, result.Message);

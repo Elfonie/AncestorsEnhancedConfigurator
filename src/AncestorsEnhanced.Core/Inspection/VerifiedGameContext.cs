@@ -8,7 +8,7 @@ namespace AncestorsEnhanced.Core.Inspection;
 /// only from a snapshot that currently satisfies all editing guards. The
 /// <see cref="ContextFingerprint"/> is a stable digest of the recognised evidence; it is
 /// used to detect context drift before a mutation, but never replaces a live re-read of
-/// the filesystem (F061/F063/F078).
+/// the filesystem.
 /// </summary>
 public sealed record VerifiedGameContext(
     string InstallDirectory,
@@ -39,7 +39,7 @@ public sealed record VerifiedGameContext(
     {
         // Hash the encoding of each field and nothing else: AppendData hashes the exact
         // UTF-8 bytes, avoiding the previous bug of hashing character count instead of
-        // byte count (F063-1a). Fields are separated by a delimiter that cannot appear
+        // byte count. Fields are separated by a delimiter that cannot appear
         // inside a normal path, and path fields are canonicalised first.
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         void Write(string value)
@@ -76,7 +76,7 @@ public sealed record VerifiedGameContext(
     /// Creates a verified context only from a snapshot that currently satisfies all
     /// editing guards. Returns <c>null</c> (fail-closed) when the installation is
     /// missing, the identity is unsupported, a content-signature read failed, or the
-    /// user-data directory is unknown (F061/F063/F078). No hard-coded supported build
+    /// user-data directory is unknown. No hard-coded supported build
     /// ID is substituted for unrecognised real data.
     /// </summary>
     public static VerifiedGameContext? TryCreateFromSnapshot(GameInspectionSnapshot snapshot)
@@ -118,7 +118,7 @@ public sealed record VerifiedGameContext(
             && Store == installation.Store
             && Host == installation.Host
             && CompatibilityLayer == installation.CompatibilityLayer
-            // A build ID that was present must not silently disappear or change (F063-1b).
+            // A build ID that was present must not silently disappear or change.
             && string.Equals(BuildId ?? string.Empty, installation.BuildId ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(ContentSignature ?? string.Empty, installation.ContentSignature ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(

@@ -22,7 +22,7 @@ public sealed class SaveGameCheatInspectorTests
     }
 
     [Fact]
-    public void HealClanModifiesFloatFieldsInPlace()
+    public void HealCurrentApeModifiesFloatFieldsInPlace()
     {
         byte[] decompressed = DecompressedSaveWithCurrentCharacter(
             ("Health", 0.5f),
@@ -32,14 +32,16 @@ public sealed class SaveGameCheatInspectorTests
 
         CheatInjectionResult result = injector.TryInject(
             decompressed,
-            CheatKind.HealClan,
+            CheatKind.HealCurrentApe,
             out byte[]? modified);
 
         Assert.True(result.Succeeded, result.Message);
         Assert.Equal(3, result.ModifiedCount);
         Assert.NotNull(modified);
         Assert.Equal(decompressed.Length, modified!.Length);
-    }    [Fact]
+    }
+
+    [Fact]
     public void MaxNeedsModifiesFloatFieldsInPlace()
     {
         byte[] decompressed = DecompressedSaveWithCurrentCharacter(
@@ -57,7 +59,9 @@ public sealed class SaveGameCheatInspectorTests
         Assert.Equal(3, result.ModifiedCount);
         Assert.NotNull(modified);
         Assert.Equal(decompressed.Length, modified!.Length);
-    }    [Fact]
+    }
+
+    [Fact]
     public void MaxNeuronalEnergyPatchesOnlyAvailablePoolAndLeavesSourcesUntouched()
     {
         byte[] decompressed = DecompressedSaveWithRpgEnergy([0.5f, 0.6f, 0.7f], 0.02f);
@@ -104,7 +108,7 @@ public sealed class SaveGameCheatInspectorTests
         Assert.Empty(result.ModifiedRanges);
     }
     [Fact]
-    public void HealClanDoesNotTouchUnrelatedHealthFields()
+    public void HealCurrentApeDoesNotTouchUnrelatedHealthFields()
     {
         // A Health field owned by an unrelated object (not under the active character)
         // must be left alone.
@@ -115,30 +119,13 @@ public sealed class SaveGameCheatInspectorTests
 
         CheatInjectionResult result = injector.TryInject(
             decompressed,
-            CheatKind.HealClan,
+            CheatKind.HealCurrentApe,
             out byte[]? modified);
 
         Assert.True(result.Succeeded, result.Message);
         Assert.NotNull(modified);
         Assert.Equal(3, result.ModifiedCount);
     }
-
-
-    [Fact]
-    public void ForceMutationsReportsNoSupportedFields()
-    {
-        byte[] decompressed = DecompressedSaveWith(("Health", 0.5f));
-        var injector = new SaveGameCheatInjector();
-
-        CheatInjectionResult result = injector.TryInject(
-            decompressed,
-            CheatKind.ForceMutations,
-            out _);
-
-        Assert.False(result.Succeeded);
-        Assert.Contains("no supported", result.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
     private static byte[] DecompressedSaveWith(params (string Name, float Value)[] floats)
     {
         using var stream = new MemoryStream();

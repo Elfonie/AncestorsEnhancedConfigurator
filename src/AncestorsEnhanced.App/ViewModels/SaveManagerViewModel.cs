@@ -153,8 +153,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             .ToArray();
 
 
-        StatusMessage = HasSlots ? "Save games loaded successfully." : "No save games loaded yet.";
-        StatusAccent = HasSlots ? "#B4D941" : "#7A877A";
+        StatusMessage = snapshot.RecoveryMessage ??
+            (HasSlots ? "Save games loaded successfully." : "No save games loaded yet.");
+        StatusAccent = snapshot.RecoveryMessage is not null || HasSlots ? "#B4D941" : "#7A877A";
 
         NotifyState();
     }
@@ -201,7 +202,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         {
             SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
             Refresh(snapshot);
-            StatusMessage = "Save games reloaded.";
+            StatusMessage = snapshot.RecoveryMessage ?? "Save games reloaded.";
             StatusAccent = "#B4D941";
         }
         catch (Exception exception) when (IsExpectedException(exception))
@@ -246,13 +247,13 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             {
                 try
                 {
-                    // The post-operation refresh must complete while the UI is still
-                    // marked busy, so the operation is only released once the view
-                    // reflects the new disk state (F006).
+                    // Keep the UI busy until it reflects the new disk state.
                     SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
                     Refresh(snapshot);
                     StatusMessage = result.Message;
-                    StatusAccent = "#B4D941";
+                    StatusAccent = result.CommitState == SaveOperationCommitState.CommittedWithWarning
+                        ? "#D6BC84"
+                        : "#B4D941";
                 }
                 catch (Exception exception)
                 {
@@ -555,8 +556,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     private void OnWatchdogCheckpointCreated(object? sender, string slotNumber)
     {
-        // Der Watchdog feuert vom Thread-Pool; UI-Änderungen gehören auf den UI-Thread.
-        // In Tests ohne UI-Loop läuft der Aufruf synchron über CheckAccess.
+        // Watchdog events arrive on a worker thread; UI state changes run on the UI thread.
         void Refresh()
         {
             Interlocked.Increment(ref _watchdogRefreshVersion);

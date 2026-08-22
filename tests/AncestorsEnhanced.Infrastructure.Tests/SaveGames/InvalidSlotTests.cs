@@ -4,8 +4,8 @@ using Xunit;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
 
-/// <summary>F170 - invalid slot numbers are rejected at the store boundary.</summary>
-public sealed class F170InvalidSlotTests
+/// <summary>Invalid slot numbers are rejected at the store boundary.</summary>
+public sealed class InvalidSlotTests
 {
     [Theory]
     [InlineData("-1")]

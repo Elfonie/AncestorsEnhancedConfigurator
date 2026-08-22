@@ -3,8 +3,7 @@ using AncestorsEnhanced.Infrastructure.Logging;
 namespace AncestorsEnhanced.App;
 
 /// <summary>
-/// Process-wide diagnostics holder. Created once at startup so crash and detection
-/// information can be written to a single log file for support tickets.
+/// Lazily creates the process-wide diagnostics log used for crash and detection data.
 /// </summary>
 public static class AppDiagnostics
 {

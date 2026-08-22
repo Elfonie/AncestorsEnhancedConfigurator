@@ -8,7 +8,7 @@ public sealed class EncodedTextFileTests
     public void Utf32LePreambleIsRejectedInsteadOfMisreadAsUtf16()
     {
         // UTF-32LE BOM (FF FE 00 00) starts with the same two bytes as the UTF-16LE
-        // BOM; it must be rejected up front rather than decoded as UTF-16 (F169).
+        // BOM; it must be rejected up front rather than decoded as UTF-16.
         byte[] content = [0xFF, 0xFE, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00];
 
         Assert.Throws<InvalidDataException>(() => EncodedTextFile.Decode(content));

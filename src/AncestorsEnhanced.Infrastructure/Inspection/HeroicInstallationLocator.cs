@@ -142,8 +142,8 @@ internal sealed class HeroicInstallationLocator(
             : factory.CreateWindows(StoreKind.Unknown, install, buildId);
 
     private static string? ReadString(JsonElement element, string name) =>
-        element.TryGetProperty(name, out JsonElement value) &&
-        value.ValueKind == JsonValueKind.String
-            ? value.GetString()
+        element.TryGetProperty(name, out JsonElement property) &&
+        property.ValueKind == JsonValueKind.String
+            ? property.GetString()
             : null;
 }

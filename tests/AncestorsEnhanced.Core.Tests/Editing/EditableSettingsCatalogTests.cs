@@ -61,7 +61,7 @@ public sealed class EditableSettingsCatalogTests
     [Fact]
     public void ChoiceLabelsUseWellFormedUtf8WithoutMojibake()
     {
-        // Regression guard for NEW-IMP-UI-01: the "x" choice labels must use the real
+        // The "x" choice labels must use the real
         // multiplication sign (U+00D7) and never the double-encoded mojibake sequence.
         SettingEditSnapshot editor = Assert.IsType<SettingEditSnapshot>(
             EditableSettingsCatalog.Create(CreateSnapshot(), "r.MaxAnisotropy", null));

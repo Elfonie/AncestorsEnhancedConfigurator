@@ -3,7 +3,7 @@
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
 /// <summary>
-/// Canonical cheat target definitions (F027). Every target is a structural
+/// Canonical cheat target definitions. Every target is a structural
 /// <see cref="CheatTargetSpec"/> with a unique schema path and authorised match count.
 /// Both the injector and the post-reparse verification resolve the same exact paths, so
 /// an equally named property elsewhere in the tree is never accepted by accident.
@@ -27,11 +27,10 @@ internal static class SaveGameCheatTargets
         CheatKind.MaxNeeds => VitalityScalars(
             ["RegimenStamina", "Energy", "Stamina"],
             1_000.0f),
-        CheatKind.HealClan => VitalityScalars(
+        CheatKind.HealCurrentApe => VitalityScalars(
             ["Energy", "Stamina"],
             1.0f,
             includeHealth: true),
-        CheatKind.ForceMutations => [],
         _ => [],
     };
 

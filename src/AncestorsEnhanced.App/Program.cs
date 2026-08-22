@@ -44,7 +44,7 @@ sealed class Program
             .UsePlatformDetect()
             .WithInterFont();
 #if DEBUG
-        // Trace logging is a debug-only aid; it must not be enabled in release builds (F156).
+        // Trace logging is a debug-only aid and must not be enabled in release builds.
         app = app.LogToTrace();
 #endif
         return app;

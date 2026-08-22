@@ -3,9 +3,9 @@ using AncestorsEnhanced.App.Views;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Inspection;
 using Avalonia;
-using Avalonia.Threading;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 
 namespace AncestorsEnhanced.App;
 
@@ -26,7 +26,8 @@ public partial class App : Application
             var window = new MainWindow
             {
                 DataContext = viewModel,
-            };            window.Opened += async (_, _) => await viewModel.InitializeAsync();
+            };
+            window.Opened += async (_, _) => await viewModel.InitializeAsync();
             int retryCount = 0;
             const int MaxAutomaticRetries = 3;
             DispatcherTimer? retryTimer = null;

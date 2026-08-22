@@ -1,5 +1,6 @@
 ﻿using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.SaveGames;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
 
@@ -139,7 +140,7 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
     }
 
     [Fact]
-    public void ListingUsesMetadataWhileRestoreStillValidatesTheFullSave()
+    public void ListingUsesMetadataWhileRestoreStillValidatesTheStoredSave()
     {
         string userData = CreateUserData();
         byte[] content = TestSaveFactory.Create(4, 5, 6);
@@ -156,6 +157,20 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         Assert.Equal(checkpointId, listed.Id);
         Assert.Throws<InvalidDataException>(() =>
             SaveGameCheckpointStore.Read(userData, 0, checkpointId));
+    }
+
+    [Fact]
+    public void CheckpointDoesNotRequireTheCheatSchemaParser()
+    {
+        string userData = CreateUserData();
+        byte[] content = SnappyBlockCodec.EncodeLiteral([1, 2, 3, 4, 5]);
+        Assert.Throws<InvalidDataException>(() =>
+            SaveGameSchemaAnalyzer.Parse(SnappyBlockCodec.Decode(content)));
+        var store = new SaveGameCheckpointStore(() => FixedTime, maxCheckpointsPerSlot: 50);
+
+        string checkpointId = store.Create(userData, 0, content);
+
+        Assert.Equal(content, SaveGameCheckpointStore.Read(userData, 0, checkpointId));
     }
 
     private static readonly DateTimeOffset FixedTime = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);

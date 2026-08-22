@@ -1,4 +1,5 @@
 ﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;
 
@@ -36,6 +37,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
 
         Assert.True(result.Succeeded, result.Message);
         Assert.False(string.IsNullOrWhiteSpace(result.CreatedCheckpointId));
+        Assert.Equal(SaveOperationCommitState.Committed, result.CommitState);
         SaveGamesSnapshot snapshot = manager.Inspect();
         SaveGameSlotSnapshot slot0 = snapshot.Slots.Single(slot => slot.SlotNumber == "0");
         Assert.Single(slot0.Checkpoints);
@@ -59,6 +61,197 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         SaveGamesSnapshot after = manager.Inspect();
         SaveGameSlotSnapshot slot0 = after.Slots.Single(slot => slot.SlotNumber == "0");
         Assert.Equal(2, slot0.Checkpoints.Count);
+        Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
+    }
+
+    [Fact]
+    public void InspectRestoresOriginalSaveWhenRestoreCrashedAfterCasCapture()
+    {
+        byte[] result = TestSaveFactory.Create(1, 2, 3);
+        byte[] original = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, result);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string checkpointId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, original);
+        _ = SaveRestoreJournalStore.Prepare(
+            userData,
+            0,
+            checkpointId,
+            FixedTime,
+            originalExists: true,
+            ConfigurationFileOperations.Sha256(original),
+            ConfigurationFileOperations.Sha256(result));
+        string sidecar = CasPath(slotPath);
+        File.Move(slotPath, sidecar);
+
+        SaveGamesSnapshot snapshot = CreateManager(userData, gameRunning: false).Inspect();
+
+        Assert.Equal(original, File.ReadAllBytes(slotPath));
+        Assert.False(File.Exists(sidecar));
+        Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
+        Assert.Contains("Recovered", snapshot.RecoveryMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InspectKeepsCommittedRestoreAndRemovesLeftoverCas()
+    {
+        byte[] result = TestSaveFactory.Create(1, 2, 3);
+        byte[] original = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, result);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string checkpointId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, original);
+        _ = SaveRestoreJournalStore.Prepare(
+            userData,
+            0,
+            checkpointId,
+            FixedTime,
+            originalExists: true,
+            ConfigurationFileOperations.Sha256(original),
+            ConfigurationFileOperations.Sha256(result));
+        string sidecar = CasPath(slotPath);
+        File.Move(slotPath, sidecar);
+        File.WriteAllBytes(slotPath, result);
+
+        SaveGamesSnapshot snapshot = CreateManager(userData, gameRunning: false).Inspect();
+
+        Assert.Equal(result, File.ReadAllBytes(slotPath));
+        Assert.False(File.Exists(sidecar));
+        Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
+        Assert.Contains("Recovered", snapshot.RecoveryMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InspectClearsJournalAfterCommittedRestoreWithoutSidecar()
+    {
+        byte[] result = TestSaveFactory.Create(1, 2, 3);
+        byte[] original = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, result);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string checkpointId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, original);
+        _ = SaveRestoreJournalStore.Prepare(
+            userData,
+            0,
+            checkpointId,
+            FixedTime,
+            originalExists: true,
+            ConfigurationFileOperations.Sha256(original),
+            ConfigurationFileOperations.Sha256(result));
+        File.WriteAllBytes(slotPath, result);
+
+        SaveGamesSnapshot snapshot = CreateManager(userData, gameRunning: false).Inspect();
+
+        Assert.Equal(result, File.ReadAllBytes(slotPath));
+        Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
+        Assert.Contains("Recovered", snapshot.RecoveryMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InspectClearsUnstartedRestoreJournalWithoutChangingOriginal()
+    {
+        byte[] result = TestSaveFactory.Create(1, 2, 3);
+        byte[] original = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, result);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string checkpointId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, original);
+        _ = SaveRestoreJournalStore.Prepare(
+            userData,
+            0,
+            checkpointId,
+            FixedTime,
+            originalExists: true,
+            ConfigurationFileOperations.Sha256(original),
+            ConfigurationFileOperations.Sha256(result));
+
+        SaveGamesSnapshot snapshot = CreateManager(userData, gameRunning: false).Inspect();
+
+        Assert.Equal(original, File.ReadAllBytes(slotPath));
+        Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
+        Assert.Contains("Recovered", snapshot.RecoveryMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InspectPreservesForeignSaveAndJournalForManualRecovery()
+    {
+        byte[] result = TestSaveFactory.Create(1, 2, 3);
+        byte[] original = TestSaveFactory.Create(4, 5, 6);
+        byte[] foreign = TestSaveFactory.Create(7, 8, 9);
+        string userData = CreateUserDataWithSave(0, result);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string checkpointId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, original);
+        _ = SaveRestoreJournalStore.Prepare(
+            userData,
+            0,
+            checkpointId,
+            FixedTime,
+            originalExists: true,
+            ConfigurationFileOperations.Sha256(original),
+            ConfigurationFileOperations.Sha256(result));
+        string sidecar = CasPath(slotPath);
+        File.Move(slotPath, sidecar);
+        File.WriteAllBytes(slotPath, foreign);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            CreateManager(userData, gameRunning: false).Inspect());
+
+        Assert.Contains("manual action", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(foreign, File.ReadAllBytes(slotPath));
+        Assert.Equal(original, File.ReadAllBytes(sidecar));
+        Assert.True(File.Exists(RestoreJournalPath(userData, 0)));
+    }
+
+    [Fact]
+    public void InspectDoesNotRecoverLiveSaveWhileGameIsRunning()
+    {
+        byte[] result = TestSaveFactory.Create(1, 2, 3);
+        byte[] original = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, result);
+        SafeSaveGameManager manager = CreateManager(userData, gameRunning: false);
+        string checkpointId = manager.CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, original);
+        _ = SaveRestoreJournalStore.Prepare(
+            userData,
+            0,
+            checkpointId,
+            FixedTime,
+            originalExists: true,
+            ConfigurationFileOperations.Sha256(original),
+            ConfigurationFileOperations.Sha256(result));
+        string sidecar = CasPath(slotPath);
+        File.Move(slotPath, sidecar);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            CreateManager(userData, gameRunning: true).Inspect());
+
+        Assert.Contains("Close Ancestors", exception.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(slotPath));
+        Assert.True(File.Exists(sidecar));
+        Assert.True(File.Exists(RestoreJournalPath(userData, 0)));
+    }
+
+    [Fact]
+    public void InspectRestoresLegacyCasWhenLiveSlotIsMissing()
+    {
+        byte[] original = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, original);
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        string sidecar = CasPath(slotPath);
+        File.Move(slotPath, sidecar);
+
+        SaveGamesSnapshot snapshot = CreateManager(userData, gameRunning: false).Inspect();
+
+        Assert.Equal(original, File.ReadAllBytes(slotPath));
+        Assert.False(File.Exists(sidecar));
+        Assert.Contains("Recovered", snapshot.RecoveryMessage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -157,6 +350,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.False(result.Succeeded);
         Assert.Contains("changed after", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(foreignContent, File.ReadAllBytes(slotPath));
+        Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
     }
 
     [Fact]
@@ -185,6 +379,7 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         SaveGameOperationResult result = manager.DeleteCheckpoint("0", checkpointId);
 
         Assert.True(result.Succeeded, result.Message);
+        Assert.Equal(SaveOperationCommitState.Committed, result.CommitState);
         Assert.Empty(manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints);
     }
 
@@ -262,6 +457,17 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         File.WriteAllBytes(SaveGamePaths.GetSlotPath(userData, slotNumber), content);
         return userData;
     }
+
+    private static string RestoreJournalPath(string userData, int slot) =>
+        Path.Combine(SaveGamePaths.GetSlotRoot(userData, slot), "restore-pending.json");
+
+    private static string CasPath(string slotPath) =>
+        Path.Combine(
+            Path.GetDirectoryName(slotPath)!,
+            $".{Path.GetFileName(slotPath)}.{Guid.NewGuid():N}.cas");
+
+    private static readonly DateTimeOffset FixedTime =
+        new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
 
     private static SafeSaveGameManager CreateManager(string userData, bool gameRunning) =>
         new(

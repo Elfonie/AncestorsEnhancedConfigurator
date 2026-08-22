@@ -7,7 +7,7 @@ public sealed class ByteRangeTests
     [Fact]
     public void EndExclusiveUses64BitArithmeticToAvoidOverflow()
     {
-        var range = new ByteRange(int.MaxValue, int.MaxValue);
+        ByteRange range = new(int.MaxValue, int.MaxValue);
 
         Assert.Equal((long)int.MaxValue + int.MaxValue, range.EndExclusive);
     }
@@ -15,7 +15,7 @@ public sealed class ByteRangeTests
     [Fact]
     public void OverflowingRangeIsLargerThanAnyRealPayload()
     {
-        var range = new ByteRange(int.MaxValue, int.MaxValue);
+        ByteRange range = new(int.MaxValue, int.MaxValue);
         int payloadLength = 1024;
 
         Assert.True(range.EndExclusive > payloadLength);

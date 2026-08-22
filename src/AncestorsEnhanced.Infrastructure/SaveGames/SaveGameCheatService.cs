@@ -1,8 +1,8 @@
-using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.Editing;
-using AncestorsEnhanced.Infrastructure.SystemSave;
 using AncestorsEnhanced.Infrastructure.Platform;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
@@ -20,7 +20,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
     private readonly Func<bool>? _revalidate;
     private readonly int _maxCheckpointsPerSlot;
 
-    /// <summary>Binds to a verified game context; the user-data path comes from the context (F078).</summary>
+    /// <summary>Binds to a verified game context and its user-data path.</summary>
     public SaveGameCheatService(VerifiedGameContext context, GameContextVerifier verifier)
         : this(new SaveGameCheatInjector(), context.UserDataDirectory, () => verifier.Verify(context))
     {
@@ -123,7 +123,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                 _maxCheckpointsPerSlot);
             string checkpointId = AncestorsEnhanced.Infrastructure.Editing.MutationCoordinator.Run(() =>
             {
-                // Revalidate inside the global mutation lock, immediately before the store write (F063-1c).
+                // Revalidate inside the global mutation lock immediately before the store write.
                 if (_revalidate is not null && !_revalidate())
                 {
                     throw new InvalidOperationException("The game context changed; the cheat cannot be applied safely. Refresh and try again.");
@@ -158,7 +158,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
     private static string DisplayName(CheatKind kind) => kind switch
     {
-        CheatKind.HealClan => "Heal Current Ape",
+        CheatKind.HealCurrentApe => "Heal Current Ape",
         _ => kind.ToString(),
     };
 
@@ -172,7 +172,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
     /// Verifies that the difference between the original and the modified save is
     /// confined to the reported modified ranges: no byte outside any reported range
     /// may have changed, and every reported range must be bounded by the payload. This
-    /// proves exactly which bytes the cheat altered (F025).
+    /// proves exactly which bytes the cheat altered.
     /// </summary>
     private static bool IsDiffConfinedToRanges(
         byte[] original,
@@ -214,7 +214,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
     /// <summary>
     /// Every reported patched range must resolve to exactly one authorised
     /// <see cref="CheatTargetSpec"/> (matched by its full schema path and type) whose
-    /// stored float value(s) equal the injected target value (F027).
+    /// stored float values equal the injected target value.
     /// </summary>
     private static bool VerifyPatchedFields(
         SaveGameSchemaNode root,

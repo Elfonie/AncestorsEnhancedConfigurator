@@ -1,14 +1,17 @@
-﻿# F028 - External validation gate (real savegames)
+# External validation gate for real savegames
 
 This document records the **external, manual release gate** for cheat validation. It is
 the only part of the 0.9 work that genuinely requires real-world data that is NOT present
 in this repository. Everything code-side around cheats is implemented and verified with
-synthetic schema fixtures (see `../F027CheatTargetSpecTests.cs`); what is missing is
+synthetic schema fixtures (see `../CheatTargetSpecTests.cs`); what is missing is
 validation against real (anonymised) save files and an in-game run.
+
+System settings use the separate verified reference in
+`../../SystemSave/VerifiedSystemSaveFixture.cs`; `System.sav` is not part of this gate.
 
 ## What is already proven by synthetic fixtures
 
-The structural target model (`CheatTargetSpec`, F027) is implemented and tests cover:
+The structural target model (`CheatTargetSpec`) is implemented and tests cover:
 
 - exact schema-path targeting (a same-named property at another path is never patched),
 - right path / wrong type and right name / wrong parent are rejected,
@@ -23,10 +26,7 @@ to the real-fixture and In-Game validation gate below.
 |-------|-----------------|------|
 | MaxNeuronalEnergy | `<save>/RPGData/AvailableNeuronalEnergy` | FloatProperty |
 | MaxNeeds | `<save>/PlayerControllerData/CharacterData/VitalityData/{RegimenStamina,Energy,Stamina}` | FloatProperty |
-| HealClan | `<save>/PlayerControllerData/CharacterData/{VitalityData/{Energy,Stamina},HealthData/Health}` | FloatProperty |
-
-`ForceMutations` has **no** verified real-world path: without a fixture it stays
-fail-closed (the cheat reports "no supported fields" and changes nothing).
+| HealCurrentApe | `<save>/PlayerControllerData/CharacterData/{VitalityData/{Energy,Stamina},HealthData/Health}` | FloatProperty |
 
 ## Fixtures needed before this gate can be closed
 
@@ -34,8 +34,7 @@ fail-closed (the cheat reports "no supported fields" and changes nothing).
    `Savegame{N}.sav` files, scrubbed of any personal identifiers before being committed.
    Place them in this `Fixtures/` folder as:
    - `slot0.sav`, `slot1.sav`, ... (`slot0.sav` is the reference used by the gate tests).
-2. **One System.sav** (`System.sav`) used to lock the System.sav settings gate.
-3. **One in-game validation run report**: start the game after applying each cheat,
+2. **One in-game validation run report**: start the game after applying each cheat,
    confirm the value actually took effect (neuronal energy and needs/health values)
    and record the result.
 
@@ -50,4 +49,4 @@ fail-closed (the cheat reports "no supported fields" and changes nothing).
 
 Once `slot0.sav` is present, a fixture-backed test is intended to load it and assert the
 cheat targets resolve and stay confined. Until a real fixture lands, no such test is
-added (would fail), and the F028 gate remains an explicit manual release step.
+added because it would fail. The real-save gate remains an explicit manual release step.

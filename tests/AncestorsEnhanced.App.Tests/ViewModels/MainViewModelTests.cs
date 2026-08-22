@@ -78,6 +78,75 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task PartialRollbackRefreshesDiskStateAndRequiresManualRecovery()
+    {
+        var inspector = new CountingInspector(CreateSnapshot());
+        var editor = new RecordingEditor
+        {
+            ApplyResult = SettingsOperationResult.PartialRollbackRequired(
+                "Some files remain changed.",
+                "operation.json"),
+        };
+        var viewModel = new MainViewModel(inspector, editor);
+        await viewModel.InitializeAsync();
+        FindViewDistanceEditor(viewModel).NumberValue = 1.5m;
+        viewModel.OpenReviewCommand.Execute(null);
+
+        await viewModel.ConfirmApplyCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, inspector.Count);
+        Assert.Equal("#D6BC84", viewModel.OperationAccent);
+        Assert.Contains("Manual recovery required", viewModel.OperationMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PartialUndoRefreshesDiskStateAndRequiresManualRecovery()
+    {
+        var inspector = new CountingInspector(CreateSnapshot());
+        var editor = new RecordingEditor
+        {
+            CanRevert = true,
+            RevertResult = SettingsOperationResult.PartialRollbackRequired(
+                "A file could not be restored.",
+                "operation.json"),
+        };
+        var viewModel = new MainViewModel(inspector, editor);
+        await viewModel.InitializeAsync();
+
+        await viewModel.RevertLastCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, inspector.Count);
+        Assert.Equal("#D6BC84", viewModel.OperationAccent);
+        Assert.Contains("Manual recovery required", viewModel.OperationMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CurrentOverrideTakesPrecedenceOverMatchingPresetLabel()
+    {
+        var editor = new SettingEditorViewModel(new SettingEditSnapshot(
+            "Engine.ini",
+            "SystemSettings",
+            "r.ViewDistanceScale",
+            SettingEditorKind.Number,
+            "1.2",
+            "1.2"));
+        var row = new FeatureSettingRowViewModel(
+            "View distance",
+            "120%",
+            "Description",
+            "Engine.ini",
+            "r.ViewDistanceScale",
+            "#B4D941",
+            true,
+            true,
+            [new SettingPresetValueRowViewModel("High", "120%")],
+            "High",
+            editor);
+
+        Assert.Equal("Custom override", row.ValueLabel);
+    }
+
+    [Fact]
     public async Task ReturningFromReviewInvalidatesThePlanButKeepsDraftValues()
     {
         var editor = new RecordingEditor();
@@ -357,6 +426,14 @@ public sealed class MainViewModelTests
 
         public int RecoveryCount { get; private set; }
 
+        public SettingsOperationResult ApplyResult { get; init; } =
+            SettingsOperationResult.Applied("Applied.", null);
+
+        public SettingsOperationResult RevertResult { get; init; } =
+            SettingsOperationResult.Failed("Nothing to revert.");
+
+        public bool CanRevert { get; init; }
+
         public bool RecoverInterruptedChanges(GameInspectionSnapshot snapshot)
         {
             RecoveryCount++;
@@ -382,14 +459,14 @@ public sealed class MainViewModelTests
         public SettingsOperationResult Apply(SettingsChangePlan plan)
         {
             ApplyCount++;
-            return new SettingsOperationResult(true, "Applied.");
+            return ApplyResult;
         }
 
         public void DiscardPlan(SettingsChangePlan plan) => DiscardCount++;
 
-        public bool CanRevertLast(GameInspectionSnapshot snapshot) => false;
+        public bool CanRevertLast(GameInspectionSnapshot snapshot) => CanRevert;
 
         public SettingsOperationResult RevertLast(GameInspectionSnapshot snapshot) =>
-            new(false, "Nothing to revert.");
+            RevertResult;
     }
 }

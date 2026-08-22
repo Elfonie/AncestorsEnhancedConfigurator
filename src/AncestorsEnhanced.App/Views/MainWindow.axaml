@@ -11,6 +11,7 @@
         x:CompileBindings="True"
         MinWidth="760"
         MinHeight="640"
+        Icon="/Assets/aec-icon.ico"
         Title="Ancestors Enhanced Configurator">
 
   <Grid ColumnDefinitions="Auto,*" Background="{DynamicResource AppBackgroundBrush}">
@@ -22,7 +23,7 @@
                  Background="Transparent"
                  IsIndeterminate="True"
                  IsVisible="{Binding IsAnyOperationRunning}" />
-    <!-- Sidebar-Navigation -->
+    <!-- Sidebar navigation -->
     <Border Grid.Column="0"
             Width="200"
             Padding="16,18"
@@ -39,19 +40,19 @@
                       IsChecked="{Binding ShowGraphicsView, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
-                      Content="  Graphics" />
+                       Content="Graphics" />
         <ToggleButton Classes="nav"
                       Command="{Binding ShowSaveGamesCommand}"
                       IsChecked="{Binding ShowSaveGamesView, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
-                      Content="  Saves" />
+                       Content="Saves" />
         <ToggleButton Classes="nav"
                       Command="{Binding ShowCheatCommand}"
                       IsChecked="{Binding ShowCheatView, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
-                      Content="  Cheats" />
+                       Content="Cheats" />
 
         <Button Classes="nav"
                 Command="{Binding RefreshCommand}"
@@ -145,18 +146,10 @@
                          Foreground="#81929D" />
             </StackPanel>
             <TextBox Grid.Column="1"
-                                          IsVisible="{Binding IsAdvancedMode}"
-                                          Text="{Binding SearchText, Mode=TwoWay}"
+                     IsVisible="{Binding IsAdvancedMode}"
+                     Text="{Binding SearchText, Mode=TwoWay}"
                      PlaceholderText="Search settings…"
-                     VerticalAlignment="Center">
-              <TextBox.InnerLeftContent>
-                <TextBlock Text=""
-                           VerticalAlignment="Center"
-                           Margin="10,0,5,0"
-                           Foreground="#81929D"
-                           FontSize="14" />
-              </TextBox.InnerLeftContent>
-            </TextBox>
+                     VerticalAlignment="Center" />
           </Grid>
         </Border>
 
@@ -322,7 +315,7 @@
 
                                       <TextBlock Grid.Column="1"
                                                  IsVisible="{Binding HasUnsupportedCurrentValue}"
-                                                 Text="Unsupported value. Turn off &#x201E;Use custom value&#x201C; to reset it."
+                                                 Text="Unsupported value. Disable Use custom value to reset it."
                                                  TextWrapping="Wrap"
                                                  Foreground="#D6BC84" />
                                     </Grid>
@@ -501,9 +494,9 @@
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
               <StackPanel Spacing="2">
                 <TextBlock Text="Save Games" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
-                <TextBlock Text="Old saves are kept here. Choose one and load it into the game." FontSize="12" Foreground="#81929D" TextWrapping="Wrap" />
+                <TextBlock Text="Manage your five save slots and their checkpoints. Create checkpoints or restore an earlier checkpoint to a slot." FontSize="12" Foreground="#81929D" TextWrapping="Wrap" />
+                <TextBlock Text="Restoring a checkpoint requires the game to be closed." FontSize="12" Foreground="#D6BC84" TextWrapping="Wrap" />
               </StackPanel>
-              
             </Grid>
           </Border>
 
@@ -519,8 +512,6 @@
                 <TextBlock Text="Enable Auto-Backup" FontWeight="SemiBold" Foreground="#E6ECEF" />
                 <TextBlock Text="Automatically saves a checkpoint in the background whenever the game saves."
                            FontSize="12" Foreground="#82939D" TextWrapping="Wrap" />
-                <TextBlock Text="Close the game to load a save file."
-                           FontSize="12" Foreground="#82939D" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" VerticalAlignment="Center">
                   <TextBlock Text="Minimum time between auto-backups:" FontSize="12" Foreground="#82939D" VerticalAlignment="Center" />
                   <ComboBox ItemsSource="{Binding SaveManager.CooldownChoices}"
@@ -534,7 +525,7 @@
           </Border>
 
           <StackPanel IsVisible="{Binding IsSaveManagerAvailable}" Spacing="12">
-       <Border Padding="14,10" CornerRadius="7" BorderThickness="1"
+          <Border Padding="14,10" CornerRadius="7" BorderThickness="1"
                   BorderBrush="{Binding SaveManager.StatusAccent}"
                   Background="{DynamicResource SurfaceBrush}"
                   IsVisible="True">
@@ -563,7 +554,7 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
                           <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                              <Grid ColumnDefinitions="*,*,Auto,Auto" ColumnSpacing="14">
+                            <Grid ColumnDefinitions="*,*,Auto,Auto" ColumnSpacing="14">
                               <StackPanel Spacing="1">
                                 <TextBlock Text="{Binding CreatedLabel}" FontWeight="SemiBold" Foreground="#E1E7EA" />
                                 <TextBlock Text="{Binding OriginLabel}" FontSize="12" Foreground="#B4D941" />
@@ -589,7 +580,7 @@
                             Command="{Binding ShowOlderCommand}"
                             IsVisible="{Binding HasHiddenCheckpoints}"
                             HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="#FF5A00" FontSize="12" />
-                    <Button Content="Show less..."
+                    <Button Content="Show less"
                             Command="{Binding ShowRecentCommand}"
                             IsVisible="{Binding HasExpandedCheckpoints}"
                             HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="#FF5A00" FontSize="12" />
@@ -645,7 +636,7 @@
           </Border>
 
           <StackPanel IsVisible="{Binding IsCheatAvailable}" Spacing="8">
-          <TextBlock Text="EXPERIMENTAL SAVEGAME CHEATS — create a checkpoint per slot" FontSize="12" FontWeight="Bold" Foreground="#FF5A00" Margin="2,8,0,0" />
+            <TextBlock Text="EXPERIMENTAL SAVEGAME CHEATS — create a modified checkpoint for the selected slot" FontSize="12" FontWeight="Bold" Foreground="#FF5A00" Margin="2,8,0,0" />
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="16">
               <StackPanel Spacing="2" VerticalAlignment="Center">
@@ -671,11 +662,11 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
                   <TextBlock Text="Max Neuronal Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Sets your neuronal energy to maximum." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Creates an experimental checkpoint that sets the neuronal-energy field to 1000. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Command="{Binding Cheat.MaxNeuronalEnergyCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create checkpoint" Padding="16,8" VerticalAlignment="Center" />
+                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
               </Grid>
             </Border>
 
@@ -683,11 +674,11 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
                   <TextBlock Text="Max Needs" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Fills the current ape's needs (stamina, energy and regimen) to their maximum." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's stamina, energy and regimen fields to 1000. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Command="{Binding Cheat.MaxNeedsCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create checkpoint" Padding="16,8" VerticalAlignment="Center" />
+                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
               </Grid>
             </Border>
 
@@ -695,11 +686,11 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
                   <TextBlock Text="Heal Current Ape" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Restores health, stamina and energy for your currently controlled ape." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's health, stamina and energy fields to the configured recovery values. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
-                <Button Grid.Column="1" Command="{Binding Cheat.HealClanCommand}"
+                <Button Grid.Column="1" Command="{Binding Cheat.HealCurrentApeCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create checkpoint" Padding="16,8" VerticalAlignment="Center" />
+                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
               </Grid>
             </Border>
           </StackPanel>

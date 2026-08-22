@@ -3,22 +3,22 @@
              x:Class="AncestorsEnhanced.App.App"
              RequestedThemeVariant="Default">
   <Application.Resources>
-    <!-- Tiefe, organische Dschungel-Schattierungen (Primal Survival) -->
+    <!-- Application surfaces -->
     <SolidColorBrush x:Key="AppBackgroundBrush" Color="#070907" />
     <SolidColorBrush x:Key="SurfaceBrush" Color="#121612" />
     <SolidColorBrush x:Key="RaisedSurfaceBrush" Color="#191F19" />
     <SolidColorBrush x:Key="BorderBrush" Color="#2A332A" />
-    <!-- Knochenweiß & Schilfgrün für warmen, harten Kontrast -->
+    <!-- Text colors -->
     <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E8E4D9" />
     <SolidColorBrush x:Key="MutedTextBrush" Color="#7A877A" />
-    <!-- Aggressive Akzente: giftiges Flora-Grün, Feuer-Orange, Blut -->
+    <!-- Status and accent colors -->
     <SolidColorBrush x:Key="SuccessBrush" Color="#B4D941" />
     <SolidColorBrush x:Key="WarningBrush" Color="#FF5A00" />
     <SolidColorBrush x:Key="InfoBrush" Color="#FF5A00" />
     <SolidColorBrush x:Key="DangerBrush" Color="#E04D42" />
     <SolidColorBrush x:Key="FloraBrush" Color="#B4D941" />
     <SolidColorBrush x:Key="BloodBrush" Color="#E04D42" />
-    <!-- Avalonia Default-Blau für ToggleSwitches mit Flora-Grün überschreiben -->
+    <!-- Active ToggleSwitch colors -->
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOn" Color="#B4D941" />
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOnPointerOver" Color="#9ABF31" />
     <SolidColorBrush x:Key="ToggleSwitchCurtainStrokeOn" Color="#B4D941" />
@@ -30,7 +30,7 @@
   <Application.Styles>
     <FluentTheme />
 
-    <!-- Global Buttons: Dunkel, taktisch, robust -->
+    <!-- Global buttons -->
     <Style Selector="Button">
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="14,8" />
@@ -52,7 +52,7 @@
       <Setter Property="Foreground" Value="#E8E4D9" />
     </Style>
 
-    <!-- Primary action: aggressiver Feuer-Verlauf (rot -> orange) -->
+    <!-- Primary action -->
     <Style Selector="Button.PrimaryAction">
       <Setter Property="Foreground" Value="#FFF3EA" />
       <Setter Property="FontWeight" Value="Bold" />
@@ -108,7 +108,7 @@
     <Style Selector="ToggleButton.nav:pointerover">
       <Setter Property="Background" Value="#1E2720" />
     </Style>
-    <!-- Sidebar Nav Buttons Active State -->
+    <!-- Active sidebar navigation -->
     <Style Selector="ToggleButton.nav:checked /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background">
         <Setter.Value>
@@ -121,7 +121,7 @@
       <Setter Property="Foreground" Value="#B4D941" />
       <Setter Property="BorderThickness" Value="0" />
     </Style>
-        <Style Selector="Button.Ghost">
+    <Style Selector="Button.Ghost">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
     </Style>
@@ -141,7 +141,7 @@
       <Setter Property="BorderThickness" Value="0" />
     </Style>
 
-<Style Selector="Button.nav">
+    <Style Selector="Button.nav">
       <Setter Property="Padding" Value="14,10" />
       <Setter Property="CornerRadius" Value="7" />
       <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -152,7 +152,7 @@
     <Style Selector="Button.nav:pointerover">
       <Setter Property="Background" Value="#1E2720" />
     </Style>
-    <!-- Mode toggle: Dschungel-Moos wenn aktiv -->
+    <!-- Mode toggle -->
     <Style Selector="ToggleButton.mode">
       <Setter Property="Padding" Value="18,8" />
       <Setter Property="CornerRadius" Value="6" />
@@ -160,7 +160,7 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
-    <!-- Mode Toggle Buttons (Simple/Advanced) Active State -->
+    <!-- Active Simple/Advanced mode -->
     <Style Selector="ToggleButton.mode:checked /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background">
         <Setter.Value>
@@ -178,7 +178,7 @@
       <Setter Property="Opacity" Value="0.35" />
     </Style>
 
-    <!-- Floating card: rahmenlose "Survival-Slate", nur linker Akzent -->
+    <!-- Settings cards -->
     <Style Selector="Border.SettingCard">
       <Setter Property="Background" Value="#121612" />
       <Setter Property="CornerRadius" Value="9" />
@@ -193,8 +193,7 @@
         </Transitions>
       </Setter>
     </Style>
-    <!-- Interaktive Karten (klickbar) erhalten einen dezenten Hover-Glow und eine
-         sichtbare Fokusmarkierung; rein visuelle Container nutzen nur SettingCard. -->
+    <!-- Interactive cards add pointer and keyboard-focus feedback. -->
     <Style Selector="Border.SettingCard.InteractiveCard">
       <Setter Property="Cursor" Value="Hand" />
     </Style>
@@ -211,7 +210,7 @@
       <Setter Property="Background" Value="#141914" />
     </Style>
 
-    <!-- Inputs abgerundet -->
+    <!-- Inputs -->
     <Style Selector="TextBox">
       <Setter Property="CornerRadius" Value="7" />
     </Style>

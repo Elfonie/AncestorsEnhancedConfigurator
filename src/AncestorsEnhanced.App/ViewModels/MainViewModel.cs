@@ -129,7 +129,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _mutationGate.Changed += OnMutationGateChanged;
 
         ProductName = "Ancestors Enhanced Configurator";
-        string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.8.0";
+        string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
         Phase = $"{version} Graphics, Saves and Cheats";
     }
 
@@ -474,13 +474,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             IsBusy = false;
         }
-        if (result.Succeeded && !await RefreshFromDiskAsync())
+        if (ShouldRefreshAfter(result) && !await RefreshFromDiskAsync())
         {
-            ShowMessage($"Changes were applied, but the configuration could not be refreshed.", "#E04D42");
+            ShowMessage("The operation finished, but the configuration could not be refreshed from disk.", "#E04D42");
             return;
         }
 
-        ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#E04D42");
+        ShowMessage(FormatOperationMessage(result), GetOperationAccent(result));
     }
 
     [RelayCommand]
@@ -513,14 +513,30 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             IsBusy = false;
         }
-        if (result.Succeeded && !await RefreshFromDiskAsync())
+        if (ShouldRefreshAfter(result) && !await RefreshFromDiskAsync())
         {
             ShowMessage("The backup was restored, but the configuration could not be refreshed.", "#E04D42");
             return;
         }
 
-        ShowMessage(result.Message, result.Succeeded ? "#B4D941" : "#E04D42");
+        ShowMessage(FormatOperationMessage(result), GetOperationAccent(result));
     }
+
+    private static bool ShouldRefreshAfter(SettingsOperationResult result) =>
+        result.Succeeded || result.Status == SettingsOperationStatus.PartialRollbackRequired;
+
+    private static string GetOperationAccent(SettingsOperationResult result) => result.Status switch
+    {
+        SettingsOperationStatus.PartialRollbackRequired => "#D6BC84",
+        SettingsOperationStatus.Failed => "#E04D42",
+        _ => result.Succeeded ? "#B4D941" : "#E04D42",
+    };
+
+    private static string FormatOperationMessage(SettingsOperationResult result) =>
+        result.Status == SettingsOperationStatus.PartialRollbackRequired &&
+        !result.Message.Contains("manual recovery required", StringComparison.OrdinalIgnoreCase)
+            ? $"Manual recovery required. {result.Message}"
+            : result.Message;
 
     partial void OnIsAdvancedModeChanged(bool value)
     {
@@ -577,56 +593,36 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _searchDebounceSource;
     private Task? _searchDebounceTask;
 
-
-
     partial void OnSearchTextChanged(string value)
-
     {
-
         CancellationTokenSource? previous = _searchDebounceSource;
         previous?.Cancel();
         previous?.Dispose();
         _searchDebounceSource = new CancellationTokenSource();
 
         CancellationToken token = _searchDebounceSource.Token;
-
         _searchDebounceTask = DebouncedSearchApplyAsync(token);
-
     }
 
-
-
     private async Task DebouncedSearchApplyAsync(CancellationToken token)
-
     {
-
         try
-
         {
-
             await Task.Delay(250, token);
-
             if (Avalonia.Application.Current is null)
             {
-                // Headless-Unit-Test ohne Avalonia-Application/Message-Pump.
+                // Headless tests do not have an Avalonia application or message pump.
                 ApplyViewMode();
                 return;
             }
 
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ApplyViewMode);
         }
-
         catch (OperationCanceledException)
-
         {
-
-            // Ein neuerer Tastendruck hat diese Suche abgelöst.
-
+            // A newer search request replaced this one.
         }
-
     }
-
-
     partial void OnCanRevertLastChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
 
     partial void OnHasRemovableToolChangesChanged(bool value) => OnPropertyChanged(nameof(CanRemoveToolChanges));
@@ -655,7 +651,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowPendingActions));
         OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(ShowReviewActions));
-        OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
     }
@@ -765,8 +760,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             Notices = [new NoticeRowViewModel("Error", exception.Message)];
             CanRevertLast = false;
             HasRemovableToolChanges = false;
-            // Clear the whole internal editor state and writer services so no stale
-            // writable editor remains active after a failed scan (F004/F077).
+            // Clear editor and writer state after a failed scan.
             foreach (SettingEditorViewModel editor in _editors.Values)
             {
                 editor.Changed -= OnEditorChanged;
@@ -779,7 +773,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             Cheat?.Dispose();
             Cheat = null;
             ShowMessage($"Scan failed: {exception.Message}", "#E04D42");
-            LogDetection("failed: "+exception.Message);
+            LogDetection("failed: " + exception.Message);
             return false;
         }
         finally
@@ -843,7 +837,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 return await SaveManager.RunLoad(slot, checkpointId);
             },
             _mutationGate);
-    }    private void RebuildEditors()
+    }
+
+    private void RebuildEditors()
     {
         foreach (SettingEditorViewModel editor in _editors.Values)
         {
@@ -1096,7 +1092,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         SaveManager?.Dispose();
         SaveManager = null;
         Cheat?.Dispose();
-Cheat = null;
+        Cheat = null;
     }
 }
 

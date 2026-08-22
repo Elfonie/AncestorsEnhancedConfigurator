@@ -1,9 +1,9 @@
 using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.Platform;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using AncestorsEnhanced.Infrastructure.Platform;
 
 namespace AncestorsEnhanced.App.ViewModels;
 
@@ -42,8 +42,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     public void UpdateSlotAvailability(IReadOnlyList<SaveGameSlotViewModel> slotViewModels)
     {
-        // An empty slot list must clear any previously shown cheat slots, never
-        // keep stale entries that no longer correspond to a real save (F136).
+        // An empty slot list must clear stale entries that no longer correspond
+        // to a real save.
         if (slotViewModels.Count == 0)
         {
             Slots = [];
@@ -135,8 +135,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         await RunCheatAsync(CheatKind.MaxNeeds);
 
     [RelayCommand]
-    private async Task HealClanAsync() =>
-        await RunCheatAsync(CheatKind.HealClan);
+    private async Task HealCurrentApeAsync() =>
+        await RunCheatAsync(CheatKind.HealCurrentApe);
 
     private async Task RunCheatAsync(CheatKind kind)
     {
@@ -158,7 +158,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         }
 
         IsBusy = true;
-        StatusMessage = "Applying...";
+        StatusMessage = "Creating modified checkpoint...";
         StatusAccent = "#FF5A00";
         NotifyState();
 
@@ -232,7 +232,9 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CanRestoreLastCheckpoint));
             NotifyState();
         }
-    }    private static bool IsExpectedRestoreException(Exception exception) =>
+    }
+
+    private static bool IsExpectedRestoreException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or
             ArgumentException or NotSupportedException or InvalidDataException;
 
@@ -244,8 +246,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     private async Task PollGameRunningLoopAsync(CancellationToken token)
     {
-        // Rotiert vollständig losgelöst vom UI-Thread; der UI-Thread wird nur bei
-        // einer Statusänderung benachrichtigt.
+        // Poll outside the UI thread and publish only when the state changes.
         try
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
@@ -302,8 +303,7 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         _gameCheckCts.Cancel();
         try
         {
-            // Kurz warten statt endlos: der Poll-Task marshal ke bleibt an den
-            // UI-Dispatcher gebunden und darf einen Test-/Shutdown-Thread nicht blockieren.
+            // A bounded wait prevents shutdown and test threads from hanging.
             _pollTask?.Wait(TimeSpan.FromMilliseconds(300));
         }
         catch (AggregateException)

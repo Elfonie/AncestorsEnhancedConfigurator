@@ -278,7 +278,10 @@ internal sealed class SaveGameCheckpointStore(
             throw new InvalidDataException("The checkpoint save has an invalid size.");
         }
         byte[] decompressed = SnappyBlockCodec.Decode(content);
-        _ = SaveGameSchemaAnalyzer.Parse(decompressed);
+        if (decompressed.Length == 0)
+        {
+            throw new InvalidDataException("The checkpoint save has an empty payload.");
+        }
     }
 
     private static void ValidateOrigin(string origin)

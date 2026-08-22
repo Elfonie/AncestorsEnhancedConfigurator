@@ -1,7 +1,7 @@
+using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.SaveGames;
-using AncestorsEnhanced.App.ViewModels;
 
 namespace AncestorsEnhanced.App.Tests.ViewModels;
 
@@ -47,6 +47,27 @@ public sealed class SaveManagerViewModelTests
 
         Assert.True(viewModel.SaveManager!.HasSlots);
         Assert.Single(viewModel.SaveManager.Slots);
+    }
+
+    [Fact]
+    public void RefreshShowsSaveRestoreRecoveryInsteadOfGenericLoadedMessage()
+    {
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(
+                DateTimeOffset.UnixEpoch,
+                "user-data",
+                Slots())),
+            "user-data");
+        const string Recovery = "Recovered an interrupted save restore safely.";
+
+        viewModel.Refresh(new SaveGamesSnapshot(
+            DateTimeOffset.UnixEpoch,
+            "user-data",
+            Slots(),
+            Recovery));
+
+        Assert.Equal(Recovery, viewModel.StatusMessage);
+        Assert.Equal("#B4D941", viewModel.StatusAccent);
     }
 
 
@@ -187,6 +208,22 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
+    public async Task CommittedWarningUsesWarningAccent()
+    {
+        var manager = new WarningSaveGameManager();
+        var viewModel = new SaveManagerViewModel(
+            manager,
+            "user-data",
+            watchdog: null);
+
+        SaveGameOperationResult result = await viewModel.RunLoad("0", "checkpoint");
+
+        Assert.Equal(SaveOperationCommitState.CommittedWithWarning, result.CommitState);
+        Assert.Equal("#D6BC84", viewModel.StatusAccent);
+        Assert.Equal("Loaded with a timestamp warning.", viewModel.StatusMessage);
+    }
+
+    [Fact]
     public void RefreshPreservesExpandedCheckpointsAndDisablesRestoreWhileGameRuns()
     {
         SaveGameCheckpoint[] checkpoints = Enumerable.Range(1, 3)
@@ -301,8 +338,8 @@ public sealed class SaveManagerViewModelTests
             return new SaveGameOperationResult(true, "Checkpoint saved.", "cp-1");
         }
 
-          public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
-              new(true, "Deleted.");
+        public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+            new(true, "Deleted.");
 
         public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
             new(true, "Loaded.");
@@ -436,8 +473,8 @@ public sealed class SaveManagerViewModelTests
         public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual") =>
             new(true, "Checkpoint saved.");
 
-          public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
-              new(true, "Deleted.");
+        public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+            new(true, "Deleted.");
 
         public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
             new(true, "Loaded.");
@@ -457,6 +494,25 @@ public sealed class SaveManagerViewModelTests
         public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
             new(false, "failed");
     }
+
+    private sealed class WarningSaveGameManager : ISaveGameManager
+    {
+        public SaveGamesSnapshot Inspect() =>
+            new(DateTimeOffset.UnixEpoch, "user-data", []);
+
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual") =>
+            new(false, "not used");
+
+        public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) =>
+            new(
+                true,
+                "Loaded with a timestamp warning.",
+                CommitState: SaveOperationCommitState.CommittedWithWarning);
+
+        public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+            new(false, "not used");
+    }
+
     [Fact]
     public void CooldownClampsNegativeAndExtremeValues()
     {

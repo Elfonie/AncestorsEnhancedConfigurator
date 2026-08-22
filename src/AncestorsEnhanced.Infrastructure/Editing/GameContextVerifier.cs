@@ -6,7 +6,7 @@ namespace AncestorsEnhanced.Infrastructure.Editing;
 /// <summary>
 /// Re-validates the live game context immediately before a mutating operation using the
 /// same detection logic the initial scan used (there is deliberately no second,
-/// divergent installation detection — F061/F063/F078). If the current reality no longer
+/// divergent installation detection). If the current reality no longer
 /// matches the <see cref="VerifiedGameContext"/> the caller captured at plan/preview
 /// time, verification fails without any write having happened.
 /// </summary>

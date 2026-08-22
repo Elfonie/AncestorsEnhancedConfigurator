@@ -16,7 +16,7 @@ public sealed class SaveGameSchemaAnalysis
     public IReadOnlyList<SaveGameSchemaNode> Findings { get; }
 }
 
-/// <summary>Read-only navigator over the nested tagged-property schema of a save.</summary>
+/// <summary>Reads the nested tagged-property schema of a save without changing it.</summary>
 public interface ISaveGameSchemaAnalyzer
 {
     SaveGameSchemaAnalysis Analyze(byte[] compressedSave);

@@ -1,9 +1,9 @@
 using System.Globalization;
-using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.Editing;
-using AncestorsEnhanced.Infrastructure.SystemSave;
 using AncestorsEnhanced.Infrastructure.Platform;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
@@ -74,6 +74,22 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         SaveGameGuard.ValidateUserData(_userDataDirectory);
         try
         {
+            bool recovered = false;
+            if (SaveRestoreJournalStore.HasRecoveryWork(_userDataDirectory))
+            {
+                recovered = MutationCoordinator.Run(() =>
+                {
+                    if (_revalidate is not null && !_revalidate())
+                    {
+                        throw new InvalidOperationException("The game context changed; save recovery was not attempted.");
+                    }
+                    if (_isGameRunning())
+                    {
+                        throw new InvalidOperationException("Close Ancestors before recovering an interrupted save restore.");
+                    }
+                    return SaveRestoreJournalStore.RecoverAll(_userDataDirectory);
+                });
+            }
             var slots = Enumerable.Range(0, SaveGamePaths.SlotCount)
                 .Select(slot =>
                 {
@@ -95,7 +111,11 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                     }
                 })
                 .ToArray();
-            return new SaveGamesSnapshot(_utcNow(), _userDataDirectory, slots);
+            return new SaveGamesSnapshot(
+                _utcNow(),
+                _userDataDirectory,
+                slots,
+                recovered ? "Recovered an interrupted save restore safely." : null);
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {
@@ -141,7 +161,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             // A restore can legitimately make the live slot equal to an older manual
             // checkpoint while the newest checkpoint is the automatic PreRestore copy.
             // Dedupe against every valid checkpoint so reconciliation cannot publish a
-            // redundant AutoBackup of the restored content (F162).
+            // redundant AutoBackup of the restored content.
             string liveHash = Sha256(content);
             foreach (SaveGameCheckpoint checkpoint in latest)
             {
@@ -160,7 +180,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 catch (Exception exception) when (IsExpectedException(exception))
                 {
                     // A damaged historical checkpoint must not prevent a current save
-                    // from being protected (F008). Continue with other candidates.
+                    // from being protected. Continue with other candidates.
                 }
             }
 
@@ -168,7 +188,8 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             return new SaveGameOperationResult(
                 true,
                 $"Checkpoint saved for slot {slot + 1}.",
-                checkpointId);
+                checkpointId,
+                SaveOperationCommitState.Committed);
         }
         catch (IOException exception)
         {
@@ -216,10 +237,13 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             {
                 byte[] current = ReadStableBounded(slotPath, 64L * 1024 * 1024);
                 expectedSha256 = Sha256(current);
-                if (!IsIdentical(current, checkpoint))
+                if (IsIdentical(current, checkpoint))
                 {
-                    _store.Create(_userDataDirectory, slot, current, "PreRestore");
+                    return new SaveGameOperationResult(
+                        true,
+                        $"Slot {slot + 1} already matches this checkpoint; no save file was changed.");
                 }
+                _store.Create(_userDataDirectory, slot, current, "PreRestore");
             }
 
             // The atomic replace is the commit point. After it, the save has already
@@ -234,7 +258,24 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 return Failure("Close Ancestors before loading a save checkpoint.");
             }
 
-            CompareAndReplace(slotPath, checkpoint, expectedSha256, expectedExists);
+            SaveRestoreOperation restore = SaveRestoreJournalStore.Prepare(
+                _userDataDirectory,
+                slot,
+                checkpointId,
+                _utcNow(),
+                expectedExists,
+                expectedSha256,
+                Sha256(checkpoint));
+            try
+            {
+                CompareAndReplace(slotPath, checkpoint, expectedSha256, expectedExists);
+                SaveRestoreJournalStore.Complete(_userDataDirectory, restore);
+            }
+            catch
+            {
+                SaveRestoreJournalStore.CancelFailedCommit(_userDataDirectory, restore);
+                throw;
+            }
             try
             {
                 File.SetLastWriteTimeUtc(slotPath, _utcNow().UtcDateTime);
@@ -286,7 +327,10 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             }
 
             DeleteDirectorySafely(SaveGamePaths.GetSlotRoot(_userDataDirectory, slot), checkpointDirectory);
-            return new SaveGameOperationResult(true, $"Checkpoint deleted from slot {slot + 1}.");
+            return new SaveGameOperationResult(
+                true,
+                $"Checkpoint deleted from slot {slot + 1}.",
+                CommitState: SaveOperationCommitState.Committed);
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {

@@ -74,7 +74,7 @@ internal sealed class SettingsTransaction(
             string? operationDirectory = null;
             SettingsOperationResult? appliedResult = MutationCoordinator.Run(() =>
             {
-                // Revalidate inside the global mutation lock, immediately before the writes (F063-1c).
+                // Revalidate inside the global mutation lock immediately before the writes.
                 if (!_revalidateContext(plan))
                 {
                     return Failure("The game context changed since this change was previewed. Refresh and try again.");
@@ -144,7 +144,7 @@ internal sealed class SettingsTransaction(
                     if (rollbackFailures.Count > 0)
                     {
                         return SettingsOperationResult.PartialRollbackRequired(
-                            "Some files could not be restored automatically. Restore them manually from the backup folder:\n" +
+                            "Manual recovery required. Some files could not be restored automatically. Restore them from the backup folder:\n" +
                             string.Join(System.Environment.NewLine, rollbackFailures),
                             SettingsBackupStore.GetManifestPath(operationDirectory));
                     }
@@ -243,14 +243,14 @@ internal sealed class SettingsTransaction(
             }
 
             // The restore target is always reconstructed from the *current* snapshot,
-            // never from the persisted absolute paths in the manifest (F013).
+            // never from persisted absolute paths in the manifest.
             string userDataDirectory = snapshot.UserDataDirectory ?? operation.Manifest.UserDataDirectory;
             string? installDirectory = snapshot.Installation?.InstallDirectory ?? operation.Manifest.InstallDirectory;
             // The whole restore mutation runs inside the single global mutation gate so it
-            // can never race another configurator write (F001).
+            // can never race another configurator write.
             return MutationCoordinator.Run(() =>
             {
-                // Revalidate inside the global mutation lock, immediately before the restore (F063-1c).
+                // Revalidate inside the global mutation lock immediately before the restore.
                 if (!_revalidateSnapshot(snapshot))
                 {
                     return Failure("The game context changed; the backup cannot be restored safely. Refresh and try again.");
@@ -275,7 +275,7 @@ internal sealed class SettingsTransaction(
                         // CAS immediately before the restore: the live file must still match
                         // the state this tool produced when it applied the change (the
                         // Result state). If anyone modified it since, abort without
-                        // overwriting those new changes (F067/F127).
+                        // overwriting those new changes.
                         byte[]? original = file.Existed ? ReadOriginal(operation, file) : null;
                         if (file.ResultExists)
                         {
@@ -322,7 +322,7 @@ internal sealed class SettingsTransaction(
                     if (restoreFailures.Count > 0)
                     {
                         return SettingsOperationResult.PartialRollbackRequired(
-                            "Not all files could be restored automatically. Restore them manually from the backup folder:\n" +
+                            "Manual recovery required. Not all files could be restored automatically. Restore them from the backup folder:\n" +
                             string.Join(System.Environment.NewLine, restoreFailures) + "\nBackup folder: " + operation.Directory,
                             operation.Directory);
                     }
@@ -377,7 +377,7 @@ internal sealed class SettingsTransaction(
                 // If the file is already back in its Result state (the state before this
                 // undo ran), there is nothing to fold back. Only the Original state that
                 // this undo wrote may be restored; a foreign concurrent change is never
-                // overwritten (F067).
+                // overwritten.
                 bool inResult = file.ResultExists
                     ? currentHash is not null && string.Equals(currentHash, file.ResultSha256, StringComparison.Ordinal)
                     : currentHash is null;
@@ -451,7 +451,7 @@ internal sealed class SettingsTransaction(
     /// <summary>
     /// Restores every already-applied file back to its original state, but only when the
     /// current file still matches the result state this apply wrote. A foreign concurrent
-    /// change is never overwritten; such files are reported as failures (F066).
+    /// change is never overwritten; such files are reported as failures.
     /// </summary>
     private static List<string> RestoreFilesBestEffort(IEnumerable<ConfigurationFileChangePlan> files)
     {
@@ -464,7 +464,7 @@ internal sealed class SettingsTransaction(
                 if (file.Existed && file.ResultExists)
                 {
                     // Replace: the file existed before and after; fold our own write back
-                    // only if it still matches the result state we wrote (F066).
+                    // only if it still matches the result state we wrote.
                     CompareAndReplace(file.FullPath, file.OriginalContent, resultHash, expectedExists: true);
                 }
                 else if (!file.Existed && file.ResultExists)
@@ -476,7 +476,7 @@ internal sealed class SettingsTransaction(
                 {
                     // Delete: the file existed before and was removed by this apply.
                     // Recreate the original only if the target is still absent, so a
-                    // foreign re-created file is never overwritten (F066).
+                    // foreign re-created file is never overwritten.
                     CompareAndReplace(file.FullPath, file.OriginalContent, expectedSha256: null, expectedExists: false);
                 }
             }

@@ -5,8 +5,8 @@ using Xunit;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.Editing;
 
-/// <summary>F127 - FindLast only accepts intact backups; a tampered newest one falls back to an older valid candidate.</summary>
-public sealed class F127BackupIntegrityTests : IDisposable
+/// <summary>FindLast accepts intact backups and falls back from a tampered newest candidate.</summary>
+public sealed class BackupIntegrityTests : IDisposable
 {
     private readonly string _temporaryDirectory = Path.Combine(
         Path.GetTempPath(),

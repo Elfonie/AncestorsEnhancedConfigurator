@@ -68,8 +68,6 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     public bool HasSave => _exists;
 
-    public bool HasCheckpoints => Checkpoints.Count > 0;
-
     public bool CanSaveCheckpoint => _exists && _canMutate();
 
     public bool HasHiddenCheckpoints => Checkpoints.Count > DefaultVisibleCheckpoints && !_showAllCheckpoints;
@@ -82,8 +80,8 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         Math.Max(0, Checkpoints.Count - DefaultVisibleCheckpoints);
 
     public string ShowAllLabel => HiddenCheckpointCount == 1
-        ? "Show 1 older checkpoint..."
-        : $"Show {HiddenCheckpointCount} older checkpoints...";
+        ? "Show 1 older checkpoint"
+        : $"Show {HiddenCheckpointCount} older checkpoints";
 
     [RelayCommand]
     private void ShowOlder() => UpdateVisibleCheckpoints(showAll: true);

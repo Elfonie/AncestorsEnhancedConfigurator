@@ -5,6 +5,5 @@ public enum CheatKind
 {
     MaxNeuronalEnergy,
     MaxNeeds,
-    HealClan,
-    ForceMutations,
+    HealCurrentApe,
 }

@@ -1,10 +1,8 @@
 namespace AncestorsEnhanced.Core.SaveGames;
 
 /// <summary>
-/// Describes how far a save operation got before finishing. This distinguishes a
-/// failure before any commit (NotCommitted) from a failure that happened after the
-/// target was already changed (CommittedWithWarning), so the UI never reports success
-/// or failure for the wrong phase (see RB-6 / F007).
+/// Describes whether a save operation changed persistent state and whether a warning
+/// occurred after that change was committed.
 /// </summary>
 public enum SaveOperationCommitState
 {

@@ -17,7 +17,7 @@ public sealed class CheatApplyResult
     public string? CheckpointId { get; }
 }
 
-/// <summary>Reads a slot save, applies a cheat, and stores the result as a new checkpoint.</summary>
+/// <summary>Reads a slot save and stores an experimental mutation as a new checkpoint.</summary>
 public interface ISaveGameCheatService
 {
     CheatApplyResult Apply(CheatKind kind, string slotNumber);

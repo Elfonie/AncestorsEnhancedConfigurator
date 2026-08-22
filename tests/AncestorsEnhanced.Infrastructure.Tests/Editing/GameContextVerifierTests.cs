@@ -11,7 +11,7 @@ internal sealed class StubInspector(Func<GameInspectionSnapshot> factory) : IRea
     public GameInspectionSnapshot Inspect() => _factory();
 }
 
-/// <summary>VerifiedGameContext + GameContextVerifier revalidation (F061/F063/F078).</summary>
+/// <summary>VerifiedGameContext and GameContextVerifier revalidation.</summary>
 public sealed class GameContextVerifierTests
 {
     [Fact]

@@ -92,7 +92,7 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
         catch (Exception exception) when (InspectionErrors.IsExpected(exception))
         {
             // A read failure is not the same as "this evidence does not exist on this
-            // platform"; it must fail closed (F061/F149).
+            // platform"; it must fail closed.
             return (null, true);
         }
     }

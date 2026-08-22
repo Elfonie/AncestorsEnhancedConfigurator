@@ -45,14 +45,14 @@ public sealed class CheatViewModelTests
     }
 
     [Fact]
-    public async Task HealClanDelegatesToService()
+    public async Task HealCurrentApeDelegatesToService()
     {
         var service = new FakeCheatService();
         var viewModel = Ready(new CheatViewModel(service));
 
-        await viewModel.HealClanCommand.ExecuteAsync(null);
+        await viewModel.HealCurrentApeCommand.ExecuteAsync(null);
 
-        Assert.Equal(CheatKind.HealClan, service.LastKind);
+        Assert.Equal(CheatKind.HealCurrentApe, service.LastKind);
     }
 
     [Fact]

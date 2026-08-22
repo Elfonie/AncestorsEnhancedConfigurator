@@ -1,10 +1,10 @@
 ﻿using AncestorsEnhanced.Core;
-using Xunit;
 using AncestorsEnhanced.Core.Inspection;
+using Xunit;
 
 namespace AncestorsEnhanced.Core.Tests;
 
-/// <summary>Identity rule for a supported install (F061/F063).</summary>
+/// <summary>Identity rules for a supported installation.</summary>
 public sealed class GameIdentityTests
 {
     private const string OkBuild = AncestorsGameProfile.SupportedSteamBuildId;
@@ -62,7 +62,7 @@ public sealed class GameIdentityTests
     public void ContentSignatureReadErrorIsAlwaysFailClosed()
     {
         // A content-signature read error is never equivalent to "this platform has no
-        // signature" (F063), even when the build ID alone would otherwise match.
+        // signature", even when the build ID alone would otherwise match.
         Assert.False(GameIdentity.IsSupported(StoreKind.Steam, OkBuild, null, contentSignatureReadFailed: true));
         Assert.False(GameIdentity.IsSupported(StoreKind.EpicGames, "epic", OkSignature, contentSignatureReadFailed: true));
     }

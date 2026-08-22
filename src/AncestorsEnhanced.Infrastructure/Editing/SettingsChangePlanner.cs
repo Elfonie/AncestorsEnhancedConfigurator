@@ -72,11 +72,11 @@ internal sealed class SettingsChangePlanner(
         DateTimeOffset createdAt = _utcNow();
         string operationId = $"{createdAt:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}";
         GameInstallationSnapshot installation = snapshot.Installation!;
+        // Record the identity that was actually recognised, never a hard-coded
+        // supported claim.
         return new SettingsChangePlan(
             operationId,
             createdAt,
-            // Record the identity that was actually recognised, never a hard-coded
-            // supported claim (F064).
             installation.BuildId ?? string.Empty,
             userDataDirectory,
             previews,
@@ -197,7 +197,7 @@ internal sealed class SettingsChangePlanner(
         }
 
         // The preview must reflect the bytes we are actually going to change,
-        // never a stale value captured in the earlier scan (F065): decode the
+        // never a stale value captured in the earlier scan: decode the
         // freshly-read System.sav once and derive "before" from it.
         SystemGraphicsSettingsSnapshot currentGraphics = AncestorsSystemSaveCodec.Read(original);
 

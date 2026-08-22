@@ -3,7 +3,7 @@ using Xunit;
 
 namespace AncestorsEnhanced.Core.Tests;
 
-/// <summary>F063 - VerifiedGameContext fingerprint stability/distinctness and Matches() semantics.</summary>
+/// <summary>VerifiedGameContext fingerprint stability, distinctness and matching semantics.</summary>
 public sealed class VerifiedGameContextTests
 {
     [Fact]
@@ -23,7 +23,7 @@ public sealed class VerifiedGameContextTests
         VerifiedGameContext autre = Context("C:\\spiele\\gr\x00f6\x00dfe\\\x00e4x", "C:\\ben\x00fctzer");
 
         // The byte length of the UTF-8 encoding (not the character count) is hashed, so
-        // multi-byte characters must still produce distinct hashes (F063-1a).
+        // multi-byte characters must still produce distinct hashes.
         Assert.NotEqual(ascii.ContextFingerprint, umlaut.ContextFingerprint);
         Assert.NotEqual(umlaut.ContextFingerprint, autre.ContextFingerprint);
     }

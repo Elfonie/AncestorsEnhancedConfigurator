@@ -420,7 +420,9 @@ public sealed class ReadOnlyAncestorsInspectorTests
             inspector.Inspect().Installation);
         Assert.Equal(install, installation.InstallDirectory);
         Assert.Equal(CompatibilityLayerKind.Proton, installation.CompatibilityLayer);
-    }    private sealed class TemporaryDirectory : IDisposable
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
     {
         public TemporaryDirectory()
         {

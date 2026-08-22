@@ -46,17 +46,30 @@ internal static class SettingsBackupStore
             }
         }
 
-        EnforceRetention(GetBackupRoot(plan.UserDataDirectory));
         return directory;
     }
 
     public static string GetManifestPath(string directory) =>
         Path.Combine(directory, ManifestFileName);
 
-    public static void MarkApplied(string directory, DateTimeOffset createdAtUtc) =>
+    public static void MarkApplied(string directory, DateTimeOffset createdAtUtc)
+    {
         WriteBytesAtomically(
             Path.Combine(directory, AppliedMarkerName),
             Encoding.UTF8.GetBytes(createdAtUtc.ToString("O")));
+
+        string backupRoot = Path.GetDirectoryName(directory)
+            ?? throw new InvalidOperationException("The settings backup root is missing.");
+        try
+        {
+            EnforceRetention(backupRoot, directory);
+        }
+        catch (Exception exception) when (IsExpectedStoreException(exception))
+        {
+            // The operation is already committed. Retention is best-effort and must
+            // not turn a successful settings write into a reported failure.
+        }
+    }
 
     public static void MarkReverted(string directory, DateTimeOffset revertedAtUtc) =>
         WriteBytesAtomically(
@@ -92,16 +105,16 @@ internal static class SettingsBackupStore
         }
 
         bool recovered = false;
-        foreach (string directory in Directory.EnumerateDirectories(backupRoot)
-                     .OrderByDescending(path => path, StringComparer.Ordinal))
+        foreach (OperationDirectory operation in EnumerateOperations(backupRoot, newestFirst: true))
         {
+            string directory = operation.Directory;
             if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
             {
                 continue;
             }
 
-            OperationManifest? manifest = ReadManifest(directory);
-            if (manifest is null || !IsCandidateUsable(manifest, context))
+            OperationManifest manifest = operation.Manifest;
+            if (!IsCandidateUsable(manifest, context))
             {
                 continue;
             }
@@ -201,13 +214,13 @@ internal static class SettingsBackupStore
             return null;
         }
 
-        foreach (string directory in Directory.EnumerateDirectories(backupRoot)
-                     .OrderByDescending(path => path, StringComparer.Ordinal))
+        foreach (OperationDirectory operation in EnumerateOperations(backupRoot, newestFirst: true))
         {
+            string directory = operation.Directory;
             try
             {
                 // A reparse point is a security violation: this candidate is skipped
-                // (fail-safe) but does not block older valid candidates (F128).
+                // but does not block older valid candidates.
                 if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
                 {
                     continue;
@@ -220,8 +233,8 @@ internal static class SettingsBackupStore
                     continue;
                 }
 
-                OperationManifest? manifest = ReadManifest(directory);
-                if (manifest is null || !IsCandidateUsable(manifest, context))
+                OperationManifest manifest = operation.Manifest;
+                if (!IsCandidateUsable(manifest, context))
                 {
                     continue;
                 }
@@ -235,7 +248,7 @@ internal static class SettingsBackupStore
                         file.Target);
                     string? expectedBackup = file.Existed ? $"{file.FileName}.before" : null;
                     string backupPath = Path.Combine(directory, expectedBackup ?? string.Empty);
-                    // F127: a candidate is only eligible when its backup content still matches
+                    // A candidate is only eligible when its backup content still matches
                     // the recorded OriginalSha256. A tampered backup is not detected mid-restore;
                     // it makes this candidate ineligible and an older valid one is considered.
                     bool backupOk = !file.Existed ||
@@ -250,7 +263,7 @@ internal static class SettingsBackupStore
                 }
 
                 // A valid but externally-modified newest candidate must not stop the search:
-                // keep looking for an older, still-unchanged operation (F019).
+                // keep looking for an older, still-unchanged operation.
                 bool unchanged = manifest.Files.All(file =>
                 {
                     string path = GetTargetPath(
@@ -274,7 +287,7 @@ internal static class SettingsBackupStore
             }
             catch (Exception exception) when (IsExpectedStoreException(exception))
             {
-                // F128: a broken or unreadable candidate must never prevent older valid
+                // A broken or unreadable candidate must never prevent older valid
                 // candidates from being checked.
                 continue;
             }
@@ -428,7 +441,7 @@ internal static class SettingsBackupStore
             return false;
         }
 
-        // F126: path comparison is platform-specific (OrdinalIgnoreCase on Windows,
+        // Path comparison is platform-specific (OrdinalIgnoreCase on Windows,
         // Ordinal on Linux), never a blanket OrdinalIgnoreCase.
         return string.Equals(
             Path.GetFullPath(first),
@@ -452,27 +465,29 @@ internal static class SettingsBackupStore
         exception is IOException or UnauthorizedAccessException or NotSupportedException or
             System.Text.Json.JsonException or ArgumentException;
 
-    private static void EnforceRetention(string backupRoot)
+    private static void EnforceRetention(string backupRoot, string protectedDirectory)
     {
-        List<string> operations = Directory
-            .EnumerateDirectories(backupRoot)
-            .OrderBy(path => path, StringComparer.Ordinal)
-            .ToList();
+        List<OperationDirectory> operations = EnumerateOperations(backupRoot, newestFirst: false);
         int remaining = operations.Count;
-        foreach (string candidate in operations)
+        foreach (OperationDirectory operation in operations)
         {
             if (remaining <= MaxRetainedOperations)
             {
                 break;
             }
+            string candidate = operation.Directory;
+            if (PathEquals(candidate, protectedDirectory))
+            {
+                continue;
+            }
             try
             {
-                // Never prune directories that are currently applied but not reverted;
-                // the list is ordered oldest first and older applied operations are
-                // still needed for an Undo, so only remove entries that are either
-                // already reverted or were never applied.
-                if (File.Exists(Path.Combine(candidate, RevertedMarkerName)) ||
-                    !File.Exists(Path.Combine(candidate, AppliedMarkerName)))
+                bool pendingUndo = File.Exists(Path.Combine(candidate, RevertPendingMarkerName));
+                bool committedOrTerminal =
+                    File.Exists(Path.Combine(candidate, AppliedMarkerName)) ||
+                    File.Exists(Path.Combine(candidate, RevertedMarkerName)) ||
+                    File.Exists(Path.Combine(candidate, AbortedMarkerName));
+                if (!pendingUndo && committedOrTerminal)
                 {
                     DeleteDirectorySafely(backupRoot, candidate);
                     remaining--;
@@ -483,6 +498,36 @@ internal static class SettingsBackupStore
             {
             }
         }
+    }
+
+    private static List<OperationDirectory> EnumerateOperations(string backupRoot, bool newestFirst)
+    {
+        var operations = new List<OperationDirectory>();
+        foreach (string directory in Directory.EnumerateDirectories(backupRoot))
+        {
+            try
+            {
+                if (File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    continue;
+                }
+                OperationManifest? manifest = ReadManifest(directory);
+                if (manifest is not null)
+                {
+                    operations.Add(new OperationDirectory(directory, manifest));
+                }
+            }
+            catch (Exception exception) when (IsExpectedStoreException(exception))
+            {
+            }
+        }
+
+        IOrderedEnumerable<OperationDirectory> ordered = newestFirst
+            ? operations.OrderByDescending(item => item.Manifest.CreatedAtUtc)
+                .ThenByDescending(item => item.Manifest.OperationId, StringComparer.Ordinal)
+            : operations.OrderBy(item => item.Manifest.CreatedAtUtc)
+                .ThenBy(item => item.Manifest.OperationId, StringComparer.Ordinal);
+        return ordered.ToList();
     }
 
 
@@ -559,6 +604,10 @@ internal sealed record ManifestFile(
     bool ResultExists);
 
 internal sealed record StoredSettingsOperation(
+    string Directory,
+    OperationManifest Manifest);
+
+internal sealed record OperationDirectory(
     string Directory,
     OperationManifest Manifest);
 

@@ -27,7 +27,7 @@ internal sealed class UserDataLocator(
             {
                 // Only accept a user whose Ancestors Saved directory actually exists.
                 // If several wine users own a save, the location is ambiguous and must
-                // not be guessed (F113).
+                // not be guessed.
                 string[] candidates = fileSystem.EnumerateDirectories(users)
                     .Select(path => Path.Combine(path, "AppData", "Local", "Ancestors", "Saved"))
                     .Where(fileSystem.DirectoryExists)

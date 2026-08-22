@@ -8,8 +8,8 @@ using Xunit;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.Editing;
 
-/// <summary>F065 - System.sav preview must come from the freshly-read file, not the stale snapshot.</summary>
-public sealed class F065SystemSavePreviewTests
+/// <summary>System.sav preview must come from the freshly-read file, not the stale snapshot.</summary>
+public sealed class SystemSavePreviewTests
 {
     [Fact]
     public void SystemSavePreviewComesFromTheCurrentFileNotTheStaleSnapshot()

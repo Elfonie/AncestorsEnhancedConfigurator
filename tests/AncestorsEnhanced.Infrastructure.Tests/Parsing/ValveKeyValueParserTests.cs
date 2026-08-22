@@ -30,7 +30,7 @@ public sealed class ValveKeyValueParserTests
     public void ParseRejectsExcessiveNestingDepth()
     {
         // 70 nested objects exceed the 64-level depth limit. Before the depth fix the
-        // recursion did not increment the depth, so this was accepted (F157).
+        // recursion did not increment the depth, so this was accepted.
         const int depth = 70;
         string content = string.Concat(Enumerable.Repeat("\"k\" { ", depth)) +
             new string('}', depth);

@@ -1,8 +1,8 @@
 using System.ComponentModel;
+using AncestorsEnhanced.App.ViewModels;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
-using AncestorsEnhanced.App.ViewModels;
 
 namespace AncestorsEnhanced.App.Views;
 

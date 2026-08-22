@@ -8,7 +8,7 @@ namespace AncestorsEnhanced.Infrastructure.SaveGames;
 /// <summary>
 /// Applies safe, schema-verified value injections to a decompressed lineage save.
 /// Targets are structural <see cref="CheatTargetSpec"/>s resolved by their exact schema
-/// path (F027), so equally named fields owned by other objects are never touched.
+/// path, so equally named fields owned by other objects are never touched.
 /// Nothing is resized, so the tagged-property layout stays valid and the modified bytes
 /// re-encode cleanly. The number of matched nodes must equal the authorised count,
 /// otherwise the injection fails closed.
@@ -38,7 +38,7 @@ public sealed class SaveGameCheatInjector : ISaveGameCheatInjector
 
         // Every production target is required.  A missing target is just as unsafe
         // as a duplicate: accepting either case would publish a partially modified
-        // save whose real schema has not been established (F027).
+        // save whose real schema has not been established.
         foreach (CheatTargetSpec spec in targets)
         {
             int count = actual.TryGetValue(spec, out int found) ? found : 0;

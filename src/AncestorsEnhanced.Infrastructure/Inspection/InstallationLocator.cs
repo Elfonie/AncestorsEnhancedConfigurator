@@ -32,7 +32,7 @@ internal sealed class InstallationLocator
 
         // Deduplicate identical installations reported by more than one store locator
         // (e.g. the same Epic install also listed through Heroic) before choosing one
-        // (F148). The explicit store preference above wins for duplicate paths.
+        // The explicit store preference above wins for duplicate paths.
         List<GameInstallationSnapshot> unique = [];
         var seen = new HashSet<string>(PathComparer);
         foreach (GameInstallationSnapshot candidate in installations)
@@ -56,7 +56,7 @@ internal sealed class InstallationLocator
         {
             // Multiple distinct installations are ambiguous: never pick and write to one
             // of them automatically. Fail closed so the user resolves the conflict
-            // instead of guessing (F037).
+            // instead of guessing.
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "game.multiple-installations",

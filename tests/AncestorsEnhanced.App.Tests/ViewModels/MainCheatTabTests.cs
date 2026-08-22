@@ -9,7 +9,7 @@ namespace AncestorsEnhanced.App.Tests.ViewModels;
 public sealed class MainCheatTabTests
 {
     [Fact]
-    public void CheatTabTogglesIndependentlyOfGraphicsAndSaves()
+    public void CheatTabNavigationIsIndependentOfGraphicsAndSaves()
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),

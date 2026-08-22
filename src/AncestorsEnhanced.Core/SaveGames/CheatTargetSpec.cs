@@ -1,7 +1,7 @@
 ﻿namespace AncestorsEnhanced.Core.SaveGames;
 
 /// <summary>
-/// Structural description of an exact cheat target inside a UE4 save schema (F027).
+/// Structural description of an exact cheat target inside a UE4 save schema.
 /// Targeting by property name alone is not enough: a target is identified by its
 /// unique full schema path, the expected property type and, for arrays, the element
 /// type, whether the value is scalar or an array, the exact intended value and how many

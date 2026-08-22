@@ -3,4 +3,5 @@
 public sealed record SaveGamesSnapshot(
     DateTimeOffset InspectedAtUtc,
     string? UserDataDirectory,
-    IReadOnlyList<SaveGameSlotSnapshot> Slots);
+    IReadOnlyList<SaveGameSlotSnapshot> Slots,
+    string? RecoveryMessage = null);

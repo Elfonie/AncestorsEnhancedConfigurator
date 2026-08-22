@@ -1,6 +1,6 @@
-﻿using AncestorsEnhanced.Infrastructure.SaveGames;
-using AncestorsEnhanced.Infrastructure.SystemSave;
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.SaveGames;
+using AncestorsEnhanced.Infrastructure.SystemSave;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
 
@@ -207,7 +207,10 @@ public sealed class SaveGameWatchdogTests : IDisposable
                 release.Wait(TimeSpan.FromSeconds(5));
             }
             return new SaveGameOperationResult(true, "Checkpoint saved.", $"cp-{call}");
-        }) { Cooldown = TimeSpan.FromDays(1) };
+        })
+        {
+            Cooldown = TimeSpan.FromDays(1),
+        };
 
         watchdog.Start();
         watchdog.BeginSlotMutation(0).Dispose();

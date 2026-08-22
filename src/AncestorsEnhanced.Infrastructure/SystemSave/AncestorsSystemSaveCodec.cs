@@ -132,7 +132,7 @@ internal static class AncestorsSystemSaveCodec
         if (encoded.Length > MaximumOutputSizeBytes)
         {
             // A recompressed System.sav that grows past the supported bound would be a
-            // disproportionate regression (F097); abort instead of writing it.
+            // disproportionate regression; abort instead of writing it.
             throw new InvalidOperationException("The updated System.sav exceeds the supported size and was not written.");
         }
 

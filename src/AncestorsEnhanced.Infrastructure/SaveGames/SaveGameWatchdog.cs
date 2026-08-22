@@ -1,17 +1,17 @@
-using System.Globalization;
 using System.Diagnostics;
+using System.Globalization;
+using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.Editing;
-using AncestorsEnhanced.Core.Inspection;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
 /// <summary>
 /// Watches the savegames directory and creates checkpoints when a slot save changes.
 /// Guarantees at most one queued backup per slot and waits for in-flight backup tasks
-/// when stopped/disposed, so stopping never races a running create (F002). Changes that
+/// when stopped or disposed, so stopping never races a running create. Changes that
 /// arrive while a backup is already queued or in its cooldown are marked dirty and
-/// backed up once afterwards instead of being discarded (I-1).
+/// backed up once afterwards instead of being discarded.
 /// </summary>
 public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 {
@@ -31,7 +31,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     private long _generation;
     private FileSystemWatcher? _watcher;
 
-    /// <summary>Binds to a verified game context; the user-data path comes from the context (F078).</summary>
+    /// <summary>Binds to a verified game context and its user-data path.</summary>
     public SaveGameWatchdog(VerifiedGameContext context, GameContextVerifier verifier)
         : this(context.UserDataDirectory, () => verifier.Verify(context))
     {

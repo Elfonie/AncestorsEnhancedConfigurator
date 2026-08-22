@@ -83,7 +83,7 @@ internal sealed class SteamInstallationLocator(
                 if (!string.IsNullOrWhiteSpace(path))
                 {
                     // Never resolve a relative library path against the process working
-                    // directory; resolve it against the Steam root instead (F115).
+                    // directory; resolve it against the Steam root instead.
                     libraries.Add(Path.GetFullPath(
                         Path.IsPathRooted(path) ? path : Path.Combine(steamRoot, path)));
                 }
@@ -178,11 +178,11 @@ internal sealed class SteamInstallationLocator(
         }
     }
 
+    // Both separators are manifest syntax regardless of the host separator, so
+    // Windows-style paths are rejected on Linux as well.
     private static bool IsSafeSingleDirectoryName(string? value) =>
         !string.IsNullOrWhiteSpace(value) &&
         value is not "." and not ".." &&
-        // Beide Trennzeichen gelten als Manifestsyntax, unabhaengig vom Host-Separator.
-        // So werden Windows-Pfade (mit backslash) auch auf Linux abgewiesen.
         value.IndexOfAny(['/', '\\']) < 0 &&
         value.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
 

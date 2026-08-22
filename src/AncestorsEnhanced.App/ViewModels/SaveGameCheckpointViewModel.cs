@@ -128,6 +128,8 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         "AutoBackup" => "Auto-backup",
         "PreRestore" => "Before restore",
         "Cheat:HealClan" => "Heal Current Ape cheat",
+        "Cheat:HealCurrentApe" => "Heal Current Ape cheat",
+        "Cheat:Heal Current Ape" => "Heal Current Ape cheat",
         string s when s.StartsWith("Cheat:", StringComparison.Ordinal) => s["Cheat:".Length..] + " cheat",
         _ => origin,
     };

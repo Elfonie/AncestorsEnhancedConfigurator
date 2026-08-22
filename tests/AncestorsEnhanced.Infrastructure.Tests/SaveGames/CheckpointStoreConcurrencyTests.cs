@@ -5,8 +5,8 @@ using Xunit;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.SaveGames;
 
-/// <summary>F009 - concurrent checkpoint store mutations must be serialized and never corrupt the store.</summary>
-public sealed class F009CheckpointStoreConcurrencyTests
+/// <summary>Concurrent checkpoint store mutations must be serialized and never corrupt the store.</summary>
+public sealed class CheckpointStoreConcurrencyTests
 {
     [Fact]
     public async Task ParallelCheckpointCreatesNeverCorruptTheStore()
@@ -27,7 +27,7 @@ public sealed class F009CheckpointStoreConcurrencyTests
                 Enumerable.Range(0, parallelCreates)
                     .Select(_ => Task.Run(() => manager.CreateCheckpoint("0"))));
 
-            // All creates are serialized by the global mutation gate (F001/F009), so the
+            // All creates are serialized by the global mutation gate, so the
             // total checkpoint count matches the successes and every checkpoint is valid.
             Assert.All(results, result => Assert.True(result.Succeeded, result.Message));
 

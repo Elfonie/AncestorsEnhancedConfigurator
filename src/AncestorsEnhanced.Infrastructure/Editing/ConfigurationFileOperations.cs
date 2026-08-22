@@ -224,7 +224,7 @@ internal static class ConfigurationFileOperations
     /// from. For a file that existed, <paramref name="expectedSha256"/> must equal the
     /// hash of the current bytes; for a file that did not exist, the path must still be
     /// absent. On any mismatch the write is aborted and the target is left untouched,
-    /// closing the lost-update / data-TOCTOU window (F066, F067, F074).
+    /// closing the lost-update and data-TOCTOU window.
     /// </summary>
     public static void CompareAndReplace(
         string path,
@@ -300,7 +300,7 @@ internal static class ConfigurationFileOperations
     /// <summary>
     /// Compare-and-swap delete: removes <paramref name="path"/> only if its current
     /// bytes still match <paramref name="expectedSha256"/>. On any mismatch the target
-    /// is left untouched so a plan can never delete bytes it did not see (F066/F067).
+    /// is left untouched so a plan can never delete bytes it did not see.
     /// </summary>
     public static void CompareAndDelete(string path, string expectedSha256)
     {
@@ -349,7 +349,7 @@ internal static class ConfigurationFileOperations
     /// Reads a file as one stable version. <paramref name="maxSizeBytes"/> (when &gt; 0)
     /// bounds the accepted size; a larger file is rejected. If the length or last-write
     /// time changes while the file is being read, the read is retried a bounded number
-    /// of times and then aborted rather than returning a torn/inconsistent version (F016).
+    /// of times and then aborted rather than returning a torn or inconsistent version.
     /// </summary>
     public static byte[] ReadStableBounded(string path, long maxSizeBytes = 0)
     {
