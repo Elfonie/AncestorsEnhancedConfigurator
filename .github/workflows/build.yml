@@ -61,7 +61,22 @@ jobs:
           }
 
       - name: Publish
-        run: dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -c Release -r ${{ matrix.rid }} --no-restore -p:PublishSingleFile=true -p:SelfContained=true -o artifacts/${{ matrix.rid }}
+        run: dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -c Release -r ${{ matrix.rid }} --no-restore -p:PublishSingleFile=true -p:SelfContained=true -p:DebugType=None -p:DebugSymbols=false -o artifacts/${{ matrix.rid }}
+
+      - name: Prepare portable package
+        shell: pwsh
+        run: |
+          $package = Resolve-Path "artifacts/${{ matrix.rid }}"
+          Get-ChildItem -LiteralPath $package -Filter '*.pdb' -File -Recurse |
+            Remove-Item -Force
+          Copy-Item -LiteralPath README.md, LICENSE -Destination $package
+          Get-ChildItem -LiteralPath $package -File -Recurse |
+            Sort-Object FullName |
+            ForEach-Object {
+              $relative = $_.FullName.Substring($package.Path.Length + 1).Replace('\', '/')
+              "$(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName | Select-Object -ExpandProperty Hash)  $relative"
+            } |
+            Set-Content -Encoding ascii (Join-Path $package 'SHA256SUMS.txt')
 
       - name: Smoke test Windows artifact
         if: runner.os == 'Windows'
@@ -81,17 +96,51 @@ jobs:
           output="$(./artifacts/linux-x64/AncestorsEnhanced.App --version)"
           test "$output" = "Ancestors Enhanced Configurator 0.9.0"
 
-      - name: Create checksums
+      - name: Create Windows archive
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Get-ChildItem -File -Recurse "artifacts/${{ matrix.rid }}" |
-            Sort-Object FullName |
-            ForEach-Object { "$(Get-FileHash -Algorithm SHA256 $_.FullName | Select-Object -ExpandProperty Hash)  $($_.FullName.Substring((Resolve-Path "artifacts/${{ matrix.rid }}").Path.Length + 1).Replace('\','/'))" } |
-            Set-Content -Encoding ascii "artifacts/${{ matrix.rid }}/SHA256SUMS.txt"
+          $archive = 'artifacts/AncestorsEnhanced-0.9.0-win-x64.zip'
+          Compress-Archive -Path 'artifacts/win-x64/*' -DestinationPath $archive
+          "$(Get-FileHash -Algorithm SHA256 -LiteralPath $archive | Select-Object -ExpandProperty Hash)  $(Split-Path -Leaf $archive)" |
+            Set-Content -Encoding ascii "$archive.sha256"
+
+      - name: Create Linux archive
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          archive="AncestorsEnhanced-0.9.0-linux-x64.zip"
+          (cd artifacts/linux-x64 && zip -q -r "../$archive" .)
+          (cd artifacts && sha256sum "$archive" > "$archive.sha256")
+
+      - name: Verify Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP 'ancestors-package'
+          Expand-Archive -LiteralPath artifacts/AncestorsEnhanced-0.9.0-win-x64.zip -DestinationPath $destination
+          if (Get-ChildItem -LiteralPath $destination -Filter '*.pdb' -File -Recurse) { throw 'Windows archive contains debug symbols.' }
+          $stdout = Join-Path $env:RUNNER_TEMP 'ancestors-package-version.txt'
+          $process = Start-Process (Join-Path $destination 'AncestorsEnhanced.App.exe') -ArgumentList '--version' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout
+          $output = (Get-Content -Raw $stdout).Trim()
+          if ($process.ExitCode -ne 0 -or $output -ne 'Ancestors Enhanced Configurator 0.9.0') { throw "Windows archive smoke test failed: $output" }
+
+      - name: Verify Linux archive
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          destination="$RUNNER_TEMP/ancestors-package"
+          unzip -q artifacts/AncestorsEnhanced-0.9.0-linux-x64.zip -d "$destination"
+          test -x "$destination/AncestorsEnhanced.App"
+          test -z "$(find "$destination" -name '*.pdb' -print -quit)"
+          output="$("$destination/AncestorsEnhanced.App" --version)"
+          test "$output" = "Ancestors Enhanced Configurator 0.9.0"
 
       - name: Upload publish artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: AncestorsEnhanced-${{ matrix.rid }}
-          path: artifacts/${{ matrix.rid }}
+          path: |
+            artifacts/AncestorsEnhanced-0.9.0-${{ matrix.rid }}.zip
+            artifacts/AncestorsEnhanced-0.9.0-${{ matrix.rid }}.zip.sha256
           if-no-files-found: error

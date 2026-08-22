@@ -1,4 +1,4 @@
-﻿using System.Runtime.Versioning;
+using System.Runtime.Versioning;
 using System.Security;
 using AncestorsEnhanced.Core.Inspection;
 using Microsoft.Win32;

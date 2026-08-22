@@ -113,11 +113,15 @@ internal static class AncestorsScalabilityPresetCatalog
         };
 
     public static bool TryGet(
-        string? buildId,
+        GameInstallationSnapshot? installation,
         string key,
         out ScalabilityPresetValues presetValues)
     {
-        if (!string.Equals(buildId, SupportedBuildId, StringComparison.Ordinal))
+        if (installation is null || !GameIdentity.IsSupported(
+                installation.Store,
+                installation.BuildId,
+                installation.ContentSignature,
+                installation.ContentSignatureReadFailed))
         {
             presetValues = null!;
             return false;

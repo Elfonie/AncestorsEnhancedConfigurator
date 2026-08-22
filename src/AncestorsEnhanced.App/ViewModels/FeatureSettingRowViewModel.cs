@@ -19,13 +19,19 @@ public sealed record FeatureSettingRowViewModel(
 
     public bool HasPresetValues => PresetValues.Count > 0;
 
+    public bool HasInspectionFailure => string.Equals(Value, "Not verified", StringComparison.Ordinal);
+
     public string ValueLabel => Editor?.HasCurrentOverride == true
         ? "Custom override"
         : ActivePresetName is not null
             ? $"{ActivePresetName} game preset"
             : HasPresetValues
                 ? "Game preset value unknown"
-                : "Game default";
+                : HasInspectionFailure
+                    ? "Inspection status"
+                    : "Game default";
+
+    public string ReadOnlyLabel => HasInspectionFailure ? Source : "Read only";
 
     public string PresetExplanation => ActivePresetName is null
         ? "The game selects one of these values, but its active preset could not be read safely."

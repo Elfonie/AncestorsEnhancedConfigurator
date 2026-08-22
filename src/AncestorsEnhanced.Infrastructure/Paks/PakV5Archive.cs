@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -237,17 +237,14 @@ internal static class PakV5Archive
 
     private static void ValidateBlockLayout(PakEntry entry, long indexOffset)
     {
-        long previousEnd = -1;
+        long headerSize = checked(57L + (entry.Blocks.Count * 16L));
+        long payloadEnd = CheckedAdd(headerSize, entry.Size, "compressed PAK entry");
+        long previousEnd = headerSize;
         foreach (PakBlock block in entry.Blocks)
         {
-            if (block.Start < 0 || block.End < block.Start)
+            if (block.Start != previousEnd || block.End < block.Start || block.End > payloadEnd)
             {
-                throw new InvalidDataException("A PAK compression block is invalid.");
-            }
-
-            if (entry.Size >= 0 && block.End > entry.Size)
-            {
-                throw new InvalidDataException("A PAK compression block lies outside the entry area.");
+                throw new InvalidDataException("The PAK compression block layout is invalid.");
             }
             long absoluteEnd = CheckedAdd(entry.Offset, block.End, "PAK compression block");
             if (absoluteEnd > indexOffset)
@@ -255,20 +252,12 @@ internal static class PakV5Archive
                 throw new InvalidDataException("A PAK compression block overlaps the index or footer.");
             }
 
-            // Ends are exclusive (block length is End - Start), so directly adjacent
-            // blocks (block.Start == previousEnd) are legal; only a real byte overlap
-            // is rejected.
-            if (block.Start < previousEnd)
-            {
-                throw new InvalidDataException("PAK compression blocks must not overlap.");
-            }
-
             previousEnd = block.End;
         }
 
-        if (entry.Blocks.Count > 0 && previousEnd > entry.Size)
+        if (previousEnd != payloadEnd)
         {
-            throw new InvalidDataException("PAK compression blocks exceed the compressed entry size.");
+            throw new InvalidDataException("The PAK compression blocks do not cover the declared payload.");
         }
     }
 

@@ -147,6 +147,26 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void FailedInspectionDoesNotClaimTheGameDefault()
+    {
+        var row = new FeatureSettingRowViewModel(
+            "Environmental vignette",
+            "Not verified",
+            "Description",
+            "Unsupported game asset",
+            "Vignette asset",
+            "#D6BC84",
+            true,
+            true,
+            [],
+            null,
+            null);
+
+        Assert.Equal("Inspection status", row.ValueLabel);
+        Assert.Equal("Unsupported game asset", row.ReadOnlyLabel);
+    }
+
+    [Fact]
     public async Task ReturningFromReviewInvalidatesThePlanButKeepsDraftValues()
     {
         var editor = new RecordingEditor();

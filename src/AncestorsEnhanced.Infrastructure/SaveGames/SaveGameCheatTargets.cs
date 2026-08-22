@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Core.SaveGames;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;
 

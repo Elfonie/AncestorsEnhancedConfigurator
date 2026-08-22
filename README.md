@@ -1,8 +1,6 @@
 # Ancestors Enhanced Configurator
 
-A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It can adjust verified graphics settings, manage local save checkpoints, and provide a small set of optional quality-of-life tweaks. No installation or separate .NET runtime is required for the release packages.
-
-> **Release status:** `0.9.0` is the upcoming release. Until its release package is published, use the source code only if you are comfortable building it yourself.
+A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It can adjust verified graphics settings, manage local save checkpoints, and create a small set of experimental save modifications. No installation or separate .NET runtime is required for the release packages.
 
 ## What it does
 
@@ -10,20 +8,20 @@ A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It can
   - Simple and advanced graphics controls
   - System.sav controls for resolution, brightness, frame-rate limit, and quality categories
   - Vignette, startup-video, and supported UE4 renderer overrides
-  - Review before write, backups, Undo, and Restore game defaults
-  - Remove tool changes returns only unchanged files managed by the Configurator to their captured pre-change state
+  - Review before write, backups, Undo, and Clear my custom overrides
+  - Remove tool changes restores verified tool-owned files to their recorded pre-tool state
 - **Save checkpoints**
   - Create and restore checkpoints for the five Ancestors save slots
   - Up to 50 retained checkpoints per slot
   - Optional automatic checkpoints when the game saves
-- **Optional tweaks**
-  - Experimental: Max Neuronal Energy, Max Needs, and Heal Current Ape create a separate checkpoint first; keep your own save backup and verify the result in-game
+- **Experimental save modifications**
+  - Max Neuronal Energy, Max Stamina and Energy, and Heal Current Ape create a separate modified checkpoint; keep your own save backup and verify the result in-game
 
 ## Compatibility
 
-The tool searches for installations from Steam, Epic Games, GOG, and Heroic. Steam on Windows and Steam through Proton on Linux are supported detection paths; Epic and GOG are supported on Windows.
+The tool searches for installations from Steam, Epic Games, GOG, and Heroic. Steam on Windows and Steam through Proton on Linux are supported. Epic and GOG are supported on Windows when the installed content signature is verified.
 
-Finding an installation is not the same as authorising an edit. Before a setting is written, the tool verifies the game build, installation context, and target file. If that verification is incomplete or contradictory, editing is disabled instead of guessing. Heroic detection is included, but should be treated as a compatibility path that still needs real-world testing.
+Finding an installation is not the same as authorising an edit. Before a setting is written, the tool verifies the game build, installation context, and target file. If that verification is incomplete or contradictory, editing is disabled instead of guessing. Heroic is detection-only in 0.9.0: Heroic installations are shown, but remain read-only because their store identity is not yet verified.
 
 ## Before you use it
 
@@ -53,7 +51,7 @@ Steam Cloud can report a conflict after a checkpoint restore or a savegame cheat
 
 ## Download and run
 
-When 0.9.0 is published, download the matching archive from [GitHub Releases](https://github.com/Elfonie/AncestorsEnhancedConfigurator/releases).
+Download the matching 0.9.0 archive from [GitHub Releases](https://github.com/Elfonie/AncestorsEnhancedConfigurator/releases).
 
 | Platform | Archive | Start |
 | --- | --- | --- |
@@ -83,10 +81,10 @@ dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -p:Publish
 dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -p:PublishProfile=linux-x64
 ```
 
-The publish profiles create self-contained, single-file builds in `src/AncestorsEnhanced.App/bin/Release/net10.0/{win-x64,linux-x64}/publish/`. Create the release archives and checksums from those exact outputs.
+The publish profiles create self-contained, single-file builds in `src/AncestorsEnhanced.App/bin/Release/net10.0/{win-x64,linux-x64}/publish/`. The GitHub Actions build packages the matching portable ZIPs, includes checksums, and smoke-tests the extracted executable on its target operating system.
 
 ## Project status
 
-Automated builds and tests run on Windows and Ubuntu. They verify code paths and file safety rules; they do not replace testing the released application with a real Ancestors installation, Proton/Heroic setup, or real savegame cheats.
+Automated builds and tests run on Windows and Ubuntu. They verify code paths and file safety rules; they do not replace testing the released application with a real Ancestors installation, a Proton setup, or real savegame modifications. Heroic editing is intentionally not enabled in 0.9.0.
 
 Ancestors Enhanced Configurator is an unofficial community project. It is not affiliated with Panache Digital Games or Private Division.

@@ -1,4 +1,4 @@
-﻿namespace AncestorsEnhanced.Core.SaveGames;
+namespace AncestorsEnhanced.Core.SaveGames;
 
 public interface ISaveGameWatchdog
 {

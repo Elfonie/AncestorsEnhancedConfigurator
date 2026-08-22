@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="AncestorsEnhanced.App.Views.AlreadyRunningWindow"
+        Width="440"
+        Height="180"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Icon="/Assets/aec-icon.ico"
+        Title="Ancestors Enhanced Configurator">
+  <Border Padding="24"
+          Background="{DynamicResource AppBackgroundBrush}">
+    <Grid RowDefinitions="*,Auto" RowSpacing="18">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Ancestors Enhanced Configurator is already open"
+                   FontSize="17"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource PrimaryTextBrush}"
+                   TextWrapping="Wrap" />
+        <TextBlock Text="Return to the existing window to continue."
+                   Foreground="#9CB0BC"
+                   TextWrapping="Wrap" />
+      </StackPanel>
+      <Button Grid.Row="1"
+              Classes="PrimaryAction"
+              HorizontalAlignment="Right"
+              Content="Close"
+              Click="CloseClicked" />
+    </Grid>
+  </Border>
+</Window>

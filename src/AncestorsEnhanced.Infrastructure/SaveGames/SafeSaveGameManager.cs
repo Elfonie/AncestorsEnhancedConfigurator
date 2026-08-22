@@ -218,6 +218,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
 
     private SaveGameOperationResult ExecuteLoadCheckpoint(int slot, string checkpointId)
     {
+        string? safetyCheckpointId = null;
         try
         {
             SaveGameOperationResult? revalidateFailure = RevalidateFailure("the checkpoint cannot be loaded safely");
@@ -243,7 +244,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                         true,
                         $"Slot {slot + 1} already matches this checkpoint; no save file was changed.");
                 }
-                _store.Create(_userDataDirectory, slot, current, "PreRestore");
+                safetyCheckpointId = _store.Create(_userDataDirectory, slot, current, "PreRestore");
             }
 
             // The atomic replace is the commit point. After it, the save has already
@@ -255,7 +256,11 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             _beforeRestoreCommit?.Invoke();
             if (_isGameRunning())
             {
-                return Failure("Close Ancestors before loading a save checkpoint.");
+                const string message =
+                    "Ancestors started before the restore could be committed. The live save was not changed.";
+                return safetyCheckpointId is null
+                    ? Failure(message)
+                    : FailureAfterSafetyCheckpoint(message, safetyCheckpointId);
             }
 
             SaveRestoreOperation restore = SaveRestoreJournalStore.Prepare(
@@ -295,7 +300,11 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {
-            return Failure($"Nothing was loaded: {exception.Message}");
+            return safetyCheckpointId is null
+                ? Failure($"Nothing was loaded: {exception.Message}")
+                : FailureAfterSafetyCheckpoint(
+                    $"Nothing was loaded: {exception.Message}",
+                    safetyCheckpointId);
         }
     }
 
@@ -376,6 +385,14 @@ public sealed class SafeSaveGameManager : ISaveGameManager
 
     private static SaveGameOperationResult Failure(string message) =>
         new(false, message);
+
+    private static SaveGameOperationResult FailureAfterSafetyCheckpoint(
+        string message,
+        string safetyCheckpointId) => new(
+            false,
+            $"{message} A safety checkpoint was created and is shown in the list.",
+            safetyCheckpointId,
+            SaveOperationCommitState.CommittedWithWarning);
 
     private static bool IsIdentical(byte[] first, byte[] second)
     {

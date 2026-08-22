@@ -1,4 +1,4 @@
-﻿namespace AncestorsEnhanced.Core.SaveGames;
+namespace AncestorsEnhanced.Core.SaveGames;
 
 public sealed record SaveGameSlotSnapshot(
     string SlotNumber,

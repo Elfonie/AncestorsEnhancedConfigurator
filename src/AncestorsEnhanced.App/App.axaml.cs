@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.App.ViewModels;
+using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.App.Views;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Inspection;
@@ -20,6 +20,13 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            if (desktop.Args?.Contains("--already-running", StringComparer.Ordinal) == true)
+            {
+                desktop.MainWindow = new AlreadyRunningWindow();
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
             var viewModel = new MainViewModel(
                 ReadOnlyAncestorsInspector.CreateDefault(),
                 new SafeGameSettingsEditor());

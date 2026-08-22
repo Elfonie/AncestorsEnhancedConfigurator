@@ -224,6 +224,21 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
+    public async Task FailedOperationWithSafetyCheckpointRefreshesAndUsesWarningAccent()
+    {
+        var manager = new SafetyCheckpointWarningManager();
+        var viewModel = new SaveManagerViewModel(manager, "user-data", watchdog: null);
+
+        SaveGameOperationResult result = await viewModel.RunLoad("0", "checkpoint");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(SaveOperationCommitState.CommittedWithWarning, result.CommitState);
+        Assert.Equal(1, manager.InspectCount);
+        Assert.Equal("Restore stopped; safety checkpoint created.", viewModel.StatusMessage);
+        Assert.Equal("#D6BC84", viewModel.StatusAccent);
+    }
+
+    [Fact]
     public void RefreshPreservesExpandedCheckpointsAndDisablesRestoreWhileGameRuns()
     {
         SaveGameCheckpoint[] checkpoints = Enumerable.Range(1, 3)
@@ -513,6 +528,29 @@ public sealed class SaveManagerViewModelTests
             new(false, "not used");
     }
 
+    private sealed class SafetyCheckpointWarningManager : ISaveGameManager
+    {
+        public int InspectCount { get; private set; }
+
+        public SaveGamesSnapshot Inspect()
+        {
+            InspectCount++;
+            return new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots());
+        }
+
+        public SaveGameOperationResult CreateCheckpoint(string slotNumber, string origin = "Manual") =>
+            new(false, "not used");
+
+        public SaveGameOperationResult LoadCheckpoint(string slotNumber, string checkpointId) => new(
+            false,
+            "Restore stopped; safety checkpoint created.",
+            "safety-checkpoint",
+            SaveOperationCommitState.CommittedWithWarning);
+
+        public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
+            new(false, "not used");
+    }
+
     [Fact]
     public void CooldownClampsNegativeAndExtremeValues()
     {
@@ -550,14 +588,77 @@ public sealed class SaveManagerViewModelTests
 
             Assert.Empty(Directory.EnumerateFiles(userData, "*.tmp"));
             string settingsPath = Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json");
-            if (File.Exists(settingsPath))
-            {
-                using System.Text.Json.JsonDocument _ = System.Text.Json.JsonDocument.Parse(
-                    File.ReadAllBytes(settingsPath));
-            }
+            Assert.True(File.Exists(settingsPath));
+            ToolSettings settings = System.Text.Json.JsonSerializer.Deserialize<ToolSettings>(
+                File.ReadAllBytes(settingsPath))!;
+            Assert.Equal(10, settings.WatchdogIntervalMinutes);
         }
         finally
         {
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void NullToolSettingsAreReportedAndPreserved()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        string settingsPath = Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json");
+        File.WriteAllText(settingsPath, "null");
+        try
+        {
+            using var viewModel = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog: null);
+
+            Assert.True(viewModel.HasToolSettingsWarning);
+            Assert.False(viewModel.CanConfigureAutoBackup);
+            Assert.Equal("null", File.ReadAllText(settingsPath));
+        }
+        finally
+        {
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MalformedToolSettingsArePreservedUntilExplicitReset()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        string settingsPath = Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json");
+        const string InvalidSettings = "{ definitely not valid json";
+        File.WriteAllText(settingsPath, InvalidSettings);
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+            userData,
+            watchdog: null);
+        try
+        {
+            Assert.True(viewModel.HasToolSettingsWarning);
+            Assert.False(viewModel.CanConfigureAutoBackup);
+            Assert.True(viewModel.CanResetToolSettings);
+            Assert.Equal(InvalidSettings, File.ReadAllText(settingsPath));
+
+            viewModel.ResetToolSettingsCommand.Execute(null);
+            await WaitUntilAsync(
+                () => File.Exists(settingsPath) && !viewModel.HasToolSettingsWarning,
+                TimeSpan.FromSeconds(5),
+                "Reset tool settings were not persisted.");
+
+            string archived = Assert.Single(Directory.EnumerateFiles(
+                userData,
+                "AncestorsEnhanced_ToolSettings.json.invalid-*.bak"));
+            Assert.Equal(InvalidSettings, File.ReadAllText(archived));
+            using System.Text.Json.JsonDocument _ = System.Text.Json.JsonDocument.Parse(
+                File.ReadAllBytes(settingsPath));
+            Assert.True(viewModel.CanConfigureAutoBackup);
+        }
+        finally
+        {
+            viewModel.Dispose();
             Directory.Delete(userData, recursive: true);
         }
     }

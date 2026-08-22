@@ -31,7 +31,8 @@ sealed class Program
             "AncestorsEnhancedConfigurator");
         if (!singleInstance.IsAcquired)
         {
-            AppDiagnostics.Logger?.Write("Second instance detected; shutting down.");
+            AppDiagnostics.Logger?.Write("Second instance detected; showing a notice.");
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(["--already-running"]);
             return;
         }
 

@@ -1,4 +1,4 @@
-﻿namespace AncestorsEnhanced.Core.SaveGames;
+namespace AncestorsEnhanced.Core.SaveGames;
 
 /// <summary>
 /// Structural description of an exact cheat target inside a UE4 save schema.

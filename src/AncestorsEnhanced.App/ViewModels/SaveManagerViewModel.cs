@@ -20,6 +20,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private int _watchdogRefreshVersion;
     private int _settingsVersion;
     private bool _disposed;
+    private string? _toolSettingsWarning;
 
     private const string ToolSettingsFileName = "AncestorsEnhanced_ToolSettings.json";
     private static readonly System.Text.Json.JsonSerializerOptions JsonSettings =
@@ -123,7 +124,25 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public bool CanMutate => !IsBusy && !(_mutationGate?.IsBusy ?? false);
 
-    public bool CanConfigureAutoBackup => CanMutate;
+    public string? ToolSettingsWarning
+    {
+        get => _toolSettingsWarning;
+        private set
+        {
+            if (SetProperty(ref _toolSettingsWarning, value))
+            {
+                OnPropertyChanged(nameof(HasToolSettingsWarning));
+                OnPropertyChanged(nameof(CanConfigureAutoBackup));
+                OnPropertyChanged(nameof(CanResetToolSettings));
+            }
+        }
+    }
+
+    public bool HasToolSettingsWarning => !string.IsNullOrWhiteSpace(ToolSettingsWarning);
+
+    public bool CanConfigureAutoBackup => CanMutate && !HasToolSettingsWarning;
+
+    public bool CanResetToolSettings => CanMutate && HasToolSettingsWarning;
 
     /// <summary>Starts persisted watchdog settings only after the owner has loaded slots.</summary>
     public void Activate()
@@ -243,7 +262,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 return new SaveGameOperationResult(false, $"Operation failed: {exception.Message}");
             }
 
-            if (result.Succeeded)
+            if (result.Succeeded || result.CommitState != SaveOperationCommitState.NotCommitted)
             {
                 try
                 {
@@ -251,7 +270,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                     SaveGamesSnapshot snapshot = await Task.Run(_manager.Inspect);
                     Refresh(snapshot);
                     StatusMessage = result.Message;
-                    StatusAccent = result.CommitState == SaveOperationCommitState.CommittedWithWarning
+                    StatusAccent = !result.Succeeded ||
+                                   result.CommitState == SaveOperationCommitState.CommittedWithWarning
                         ? "#D6BC84"
                         : "#B4D941";
                 }
@@ -422,6 +442,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 JsonSettings);
             if (settings is null)
             {
+                ToolSettingsWarning =
+                    "Auto-backup settings contain no usable data. Safe defaults are active and the existing settings file was preserved.";
                 return;
             }
 
@@ -439,6 +461,62 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         catch (Exception exception) when (
             exception is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
         {
+            ToolSettingsWarning =
+                "Auto-backup settings could not be read. Safe defaults are active and the existing settings file was preserved. " +
+                exception.Message;
+        }
+    }
+
+    [RelayCommand]
+    private void ResetToolSettings()
+    {
+        if (!CanResetToolSettings)
+        {
+            return;
+        }
+
+        using IDisposable? mutation = _mutationGate?.TryEnter();
+        if (_mutationGate is not null && mutation is null)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        NotifyState();
+        try
+        {
+            string path = ToolSettingsPath();
+            string archivedName = Path.GetFileName(path) +
+                $".invalid-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}.bak";
+            string archivedPath = Path.Combine(Path.GetDirectoryName(path)!, archivedName);
+            File.Move(path, archivedPath);
+
+            _loadingSettings = true;
+            try
+            {
+                IsWatchdogEnabled = false;
+                CooldownMinutes = 5;
+            }
+            finally
+            {
+                _loadingSettings = false;
+            }
+
+            ToolSettingsWarning = null;
+            SaveSettings();
+            StatusMessage = $"Auto-backup settings were reset. The unreadable file was kept as {archivedName}.";
+            StatusAccent = "#B4D941";
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            StatusMessage = "Auto-backup settings could not be reset: " + exception.Message;
+            StatusAccent = "#E04D42";
+        }
+        finally
+        {
+            IsBusy = false;
+            NotifyState();
         }
     }
 
@@ -477,7 +555,6 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            _lifetimeCancellation.Token.ThrowIfCancellationRequested();
             // A delayed older item must never overwrite a newer snapshot. The tail
             // task represents the complete queue, so Dispose always waits for every
             // item rather than only the most recently started task.
@@ -503,9 +580,6 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 {
                 }
             }
-        }
-        catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
-        {
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -548,6 +622,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanCreate));
         OnPropertyChanged(nameof(CanMutate));
         OnPropertyChanged(nameof(CanConfigureAutoBackup));
+        OnPropertyChanged(nameof(CanResetToolSettings));
         foreach (SaveGameSlotViewModel slot in Slots)
         {
             slot.RefreshMutationAvailability();
@@ -607,6 +682,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanCreate));
         OnPropertyChanged(nameof(CanMutate));
         OnPropertyChanged(nameof(CanConfigureAutoBackup));
+        OnPropertyChanged(nameof(CanResetToolSettings));
     }
 
     private static bool IsExpectedException(Exception exception) =>

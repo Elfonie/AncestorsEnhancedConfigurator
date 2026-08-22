@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using AncestorsEnhanced.Core;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.SaveGames;
@@ -1061,16 +1062,28 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             StoreKind.EpicGames => "Epic Games",
             StoreKind.Gog => "GOG",
+            StoreKind.Heroic => "Heroic",
             _ => installation.Store.ToString(),
         };
         string layer = installation.CompatibilityLayer == CompatibilityLayerKind.Proton
             ? "  Proton"
             : string.Empty;
-        string identity = installation.BuildId is not null
-            ? "Build " + installation.BuildId
-            : installation.ContentSignature is not null
-                ? "Recognized PAK index signature"
-                : "Build unknown";
+        string identity = installation.Store switch
+        {
+            StoreKind.EpicGames or StoreKind.Gog when installation.ContentSignatureReadFailed =>
+                "Content signature could not be read",
+            StoreKind.EpicGames or StoreKind.Gog when string.Equals(
+                installation.ContentSignature,
+                AncestorsGameProfile.SupportedContentSignature,
+                StringComparison.Ordinal) => "Content signature verified",
+            StoreKind.EpicGames or StoreKind.Gog when installation.ContentSignature is not null =>
+                "Content signature not recognized",
+            StoreKind.EpicGames or StoreKind.Gog => "Content signature unavailable",
+            StoreKind.Heroic => "Detection only · store identity unverified",
+            StoreKind.Steam when installation.BuildId is not null => "Steam build " + installation.BuildId,
+            _ when installation.ContentSignature is not null => "Recognized PAK index signature",
+            _ => "Build unknown",
+        };
         return $"{store}  {installation.Host}{layer}  {identity}";
     }
 

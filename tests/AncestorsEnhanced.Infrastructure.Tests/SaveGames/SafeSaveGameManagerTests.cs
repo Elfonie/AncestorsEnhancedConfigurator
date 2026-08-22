@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;
@@ -348,9 +348,43 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         SaveGameOperationResult result = manager.LoadCheckpoint("0", checkpointId);
 
         Assert.False(result.Succeeded);
+        Assert.Equal(SaveOperationCommitState.CommittedWithWarning, result.CommitState);
+        Assert.NotNull(result.CreatedCheckpointId);
         Assert.Contains("changed after", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("safety checkpoint", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(foreignContent, File.ReadAllBytes(slotPath));
         Assert.False(File.Exists(RestoreJournalPath(userData, 0)));
+    }
+
+    [Fact]
+    public void LoadReportsSafetyCheckpointWhenGameStartsBeforeCommit()
+    {
+        byte[] checkpointContent = TestSaveFactory.Create(1, 2, 3);
+        byte[] liveContent = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, checkpointContent);
+        string checkpointId = CreateManager(userData, gameRunning: false)
+            .CreateCheckpoint("0").CreatedCheckpointId!;
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, liveContent);
+        bool gameRunning = false;
+        var manager = new SafeSaveGameManager(
+            userData,
+            () => DateTimeOffset.UtcNow,
+            () => gameRunning,
+            new SaveGameManagerOptions(),
+            beforeRestoreCommit: () => gameRunning = true);
+
+        SaveGameOperationResult result = manager.LoadCheckpoint("0", checkpointId);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(SaveOperationCommitState.CommittedWithWarning, result.CommitState);
+        Assert.NotNull(result.CreatedCheckpointId);
+        Assert.Contains("live save was not changed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(liveContent, File.ReadAllBytes(slotPath));
+        SaveGameSlotSnapshot slot = CreateManager(userData, gameRunning: false)
+            .Inspect().Slots.Single(item => item.SlotNumber == "0");
+        Assert.Contains(slot.Checkpoints, checkpoint =>
+            checkpoint.Id == result.CreatedCheckpointId && checkpoint.Origin == "PreRestore");
     }
 
     [Fact]

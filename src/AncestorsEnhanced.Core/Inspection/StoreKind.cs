@@ -6,5 +6,6 @@ public enum StoreKind
     Steam,
     EpicGames,
     Gog,
+    Heroic,
     Manual,
 }

@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.SaveGames;
 using AncestorsEnhanced.Infrastructure.SystemSave;
 

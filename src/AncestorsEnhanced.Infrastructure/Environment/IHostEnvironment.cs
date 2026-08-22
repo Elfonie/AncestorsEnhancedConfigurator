@@ -1,4 +1,4 @@
-﻿namespace AncestorsEnhanced.Infrastructure.Environment;
+namespace AncestorsEnhanced.Infrastructure.Environment;
 
 using AncestorsEnhanced.Core.Inspection;
 

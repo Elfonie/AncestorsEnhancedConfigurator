@@ -1,4 +1,4 @@
-﻿namespace AncestorsEnhanced.Core;
+namespace AncestorsEnhanced.Core;
 
 /// <summary>
 /// Store-aware identity rule for a supported Ancestors installation.

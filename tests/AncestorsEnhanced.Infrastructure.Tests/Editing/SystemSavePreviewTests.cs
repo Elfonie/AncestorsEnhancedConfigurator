@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Editing;

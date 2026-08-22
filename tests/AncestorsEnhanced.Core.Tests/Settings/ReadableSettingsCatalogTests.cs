@@ -194,6 +194,48 @@ public sealed class ReadableSettingsCatalogTests
         Assert.Equal(ReadableSettingState.Unknown, bloom.State);
     }
 
+    [Theory]
+    [InlineData(StoreKind.EpicGames, "epic-release-2026")]
+    [InlineData(StoreKind.Gog, null)]
+    public void CreateFeatureGroupsShowsPresetValuesForSignatureVerifiedStores(
+        StoreKind store,
+        string? buildId)
+    {
+        GameInspectionSnapshot snapshot = WithInstallation(
+            CreateSnapshot([], []),
+            store,
+            buildId,
+            AncestorsGameProfile.SupportedContentSignature);
+
+        FeatureSettingSnapshot motionBlur = FindSetting(
+            FindGroup(ReadableSettingsCatalog.CreateFeatureGroups(snapshot), "motion-blur"),
+            "motion-blur-quality");
+
+        Assert.Collection(
+            motionBlur.PresetValues!,
+            low => Assert.Equal(new SettingPresetValueSnapshot("Low", "Off"), low),
+            medium => Assert.Equal(new SettingPresetValueSnapshot("Medium", "High"), medium),
+            high => Assert.Equal(new SettingPresetValueSnapshot("High", "High"), high));
+        Assert.Contains("Verified Ancestors preset table", motionBlur.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CreateFeatureGroupsDoesNotUsePresetValuesForContradictorySteamEvidence()
+    {
+        GameInspectionSnapshot snapshot = WithInstallation(
+            CreateSnapshot([], []),
+            StoreKind.Steam,
+            "wrong-build",
+            AncestorsGameProfile.SupportedContentSignature);
+
+        FeatureSettingSnapshot motionBlur = FindSetting(
+            FindGroup(ReadableSettingsCatalog.CreateFeatureGroups(snapshot), "motion-blur"),
+            "motion-blur-quality");
+
+        Assert.Null(motionBlur.PresetValues);
+        Assert.Equal("Game preset", motionBlur.Value);
+    }
+
     [Fact]
     public void NonPresetRendererValuesAreReportedAsGameControlled()
     {
@@ -265,6 +307,25 @@ public sealed class ReadableSettingsCatalogTests
     private static FeatureSettingSnapshot FindSetting(
         FeatureGroupSnapshot group,
         string id) => Assert.Single(group.Settings, setting => setting.Id == id);
+
+    private static GameInspectionSnapshot WithInstallation(
+        GameInspectionSnapshot snapshot,
+        StoreKind store,
+        string? buildId,
+        string? contentSignature,
+        bool contentSignatureReadFailed = false) => snapshot with
+        {
+            Installation = new GameInstallationSnapshot(
+                store,
+                HostKind.Windows,
+                CompatibilityLayerKind.None,
+                "library",
+                "install",
+                buildId,
+                ExecutableExists: true,
+                contentSignature,
+                contentSignatureReadFailed),
+        };
 
     private static GameInspectionSnapshot CreateSnapshot(
         IReadOnlyList<IniSettingSnapshot> iniSettings,

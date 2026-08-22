@@ -143,6 +143,7 @@
                          Foreground="#EBF0F3" />
               <TextBlock Text="{Binding ViewModeDescription}"
                          FontSize="12"
+                         TextWrapping="Wrap"
                          Foreground="#81929D" />
             </StackPanel>
             <TextBox Grid.Column="1"
@@ -206,8 +207,8 @@
                                 BorderBrush="#1A221A"
                                 BorderThickness="0,1,0,0"
                                 ToolTip.Tip="{Binding Description}">
-                          <Grid RowDefinitions="Auto,Auto"
-                                ColumnDefinitions="*,140,260"
+                          <Grid RowDefinitions="Auto,Auto,Auto"
+                                ColumnDefinitions="*,Auto"
                                 ColumnSpacing="18"
                                 MinHeight="46">
                             <StackPanel VerticalAlignment="Center" Spacing="2">
@@ -243,9 +244,13 @@
                                          Foreground="#E8E4D9" />
                             </StackPanel>
 
-                            <ContentControl Grid.Column="2"
+                            <ContentControl Grid.Row="1"
+                                            Grid.ColumnSpan="2"
                                             Content="{Binding Editor}"
                                             IsVisible="{Binding IsEditable}"
+                                            HorizontalAlignment="Stretch"
+                                            MaxWidth="520"
+                                            Margin="0,12,0,0"
                                             VerticalAlignment="Center">
                               <ContentControl.ContentTemplate>
                                 <DataTemplate x:DataType="vm:SettingEditorViewModel">
@@ -324,18 +329,20 @@
                               </ContentControl.ContentTemplate>
                             </ContentControl>
 
-                            <Border Grid.Column="2"
+                            <Border Grid.Row="1"
+                                    Grid.ColumnSpan="2"
                                     IsVisible="{Binding IsReadOnly}"
                                     Padding="9,5"
+                                    Margin="0,12,0,0"
                                     CornerRadius="5"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     Background="{DynamicResource SurfaceBrush}">
-                              <TextBlock Text="Read only" FontSize="12" Foreground="#71828D" />
+                              <TextBlock Text="{Binding ReadOnlyLabel}" FontSize="12" Foreground="#71828D" TextWrapping="Wrap" />
                             </Border>
 
-                            <Expander Grid.Row="1"
-                                      Grid.ColumnSpan="3"
+                            <Expander Grid.Row="2"
+                                      Grid.ColumnSpan="2"
                                       IsVisible="{Binding HasPresetValues}"
                                       Margin="0,9,0,0"
                                       Header="Game preset values"
@@ -500,6 +507,25 @@
             </Grid>
           </Border>
 
+          <Border Padding="14,11"
+                  CornerRadius="7"
+                  Background="#2A1F16"
+                  BorderBrush="#6B4A26"
+                  BorderThickness="1"
+                  IsVisible="{Binding SaveManager.HasToolSettingsWarning}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+              <TextBlock Text="{Binding SaveManager.ToolSettingsWarning}"
+                         Foreground="#E8C08A"
+                         TextWrapping="Wrap"
+                         VerticalAlignment="Center" />
+              <Button Grid.Column="1"
+                      Content="Reset auto-backup settings"
+                      Command="{Binding SaveManager.ResetToolSettingsCommand}"
+                      IsEnabled="{Binding SaveManager.CanResetToolSettings}"
+                      VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1"
                     IsVisible="{Binding IsSaveManagerAvailable}"
                     IsEnabled="{Binding SaveManager.CanConfigureAutoBackup}">
@@ -546,7 +572,7 @@
                         <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="#E6ECEF" />
                         <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="#71828D" />
                         <TextBlock Text="{Binding Status}" FontSize="12" Foreground="#82939E" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding CheckpointCount}" FontSize="12" Foreground="#FF5A00" />
+                        <TextBlock Text="{Binding CheckpointCount}" FontSize="12" Foreground="#82939E" />
                       </StackPanel>
                       <Button Grid.Column="1" Command="{Binding CreateCheckpointCommand}" IsEnabled="{Binding CanSaveCheckpoint}" Content="Save checkpoint" VerticalAlignment="Center" />
                     </Grid>
@@ -554,20 +580,20 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
                           <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                            <Grid ColumnDefinitions="*,*,Auto,Auto" ColumnSpacing="14">
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="14">
                               <StackPanel Spacing="1">
                                 <TextBlock Text="{Binding CreatedLabel}" FontWeight="SemiBold" Foreground="#E1E7EA" />
                                 <TextBlock Text="{Binding OriginLabel}" FontSize="12" Foreground="#B4D941" />
                                 <TextBlock Text="{Binding SizeLabel}" FontSize="12" Foreground="#71828D" />
                               </StackPanel>
-                              <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
-                                <Button Classes="Ghost" Content="Delete" Padding="12,6" Foreground="#D6BC84" Command="{Binding OpenDeleteConfirmCommand}" IsEnabled="{Binding CanDelete}" />
+                              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                <Button Classes="Ghost" Content="Delete" Padding="12,6" Foreground="#D6BC84" Command="{Binding OpenDeleteConfirmCommand}" IsEnabled="{Binding CanDelete}" IsVisible="{Binding !IsDeleteConfirmVisible}" />
                                 <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="DangerAction" Content="Yes, delete it" Padding="12,6" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanDelete}" />
                                 <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelDeleteConfirmCommand}" />
                               </StackPanel>
 
-                              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                                <Button Command="{Binding OpenRestoreConfirmCommand}" IsEnabled="{Binding CanRestore}" Content="Restore" Padding="12,6" />
+                              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <Button Command="{Binding OpenRestoreConfirmCommand}" IsEnabled="{Binding CanRestore}" Content="Restore" Padding="12,6" IsVisible="{Binding !IsRestoreConfirmVisible}" />
                                 <Button IsVisible="{Binding IsRestoreConfirmVisible}" IsEnabled="{Binding CanRestore}" Classes="PrimaryAction" Content="Confirm restore" Padding="12,6" Command="{Binding LoadCommand}" />
                                 <Button IsVisible="{Binding IsRestoreConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelRestoreConfirmCommand}" />
                               </StackPanel>
@@ -673,8 +699,8 @@
             <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="Max Needs" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's stamina, energy and regimen fields to 1000. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Max Stamina and Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
+                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's stamina, energy and regimen-stamina fields to 1000. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Command="{Binding Cheat.MaxNeedsCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
@@ -686,7 +712,7 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                 <StackPanel Spacing="2" VerticalAlignment="Center">
                   <TextBlock Text="Heal Current Ape" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's health, stamina and energy fields to the configured recovery values. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's health, stamina and energy fields to 1.0. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Command="{Binding Cheat.HealCurrentApeCommand}"
                         IsEnabled="{Binding Cheat.CanApply}"
@@ -740,7 +766,7 @@
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,1,0,0">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="18">
+      <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
         <StackPanel Spacing="1" VerticalAlignment="Center">
           <TextBlock Text="{Binding PendingSummary}"
                      FontWeight="SemiBold"
@@ -755,28 +781,34 @@
                      FontSize="12"
                      Foreground="{Binding OperationAccent}" />
         </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+        <WrapPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Button Command="{Binding RestoreGameDefaultsCommand}"
                   IsEnabled="{Binding CanRestoreGameDefaults}"
                   IsVisible="{Binding ShowGraphicsView}"
-                  Content="Clear my custom overrides" />
+                  Margin="0,0,8,0"
+                  Content="Clear my custom overrides"
+                  ToolTip.Tip="Reviews and removes the custom graphics values currently shown in the editor. Undo history and pre-tool baselines are kept." />
           <Button Command="{Binding RevertLastCommand}"
                   IsEnabled="{Binding CanUndo}"
                   IsVisible="{Binding ShowGraphicsView}"
+                  Margin="0,0,8,0"
                   Padding="16,7"
                   Content="Undo" />
           <Button Command="{Binding RemoveToolChangesCommand}"
                   IsVisible="{Binding HasRemovableToolChanges}"
                   IsEnabled="{Binding CanRemoveToolChanges}"
-                  Content="Remove tool changes" />
+                  Margin="0,0,8,0"
+                  Content="Remove tool changes"
+                  ToolTip.Tip="Restores every tool-owned settings file to its recorded state from before the configurator first changed it." />
           <Button Command="{Binding DiscardChangesCommand}"
                   IsVisible="{Binding ShowPendingActions}"
+                  Margin="0,0,8,0"
                   Content="Discard" />
           <Button Command="{Binding OpenReviewCommand}"
                   Classes="PrimaryAction"
                   IsVisible="{Binding ShowPendingActions}"
                   Content="Review" />
-        </StackPanel>
+        </WrapPanel>
       </Grid>
     </Border>
     </Grid>

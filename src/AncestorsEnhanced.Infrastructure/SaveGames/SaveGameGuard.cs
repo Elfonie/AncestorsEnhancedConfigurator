@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core;
+using AncestorsEnhanced.Core;
 using static AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations;
 
 namespace AncestorsEnhanced.Infrastructure.SaveGames;

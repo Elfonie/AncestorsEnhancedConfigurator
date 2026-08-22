@@ -11,13 +11,6 @@
     <!-- Text colors -->
     <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E8E4D9" />
     <SolidColorBrush x:Key="MutedTextBrush" Color="#7A877A" />
-    <!-- Status and accent colors -->
-    <SolidColorBrush x:Key="SuccessBrush" Color="#B4D941" />
-    <SolidColorBrush x:Key="WarningBrush" Color="#FF5A00" />
-    <SolidColorBrush x:Key="InfoBrush" Color="#FF5A00" />
-    <SolidColorBrush x:Key="DangerBrush" Color="#E04D42" />
-    <SolidColorBrush x:Key="FloraBrush" Color="#B4D941" />
-    <SolidColorBrush x:Key="BloodBrush" Color="#E04D42" />
     <!-- Active ToggleSwitch colors -->
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOn" Color="#B4D941" />
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOnPointerOver" Color="#9ABF31" />

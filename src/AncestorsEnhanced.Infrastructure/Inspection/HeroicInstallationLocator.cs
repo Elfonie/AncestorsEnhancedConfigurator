@@ -138,8 +138,8 @@ internal sealed class HeroicInstallationLocator(
 
     private GameInstallationSnapshot? CreateForStore(string install, string? buildId) =>
         environment.Host == HostKind.Linux
-            ? factory.CreateLinux(StoreKind.Unknown, install, buildId, CompatibilityLayerKind.Proton)
-            : factory.CreateWindows(StoreKind.Unknown, install, buildId);
+            ? factory.CreateLinux(StoreKind.Heroic, install, buildId, CompatibilityLayerKind.Proton)
+            : factory.CreateWindows(StoreKind.Heroic, install, buildId);
 
     private static string? ReadString(JsonElement element, string name) =>
         element.TryGetProperty(name, out JsonElement property) &&

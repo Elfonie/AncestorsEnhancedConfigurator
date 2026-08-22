@@ -16,10 +16,10 @@ public partial class SettingEditorViewModel : ViewModelBase
     public partial bool ToggleValue { get; set; }
 
     [ObservableProperty]
-    private decimal _numberValue;
+    public partial decimal NumberValue { get; set; }
 
     [ObservableProperty]
-    private SettingChoiceViewModel? _selectedChoice;
+    public partial SettingChoiceViewModel? SelectedChoice { get; set; }
 
     public SettingEditorViewModel(SettingEditSnapshot snapshot)
     {

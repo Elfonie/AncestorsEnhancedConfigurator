@@ -821,7 +821,7 @@ public static class ReadableSettingsCatalog
         SettingEditSnapshot? editor)
     {
         if (!AncestorsScalabilityPresetCatalog.TryGet(
-                snapshot.Installation?.BuildId,
+                snapshot.Installation,
                 key,
                 out ScalabilityPresetValues? presetValues))
         {
@@ -847,7 +847,7 @@ public static class ReadableSettingsCatalog
             activeValue ?? "Game preset",
             description,
             activeValue is null
-                ? $"Ancestors build {AncestorsScalabilityPresetCatalog.SupportedBuildId} preset table; active level not read from System.sav"
+                ? "Verified Ancestors preset table; active level not read from System.sav"
                 : $"System.sav · {activeName} game preset",
             key,
             ReadableSettingState.Unknown,

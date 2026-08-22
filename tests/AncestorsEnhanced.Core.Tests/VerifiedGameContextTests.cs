@@ -1,4 +1,4 @@
-﻿using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.Inspection;
 using Xunit;
 
 namespace AncestorsEnhanced.Core.Tests;

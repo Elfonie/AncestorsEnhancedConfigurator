@@ -387,6 +387,7 @@ public sealed class ReadOnlyAncestorsInspectorTests
 
         GameInstallationSnapshot installation = Assert.IsType<GameInstallationSnapshot>(
             inspector.Inspect().Installation);
+        Assert.Equal(StoreKind.Heroic, installation.Store);
         Assert.Equal(HostKind.Linux, installation.Host);
         Assert.Equal(CompatibilityLayerKind.Proton, installation.CompatibilityLayer);
         Assert.Equal(install, installation.InstallDirectory);
@@ -418,6 +419,7 @@ public sealed class ReadOnlyAncestorsInspectorTests
 
         GameInstallationSnapshot installation = Assert.IsType<GameInstallationSnapshot>(
             inspector.Inspect().Installation);
+        Assert.Equal(StoreKind.Heroic, installation.Store);
         Assert.Equal(install, installation.InstallDirectory);
         Assert.Equal(CompatibilityLayerKind.Proton, installation.CompatibilityLayer);
     }
