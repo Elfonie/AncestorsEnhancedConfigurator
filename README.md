@@ -1,77 +1,117 @@
 # Ancestors Enhanced Configurator
 
-A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It can adjust verified graphics settings, manage local save checkpoints, and create a small set of experimental save modifications. No installation or separate .NET runtime is required for the release packages.
+A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It exposes verified graphics options, manages local save checkpoints, and provides a small set of experimental save modifications.
 
-## What it does
+Release packages are self-contained. Extract the archive and start the application; no installer or separate .NET runtime is required.
 
-- **Graphics**
-  - Simple and advanced graphics controls
-  - System.sav controls for resolution, brightness, frame-rate limit, and quality categories
-  - Vignette, startup-video, and supported UE4 renderer overrides
-  - Review before write, backups, Undo, and Clear my custom overrides
-  - Remove tool changes restores verified tool-owned files to their recorded pre-tool state
-- **Save checkpoints**
-  - Create and restore checkpoints for the five Ancestors save slots
-  - Up to 50 retained checkpoints per slot
-  - Optional automatic checkpoints when the game saves
-- **Experimental save modifications**
-  - Max Neuronal Energy, Max Stamina and Energy, and Heal Current Ape create a separate modified checkpoint; keep your own save backup and verify the result in-game
+## Highlights
+
+- Simple and advanced graphics controls, including supported UE4 overrides
+- Editable `System.sav` display, frame-rate, brightness, and quality settings
+- Vignette and startup-video controls
+- Review before write, verified backups, Undo, and removal of tool-owned changes
+- Manual and automatic checkpoints for all five local save slots
+- Portable Windows and Linux builds
+- Fail-closed editing when the installed game or target file cannot be verified
+
+## Quick start
+
+1. Start Ancestors once so it creates its local files.
+2. Close the game, extract the Configurator archive, and start the application.
+3. Adjust the settings, select **Review**, and confirm the changes.
+
+Creating normal save checkpoints and automatic checkpoints is allowed while the game is running. Restoring a checkpoint or creating or restoring an experimental save modification requires the game to be closed.
 
 ## Compatibility
 
-The tool searches for installations from Steam, Epic Games, GOG, and Heroic. Steam on Windows and Steam through Proton on Linux are supported. Epic and GOG are supported on Windows when the installed content signature is verified.
+| Installation | Detection | Graphics editing | Save checkpoints | Experimental save modifications |
+| --- | --- | --- | --- | --- |
+| Steam on Windows | Supported | Supported for the verified build | Supported | Available, experimental |
+| Epic Games on Windows | Supported | Supported with a verified content signature | Supported with a verified installation | Available, experimental |
+| GOG on Windows | Supported | Supported with a verified content signature | Supported with a verified installation | Available, experimental |
+| Steam through Proton on Linux | Supported | Supported for a verified installation | Supported | Available, experimental |
+| Heroic | Detection only | Read-only in 0.9.0 | Read-only in 0.9.0 | Unavailable in 0.9.0 |
 
-Finding an installation is not the same as authorising an edit. Before a setting is written, the tool verifies the game build, installation context, and target file. If that verification is incomplete or contradictory, editing is disabled instead of guessing. Heroic is detection-only in 0.9.0: Heroic installations are shown, but remain read-only because their store identity is not yet verified.
+Detection alone never authorises a write. Before changing a file, the Configurator verifies the game identity, installation context, and target. Missing or contradictory evidence disables editing instead of guessing.
 
-## Before you use it
+## Graphics settings
 
-1. Start Ancestors once so it creates its local data.
-2. Close the game before creating, restoring, or modifying saves.
-3. Start the Configurator and let it scan the installation.
-4. Review every pending change before confirming it.
-5. After restoring a checkpoint, start the game and verify the result before continuing a long play session.
+The Graphics page contains two views:
 
-The Configurator keeps its own backups, but they are not a substitute for keeping a copy of your save directory before important changes.
+- **Simple** shows the settings with the clearest visual effect.
+- **Advanced** shows the deeper verified settings and inspection details.
 
-## Remove tool changes
+Custom settings replace only the selected parts of the game's current preset. The review screen lists the exact files and values that will change before anything is written.
 
-From the first configuration write, the Configurator records a private baseline for each file it changes. **Remove tool changes** is available only when that baseline exists and the current installation and file contents still match the tool-managed state. It restores graphics, System.sav, vignette, and startup-video changes that were made through the settings editor, then marks those files as restored to their baseline state.
+Available safety actions include:
 
-It never removes the app, save checkpoints, game-progress saves, Steam Cloud data, external mods, or edits made outside the Configurator. The private baseline remains available internally so undoing the removal is reversible; while no tool changes are active, the removal button stays unavailable. For installs that were already modified before this feature existed, no original baseline can be reconstructed, so the button stays unavailable.
+- **Undo** reverts the most recent Configurator operation.
+- **Clear my custom overrides** reviews and removes the custom graphics values currently shown in the editor.
+- **Remove tool changes** restores verified tool-owned settings files to their recorded pre-tool state.
 
-## Savegame-cheat status
+## Save checkpoints
 
-The savegame injector is designed to fail closed: it uses explicit structural paths, rejects ambiguous matches, verifies its own output, and creates a checkpoint rather than overwriting the live save.
+The Configurator can create and restore checkpoints for each of the five Ancestors save slots. It retains up to 50 checkpoints per slot. Optional automatic checkpoints are created in the background when the game saves, subject to the selected minimum interval.
 
-It is nevertheless still awaiting validation with anonymised real save files and an in-game verification run for each cheat. Treat savegame cheats in 0.9.0 as experimental and keep your own backup. Details are in [the validation gate](tests/AncestorsEnhanced.Infrastructure.Tests/SaveGames/Fixtures/README.md).
+Restoring a checkpoint first creates a safety checkpoint of the current live save. A restore still changes live game progress, so verify the result in-game before continuing a long play session.
+
+## Experimental save modifications
+
+The following modifications create a separate checkpoint instead of overwriting the live save:
+
+- Max Neuronal Energy
+- Max Stamina and Energy
+- Heal Current Ape
+
+The injector uses explicit structural paths, rejects ambiguous matches, and verifies its own output. Real-save and in-game validation is not yet complete for every modification, so this part of 0.9.0 remains experimental. Keep your own save backup and verify the result in-game.
+
+Developer validation details are tracked in [the save fixture documentation](tests/AncestorsEnhanced.Infrastructure.Tests/SaveGames/Fixtures/README.md).
+
+## Removing tool changes
+
+From the first settings write, the Configurator records a private baseline for every file it owns. **Remove tool changes** is available only when that baseline exists and the current installation and files still match a state the tool can prove.
+
+It restores settings, `System.sav`, vignette, and startup-video changes made through the settings editor. It does not remove:
+
+- the Configurator itself
+- save checkpoints or game-progress saves
+- Steam Cloud data
+- external mods
+- edits owned by another tool or made manually
+
+The operation is reversible through Undo. A baseline cannot be reconstructed for files modified before the baseline feature existed.
 
 ## Steam Cloud
 
-Steam Cloud can report a conflict after a checkpoint restore or a savegame cheat. Do not choose a conflict option automatically: compare the dates and sizes first. The local version is the intended one only if you deliberately restored or applied that checkpoint. Keeping a manual copy of the local save folder before resolving a conflict is recommended.
+Steam Cloud may report a conflict after restoring a checkpoint or applying an experimental modification. Do not select a conflict option automatically. Compare the dates and sizes first. The local file is the intended version only after a deliberate local restore.
+
+Keeping a separate copy of the local save directory before an important restore is recommended.
 
 ## Download and run
 
-Download the matching 0.9.0 archive from [GitHub Releases](https://github.com/Elfonie/AncestorsEnhancedConfigurator/releases).
+Download the matching archive from [GitHub Releases](https://github.com/Elfonie/AncestorsEnhancedConfigurator/releases) or the Ancestors Enhanced Configurator page on Nexus Mods.
 
 | Platform | Archive | Start |
 | --- | --- | --- |
-| Windows x64 | `AncestorsEnhanced-0.9.0-win-x64.zip` | Extract, then run `AncestorsEnhanced.App.exe` |
-| Linux x64 | `AncestorsEnhanced-0.9.0-linux-x64.zip` | Extract, then run `./AncestorsEnhanced.App` |
+| Windows x64 | `AncestorsEnhanced-0.9.0-win-x64.zip` | Extract and run `AncestorsEnhanced.App.exe` |
+| Linux x64 | `AncestorsEnhanced-0.9.0-linux-x64.zip` | Extract and run `./AncestorsEnhanced.App` |
 
-On Linux, run `chmod +x AncestorsEnhanced.App` first if your archive tool did not preserve the executable bit.
+On Linux, run `chmod +x AncestorsEnhanced.App` if the archive tool did not preserve the executable bit.
 
-## Logs and troubleshooting
+Each archive contains the application, this README, the MIT license, and `SHA256SUMS.txt`. A separate `.zip.sha256` file is supplied for verifying the complete download.
 
-The tool writes a local log file to:
+## Logs and bug reports
+
+The local log is stored at:
 
 - Windows: `%LocalAppData%\AncestorsEnhanced\Logs\AncestorsEnhanced.log`
 - Linux: the platform-specific local application-data directory under `AncestorsEnhanced/Logs/`
 
-The log records detection and operation errors. Do not share a full save file in a bug report. If a report needs a log, check it first for paths or other personal information.
+When reporting a problem, include the operating system, game store, detected build information, the action that failed, and the relevant log section. Check logs for personal paths before sharing them. Never attach a complete save file to a public issue.
 
 ## Build from source
 
-Requirements: [.NET SDK 10.0.302](global.json).
+The required SDK version is defined in [`global.json`](global.json).
 
 ```text
 dotnet restore AncestorsEnhanced.slnx
@@ -81,10 +121,12 @@ dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -p:Publish
 dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -p:PublishProfile=linux-x64
 ```
 
-The publish profiles create self-contained, single-file builds in `src/AncestorsEnhanced.App/bin/Release/net10.0/{win-x64,linux-x64}/publish/`. The GitHub Actions build packages the matching portable ZIPs, includes checksums, and smoke-tests the extracted executable on its target operating system.
+The publish profiles create self-contained single-file builds. GitHub Actions builds Windows and Linux on their native runners, checks dependencies for known vulnerabilities, smoke-tests both executables, verifies the packaged archives, and produces SHA-256 checksums.
 
 ## Project status
 
-Automated builds and tests run on Windows and Ubuntu. They verify code paths and file safety rules; they do not replace testing the released application with a real Ancestors installation, a Proton setup, or real savegame modifications. Heroic editing is intentionally not enabled in 0.9.0.
+Automated tests verify code paths and file-safety rules. They do not replace release testing with a real Ancestors installation, a Proton environment, Steam Cloud, or real in-game save modifications.
 
-Ancestors Enhanced Configurator is an unofficial community project. It is not affiliated with Panache Digital Games or Private Division.
+Ancestors Enhanced Configurator is an unofficial community project and is not affiliated with Panache Digital Games or Private Division.
+
+Released under the [MIT License](LICENSE).

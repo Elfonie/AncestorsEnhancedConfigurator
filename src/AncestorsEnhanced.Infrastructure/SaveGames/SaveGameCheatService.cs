@@ -63,7 +63,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                 return new CheatApplyResult(false, $"There is no save in slot {slot + 1} to modify.");
             }
 
-            byte[] compressed = ReadSaveWithRetries(slotPath);
+            byte[] compressed = ConfigurationFileOperations.ReadStableBounded(slotPath, 64L * 1024 * 1024);
             string sourceSha256 = AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.Sha256(compressed);
             byte[] decompressed = SnappyBlockCodec.Decode(compressed);
 
@@ -117,7 +117,6 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                 return new CheatApplyResult(false, "The modified save changed bytes outside the reported ranges.");
             }
 
-
             var store = new SaveGameCheckpointStore(
                 () => DateTimeOffset.UtcNow,
                 _maxCheckpointsPerSlot);
@@ -133,7 +132,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
                 {
                     throw new InvalidOperationException("Close Ancestors before applying a cheat.");
                 }
-                byte[] current = ReadSaveWithRetries(slotPath);
+                byte[] current = ConfigurationFileOperations.ReadStableBounded(slotPath, 64L * 1024 * 1024);
                 if (!string.Equals(
                         AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.Sha256(current),
                         sourceSha256,
@@ -147,7 +146,7 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
             return new CheatApplyResult(
                 true,
-                $"{DisplayName(kind)} applied and saved as a new checkpoint for slot {slot + 1}.",
+                $"{DisplayName(kind)} was saved as a modified checkpoint for slot {slot + 1}.",
                 checkpointId);
         }
         catch (Exception exception) when (IsExpectedException(exception))
@@ -313,9 +312,6 @@ public sealed class SaveGameCheatService : ISaveGameCheatService
 
         return true;
     }
-
-    private static byte[] ReadSaveWithRetries(string slotPath) =>
-        AncestorsEnhanced.Infrastructure.Editing.ConfigurationFileOperations.ReadStableBounded(slotPath, 64L * 1024 * 1024);
 
     private static bool IsExpectedException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or

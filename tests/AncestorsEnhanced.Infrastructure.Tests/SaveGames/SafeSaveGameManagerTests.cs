@@ -349,7 +349,6 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.Contains("no save", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-
     [Fact]
     public void IdenticalCheckpointIsSkippedButChangedContentIsBackedUp()
     {
@@ -370,7 +369,6 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.True(changed.Succeeded);
         Assert.Equal(2, manager.Inspect().Slots.Single(slot => slot.SlotNumber == "0").Checkpoints.Count);
     }
-
 
     [Fact]
     public void LoadDoesNotAddASafetyBackupWhenCurrentStateMatchesTheCheckpoint()
@@ -462,7 +460,6 @@ public sealed class SafeSaveGameManagerTests : IDisposable
         Assert.True(result.Succeeded, result.Message);
         Assert.NotEqual(damaged, result.CreatedCheckpointId);
     }
-
 
     [Fact]
     public void DeleteCheckpointRemovesTheStoredCheckpoint()

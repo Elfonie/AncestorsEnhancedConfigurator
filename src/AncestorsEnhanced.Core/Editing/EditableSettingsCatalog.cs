@@ -257,7 +257,7 @@ public static class EditableSettingsCatalog
             return null;
         }
 
-        return graphics is null ? null : GetSystemValue(graphics, key);
+        return GetSystemValue(graphics, key);
     }
 
     public static bool IsVerifiedEditingTarget(GameInspectionSnapshot snapshot)
@@ -297,7 +297,7 @@ public static class EditableSettingsCatalog
             return null;
         }
 
-        return graphics is null ? null : GetSystemValue(graphics, key);
+        return GetSystemValue(graphics, key);
     }
 
     /// <summary>Maps a recognised System.sav setting key to its current string value.</summary>

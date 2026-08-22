@@ -88,7 +88,7 @@
       <StackPanel Margin="22,18"
                   Spacing="12"
                   MaxWidth="1380"
-                  HorizontalAlignment="Center">
+                  HorizontalAlignment="Stretch">
 
 
         <StackPanel IsVisible="{Binding ShowGraphicsView}" Spacing="12">
@@ -97,16 +97,16 @@
                   CornerRadius="7"
                   BorderThickness="1"
                   BorderBrush="{Binding DetectionColor}"
-                  Background="{Binding DetectionColor}">
+                  Background="{DynamicResource SurfaceBrush}">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
               <Ellipse Width="9" Height="9" Fill="{Binding DetectionDotColor}" VerticalAlignment="Center" />
               <StackPanel Grid.Column="1" Spacing="1">
                 <TextBlock Text="{Binding DetectionStatus}"
                            FontWeight="SemiBold"
-                           Foreground="#0E1417" />
+                           Foreground="{Binding DetectionColor}" />
                 <TextBlock Text="{Binding InstallationDetails}"
                            FontSize="12"
-                           Foreground="#27323A" />
+                           Foreground="#9CB0BC" />
               </StackPanel>
             </Grid>
           </Border>
@@ -174,6 +174,7 @@
                 <Grid RowDefinitions="Auto,Auto">
                   <Button Classes="CardHeader"
                           Command="{Binding ToggleExpandedCommand}"
+                          AutomationProperties.Name="{Binding Name}"
                           Padding="14,10"
                           MinHeight="42"
                           HorizontalAlignment="Stretch"
@@ -641,7 +642,7 @@
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   IsVisible="{Binding IsSaveManagerUnavailable}">
             <StackPanel Spacing="8">
-              <TextBlock Text="Save Games are only available when an Ancestors user-data folder was found. Install or start Ancestors once, then reload."
+              <TextBlock Text="Save management requires a supported, verified Ancestors installation and detected user data. If the game is running or recovery is pending, close it and reload."
                          TextWrapping="Wrap" Foreground="#82939D" />
               <Button Classes="PrimaryAction" Content="Scan again" Command="{Binding RefreshCommand}"
                       HorizontalAlignment="Left" />
@@ -737,7 +738,7 @@
 
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   IsVisible="{Binding IsCheatUnavailable}">
-            <TextBlock Text="Cheats are only available when an Ancestors user-data folder was found. Install or start Ancestors once, then reload."
+            <TextBlock Text="Experimental save modifications require a supported, verified Ancestors installation and detected user data. If the game is running or recovery is pending, close it and reload."
                        TextWrapping="Wrap" Foreground="#82939D" />
           </Border>
 

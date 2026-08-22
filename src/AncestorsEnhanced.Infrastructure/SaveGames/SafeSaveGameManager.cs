@@ -148,7 +148,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 return Failure($"There is no save in slot {slot + 1} to back up.");
             }
 
-            byte[] content = ReadSaveWithRetries(slotPath);
+            byte[] content = ReadStableBounded(slotPath, 64L * 1024 * 1024);
             try
             {
                 _ = SnappyBlockCodec.Decode(content);
@@ -233,7 +233,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             string slotPath = SaveGamePaths.GetSlotPath(_userDataDirectory, slot);
             byte[] checkpoint = SaveGameCheckpointStore.Read(_userDataDirectory, slot, checkpointId);
 
-            // Everything before WriteBytesAtomically is part of the "not committed"
+            // Everything before CompareAndReplace is part of the not-committed
             // phase: if any of it fails, the live save is still intact.
             bool expectedExists = File.Exists(slotPath);
             string? expectedSha256 = null;
@@ -422,8 +422,6 @@ public sealed class SafeSaveGameManager : ISaveGameManager
         return first.AsSpan().SequenceEqual(second);
     }
 
-    private static byte[] ReadSaveWithRetries(string slotPath) =>
-        ReadStableBounded(slotPath, 64L * 1024 * 1024);
     private static bool IsExpectedException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or
             ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException;

@@ -87,11 +87,14 @@ public sealed class MainViewModelTests
         SettingEditorViewModel viewDistance = FindViewDistanceEditor(viewModel);
         viewDistance.NumberValue = 1.5m;
 
+        Assert.Equal("#FF5A00", viewModel.OperationAccent);
+
         viewModel.OpenReviewCommand.Execute(null);
 
         Assert.True(viewModel.IsReviewingChanges);
         Assert.Single(viewModel.ReviewChanges);
         Assert.Equal(0, editor.ApplyCount);
+        Assert.Equal("#FF5A00", viewModel.OperationAccent);
 
         await viewModel.ConfirmApplyCommand.ExecuteAsync(null);
 
@@ -204,6 +207,36 @@ public sealed class MainViewModelTests
         Assert.False(viewModel.IsReviewingChanges);
         Assert.True(viewModel.HasPendingChanges);
         Assert.Equal(0, editor.ApplyCount);
+    }
+
+    [Fact]
+    public async Task RemoveToolChangesReviewUsesANonErrorAccent()
+    {
+        var editor = new RecordingEditor { CanRemove = true };
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), editor);
+        await viewModel.InitializeAsync();
+
+        viewModel.RemoveToolChangesCommand.Execute(null);
+
+        Assert.True(viewModel.IsReviewingChanges);
+        Assert.Equal("#FF5A00", viewModel.OperationAccent);
+    }
+
+    [Fact]
+    public async Task RefreshCommandDoesNotRunDuringASaveMutation()
+    {
+        var inspector = new CountingInspector(CreateSnapshot());
+        var viewModel = new MainViewModel(
+            inspector,
+            new RecordingEditor(),
+            _ => new RecoverySaveGameManager(null));
+        await viewModel.InitializeAsync();
+        int inspectionsBeforeRefresh = inspector.Count;
+        viewModel.SaveManager!.IsBusy = true;
+
+        await viewModel.RefreshCommand.ExecuteAsync(null);
+
+        Assert.Equal(inspectionsBeforeRefresh, inspector.Count);
     }
 
     [Fact]
@@ -386,7 +419,7 @@ public sealed class MainViewModelTests
             viewModel.FeatureGroups.SelectMany(group => group.Settings),
             setting => setting.Name == "Image sharpening");
 
-        Assert.Equal("Game default", sharpening.ValueLabel);
+        Assert.Equal("Game controlled", sharpening.ValueLabel);
         Assert.Equal("Game controlled", sharpening.Value);
         Assert.True(sharpening.Editor!.ShowUnknownGameValue);
     }
@@ -458,7 +491,7 @@ public sealed class MainViewModelTests
         public GameInspectionSnapshot Inspect() => throw new IOException("test failure");
     }
 
-    private sealed class RecoverySaveGameManager(string recoveryMessage) : ISaveGameManager
+    private sealed class RecoverySaveGameManager(string? recoveryMessage) : ISaveGameManager
     {
         public SaveGamesSnapshot Inspect() =>
             new(DateTimeOffset.UnixEpoch, "user-data", [], recoveryMessage);
@@ -490,6 +523,8 @@ public sealed class MainViewModelTests
             SettingsOperationResult.Failed("Nothing to revert.");
 
         public bool CanRevert { get; init; }
+
+        public bool CanRemove { get; init; }
 
         public bool RecoverInterruptedChanges(GameInspectionSnapshot snapshot)
         {
@@ -525,5 +560,21 @@ public sealed class MainViewModelTests
 
         public SettingsOperationResult RevertLast(GameInspectionSnapshot snapshot) =>
             RevertResult;
+
+        public bool CanRemoveToolChanges(GameInspectionSnapshot snapshot) => CanRemove;
+
+        public SettingsChangePlan CreateRemoveToolChangesPlan(GameInspectionSnapshot snapshot) =>
+            new(
+                "remove",
+                DateTimeOffset.UnixEpoch,
+                "5495393",
+                snapshot.UserDataDirectory!,
+                [new SettingChangePreview(
+                    "Engine.ini",
+                    "Engine.ini",
+                    "r.ViewDistanceScale",
+                    "1.2",
+                    null)],
+                []);
     }
 }

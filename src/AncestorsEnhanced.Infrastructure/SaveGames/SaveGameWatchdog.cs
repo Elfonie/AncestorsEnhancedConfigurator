@@ -386,7 +386,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                         }
                     }
                 }
-                else if (!result.Succeeded)
+                else
                 {
                     TimeSpan? retryDelay = RegisterFailure(slot, result);
                     if (retryDelay is not null)
@@ -400,12 +400,6 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
         {
             // StopWatch deliberately interrupts debounce/cooldown waits.
-        }
-        catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or InvalidOperationException or
-                ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException)
-        {
-            PublishWatcherError($"Auto-backup failed for slot {slot + 1}: {exception.Message}");
         }
         catch (Exception exception)
         {

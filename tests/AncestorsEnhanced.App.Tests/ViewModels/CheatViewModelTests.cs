@@ -32,6 +32,7 @@ public sealed class CheatViewModelTests
         Assert.All(viewModel.Slots, slot => Assert.DoesNotContain("Slot 01", slot.Label, StringComparison.Ordinal));
         Assert.All(viewModel.Slots, slot => Assert.DoesNotContain("Slot 11", slot.Label, StringComparison.Ordinal));
     }
+
     [Fact]
     public async Task MaxNeuronalEnergyDelegatesToService()
     {
@@ -85,7 +86,44 @@ public sealed class CheatViewModelTests
         Assert.Equal("cp-1", pair.Id);
     }
 
+    [Fact]
+    public async Task CommittedRestoreWarningIsShownAndClearsThePendingCheckpoint()
+    {
+        const string Warning = "The save was loaded, but its timestamp could not be updated.";
+        var viewModel = Ready(new CheatViewModel(
+            new FakeCheatService(),
+            (slot, id) => Task.FromResult(new SaveGameOperationResult(
+                true,
+                Warning,
+                CommitState: SaveOperationCommitState.CommittedWithWarning))));
+        await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
 
+        await viewModel.RestoreLastCheckpointCommand.ExecuteAsync(null);
+
+        Assert.Equal(Warning, viewModel.StatusMessage);
+        Assert.Equal("#D6BC84", viewModel.StatusAccent);
+        Assert.False(viewModel.CanRestoreLastCheckpoint);
+    }
+
+    [Fact]
+    public async Task FailedRestoreWithSafetyCheckpointWarningRemainsRetryable()
+    {
+        const string Warning = "Restore stopped after creating a safety checkpoint.";
+        var viewModel = Ready(new CheatViewModel(
+            new FakeCheatService(),
+            (slot, id) => Task.FromResult(new SaveGameOperationResult(
+                false,
+                Warning,
+                "safety-checkpoint",
+                SaveOperationCommitState.CommittedWithWarning))));
+        await viewModel.MaxNeuronalEnergyCommand.ExecuteAsync(null);
+
+        await viewModel.RestoreLastCheckpointCommand.ExecuteAsync(null);
+
+        Assert.Equal(Warning, viewModel.StatusMessage);
+        Assert.Equal("#D6BC84", viewModel.StatusAccent);
+        Assert.True(viewModel.CanRestoreLastCheckpoint);
+    }
 
     [Fact]
     public async Task RestoreFailureDoesNotClaimSuccess()
@@ -100,7 +138,6 @@ public sealed class CheatViewModelTests
         Assert.Contains("Close Ancestors", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("#E04D42", viewModel.StatusAccent);
     }
-
 
     private static SaveGameSlotViewModel Slot(string slotNumber, bool saved)
     {
@@ -124,6 +161,7 @@ public sealed class CheatViewModelTests
         viewModel.UpdateSlotAvailability([Slot("0", saved: true)]);
         return viewModel;
     }
+
     private sealed class FakeCheatService : ISaveGameCheatService
     {
         public CheatKind? LastKind { get; private set; }

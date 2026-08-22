@@ -9,7 +9,8 @@ namespace AncestorsEnhanced.Infrastructure.SaveGames;
 
 internal sealed class SaveGameCheckpointStore(
     Func<DateTimeOffset> utcNow,
-    int maxCheckpointsPerSlot)
+    int maxCheckpointsPerSlot,
+    Func<DateTimeOffset, string>? newCheckpointId = null)
 {
     private const string ManifestFileName = "checkpoint.json";
     private const int ManifestVersion = 1;
@@ -19,6 +20,8 @@ internal sealed class SaveGameCheckpointStore(
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private readonly Func<DateTimeOffset> _utcNow = utcNow;
+    private readonly Func<DateTimeOffset, string> _newCheckpointId =
+        newCheckpointId ?? SaveGamePaths.NewCheckpointId;
 
     public string Create(string userDataDirectory, int slotNumber, byte[] content, string origin = "Manual")
     {
@@ -50,7 +53,8 @@ internal sealed class SaveGameCheckpointStore(
             {
                 throw new IOException("A unique checkpoint identifier could not be created.");
             }
-            checkpointId = SaveGamePaths.NewCheckpointId(createdAt);
+            checkpointId = _newCheckpointId(createdAt);
+            SaveGamePaths.ValidateCheckpointId(checkpointId);
             checkpointDirectory = Path.Combine(slotRoot, checkpointId);
             tempDirectory = Path.Combine(slotRoot, $".{checkpointId}.tmp");
         }
@@ -100,7 +104,7 @@ internal sealed class SaveGameCheckpointStore(
         // never turn a successfully published checkpoint into a reported failure.
         try
         {
-            EnforceCap(slotRoot, maxCheckpointsPerSlot);
+            EnforceCap(slotRoot, slotNumber, maxCheckpointsPerSlot, checkpointDirectory);
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or
@@ -147,20 +151,29 @@ internal sealed class SaveGameCheckpointStore(
             .ToArray();
     }
 
-    private static void EnforceCap(string slotRoot, int maxCheckpointsPerSlot)
+    private static void EnforceCap(
+        string slotRoot,
+        int slotNumber,
+        int maxCheckpointsPerSlot,
+        string protectedCheckpointDirectory)
     {
         string[] directories = Directory.EnumerateDirectories(slotRoot).ToArray();
         List<string> checkpoints = directories
-            .Where(path => TryReadCheckpointMetadata(path, slotNumber: 0) is not null)
+            .Where(path => TryReadCheckpointMetadata(path, slotNumber) is not null)
             // Checkpoint IDs begin with a fixed-width UTC timestamp. Ordering by the
             // immutable directory name avoids trusting mutable manifest timestamps.
             .OrderBy(path => Path.GetFileName(path), StringComparer.Ordinal)
             .ToList();
 
         int overflow = checkpoints.Count - maxCheckpointsPerSlot;
-        for (int index = 0; index < overflow; index++)
+        foreach (string checkpoint in checkpoints
+                     .Where(path => !string.Equals(
+                         Path.GetFullPath(path),
+                         protectedCheckpointDirectory,
+                         PathComparison))
+                     .Take(overflow))
         {
-            TryDeleteDirectory(checkpoints[index]);
+            TryDeleteDirectory(checkpoint);
         }
     }
 

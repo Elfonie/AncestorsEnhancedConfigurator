@@ -47,7 +47,13 @@ public sealed class SaveGameCheatServiceTests : IDisposable
         CheatApplyResult result = service.Apply(CheatKind.MaxNeuronalEnergy, "0");
 
         Assert.True(result.Succeeded, result.Message);
+        Assert.Equal(
+            "Max Neuronal Energy was saved as a modified checkpoint for slot 1.",
+            result.Message);
         Assert.NotNull(result.CheckpointId);
+        Assert.Equal(
+            "Cheat:Max Neuronal Energy",
+            Assert.Single(SaveGameCheckpointStore.ListCheckpoints(_userData, 0)).Origin);
         string checkpointPath = SaveGamePaths.GetCheckpointPath(_userData, 0, result.CheckpointId!);
         Assert.True(File.Exists(checkpointPath));
 

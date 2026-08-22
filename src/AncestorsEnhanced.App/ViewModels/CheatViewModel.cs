@@ -63,10 +63,8 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
                         ? parsed
                         : 0;
                 string label = number >= 0
-                    ? string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Slot {number + 1} \u00b7 {(slot.HasSave ? "saved" : "empty")}")
-                    : slot.HasSave ? "saved" : "empty";
+                    ? string.Create(CultureInfo.InvariantCulture, $"Slot {number + 1} \u00b7 saved")
+                    : "saved";
                 return new CheatSlotChoice(number, label);
             })
             .ToArray();
@@ -121,7 +119,6 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
 
     public bool CanApply =>
         !IsBusy && !IsGameRunning && SelectedSlot is not null && !(_mutationGate?.IsBusy ?? false);
-
 
     public string SteamCloudWarning { get; } =
         "Steam Cloud: do not choose a conflict option automatically. Compare save dates and sizes first. Local files are the intended version only after a deliberate local checkpoint restore; when unsure, copy the local saves before deciding.";
@@ -213,13 +210,24 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
             SaveGameOperationResult result = await _restoreCheckpoint(_lastCheckpointSlot, _lastCheckpointId);
             if (result.Succeeded)
             {
-                SetStatus("Cheat checkpoint restored. Start Ancestors to continue.", "#B4D941");
+                if (result.CommitState == SaveOperationCommitState.CommittedWithWarning)
+                {
+                    SetStatus(result.Message, "#D6BC84");
+                }
+                else
+                {
+                    SetStatus("Cheat checkpoint restored. Start Ancestors to continue.", "#B4D941");
+                }
                 _lastCheckpointSlot = null;
                 _lastCheckpointId = null;
             }
             else
             {
-                SetStatus(result.Message, "#E04D42");
+                SetStatus(
+                    result.Message,
+                    result.CommitState == SaveOperationCommitState.CommittedWithWarning
+                        ? "#D6BC84"
+                        : "#E04D42");
             }
         }
         catch (Exception exception) when (IsExpectedRestoreException(exception))
@@ -313,7 +321,6 @@ public partial class CheatViewModel : ViewModelBase, IDisposable
         _pollTask = null;
     }
 }
-
 
 public sealed record CheatSlotChoice(int Number, string Label)
 {

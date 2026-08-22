@@ -70,6 +70,27 @@ public sealed class SaveManagerViewModelTests
         Assert.Equal("#B4D941", viewModel.StatusAccent);
     }
 
+    [Theory]
+    [InlineData("Cheat:MaxNeuronalEnergy", "Max Neuronal Energy cheat")]
+    [InlineData("Cheat:MaxNeeds", "Max Stamina and Energy cheat")]
+    [InlineData("Cheat:HealClan", "Heal Current Ape cheat")]
+    public void LegacyCheatOriginsRemainReadable(string origin, string expected)
+    {
+        var checkpoint = new SaveGameCheckpoint(
+            "checkpoint",
+            DateTimeOffset.UnixEpoch,
+            "0",
+            1,
+            "hash",
+            origin);
+        var viewModel = new SaveGameCheckpointViewModel(
+            checkpoint,
+            () => Task.CompletedTask,
+            () => Task.CompletedTask,
+            () => true);
+
+        Assert.Equal(expected, viewModel.OriginLabel);
+    }
 
     [Fact]
     public void TabsSwitchBetweenGraphicsAndSaveGames()

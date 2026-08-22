@@ -347,9 +347,9 @@ internal static class ConfigurationFileOperations
 
     /// <summary>
     /// Reads a file as one stable version. <paramref name="maxSizeBytes"/> (when &gt; 0)
-    /// bounds the accepted size; a larger file is rejected. If the length or last-write
-    /// time changes while the file is being read, the read is retried a bounded number
-    /// of times and then aborted rather than returning a torn or inconsistent version.
+    /// bounds the accepted size; a larger file is rejected. Two complete reads must be
+    /// byte-for-byte identical. Otherwise the read is retried a bounded number of times
+    /// and then aborted rather than returning a torn or inconsistent version.
     /// </summary>
     public static byte[] ReadStableBounded(string path, long maxSizeBytes = 0)
     {
@@ -377,7 +377,7 @@ internal static class ConfigurationFileOperations
             }
         }
 
-        throw new IOException("The save file is being written and could not be read as a stable version.");
+        throw new IOException("The file is changing and could not be read as a stable version.");
     }
 
     private static byte[] ReadBoundedVersion(string path, long maxSizeBytes)

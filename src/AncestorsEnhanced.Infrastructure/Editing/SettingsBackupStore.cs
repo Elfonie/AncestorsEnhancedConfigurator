@@ -416,7 +416,7 @@ internal static class SettingsBackupStore
         bool pathMatches = PathEquals(manifest.UserDataDirectory, context.UserDataDirectory) &&
             PathEquals(manifest.InstallDirectory, context.InstallDirectory);
 
-        // Newer manifests carry the context fingerprint: it must match exactly (Paket 3).
+        // Newer manifests carry the context fingerprint, which must match exactly.
         if (!string.IsNullOrEmpty(manifest.ContextFingerprint))
         {
             return pathMatches && string.Equals(manifest.ContextFingerprint, context.ContextFingerprint, StringComparison.Ordinal);

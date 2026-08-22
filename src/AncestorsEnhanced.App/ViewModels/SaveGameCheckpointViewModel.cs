@@ -127,6 +127,9 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         "Manual" => "Manual backup",
         "AutoBackup" => "Auto-backup",
         "PreRestore" => "Before restore",
+        // Keep checkpoint origins created by pre-0.9 builds readable.
+        "Cheat:MaxNeuronalEnergy" => "Max Neuronal Energy cheat",
+        "Cheat:MaxNeeds" => "Max Stamina and Energy cheat",
         "Cheat:HealClan" => "Heal Current Ape cheat",
         "Cheat:HealCurrentApe" => "Heal Current Ape cheat",
         "Cheat:Heal Current Ape" => "Heal Current Ape cheat",

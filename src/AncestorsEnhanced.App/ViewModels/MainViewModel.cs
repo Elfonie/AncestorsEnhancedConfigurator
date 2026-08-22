@@ -244,7 +244,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        if (IsBusy)
+        if (IsAnyOperationRunning)
         {
             return;
         }
@@ -413,7 +413,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(ReviewDescription));
             OnPropertyChanged(nameof(ConfirmReviewLabel));
             IsReviewingChanges = true;
-            ShowMessage("Review the tool-managed files before removing those changes.", "#E04D42");
+            ShowMessage("Review the tool-managed files before removing those changes.", "#FF5A00");
         }
         catch (Exception exception)
         {
@@ -652,7 +652,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnReviewChangesChanged(IReadOnlyList<ChangeReviewRowViewModel> value) =>
         OnPropertyChanged(nameof(ReviewSummary));
 
-
     private void SetDetection(string status, string statusColor, string dotColor)
     {
         DetectionStatus = status;
@@ -705,7 +704,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             UserDataPath = snapshot.UserDataDirectory ?? "Not detected";
             BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
             BinarySettingsStatus = snapshot.BinarySettingsFile?.FormatStatus ?? "Not inspected";
-            LogDetection("detected");
+            LogDetection(
+                snapshot.HasErrors
+                    ? "problems"
+                    : _verifiedGameContext is not null
+                        ? "ready"
+                        : snapshot.IsGameDetected
+                            ? "unsupported"
+                            : "not-found");
 
             _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
             OnPropertyChanged(nameof(CustomOverrideCount));
@@ -852,7 +858,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             return null;
         }
     }
-
 
     private CheatViewModel? CreateCheat()
     {
@@ -1007,7 +1012,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         UpdatePendingChanges();
         if (HasPendingChanges)
         {
-            ShowMessage("Review the pending values, then apply or discard them.", "#E04D42");
+            ShowMessage("Review the pending values, then apply or discard them.", "#FF5A00");
         }
     }
 
@@ -1056,7 +1061,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         string data = string.IsNullOrWhiteSpace(_snapshot?.UserDataDirectory)
             ? "missing user-data"
             : "user-data found";
-        AppDiagnostics.Logger?.Write("Self-test: store=" + store + " " + data + " => " + result);
+        AppDiagnostics.Logger?.Write("Detection: store=" + store + " " + data + " => " + result);
     }
 
     private void ShowMessage(string message, string accent)

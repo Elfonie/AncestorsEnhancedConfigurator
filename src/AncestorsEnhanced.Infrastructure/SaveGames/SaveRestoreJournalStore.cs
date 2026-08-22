@@ -58,7 +58,7 @@ internal static class SaveRestoreJournalStore
         SaveRestoreOperation stored = Read(path, operation.SlotNumber);
         if (stored != operation)
         {
-            throw new IOException("The save restore journal changed before commit.");
+            throw new IOException("The save restore journal changed during finalization.");
         }
 
         string slotPath = SaveGamePaths.GetSlotPath(userDataDirectory, operation.SlotNumber);
@@ -282,7 +282,8 @@ internal static class SaveRestoreJournalStore
     }
 
     private static IOException ManualRecovery(string path, string reason) =>
-        new($"Save restore recovery requires manual action because {reason}. No save file was overwritten. Inspect {path}.");
+        new($"Save restore recovery requires manual action because {reason}. " +
+            $"Automatic recovery did not overwrite an unknown or foreign save state. Inspect {path}.");
 }
 
 internal sealed record SaveRestoreOperation(

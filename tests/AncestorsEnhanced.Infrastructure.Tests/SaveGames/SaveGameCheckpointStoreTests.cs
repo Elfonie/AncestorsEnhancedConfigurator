@@ -50,6 +50,34 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
         Assert.Contains(remaining, checkpoint => checkpoint.Id == thirdId);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void RetentionNeverDeletesTheCheckpointThatWasJustPublished(int cap)
+    {
+        string userData = CreateUserData();
+        string[] ids = cap == 1
+            ? [CheckpointId('f'), CheckpointId('0')]
+            : [CheckpointId('e'), CheckpointId('f'), CheckpointId('0')];
+        var pendingIds = new Queue<string>(ids);
+        var store = new SaveGameCheckpointStore(
+            () => FixedTime,
+            cap,
+            _ => pendingIds.Dequeue());
+
+        string publishedId = string.Empty;
+        foreach (int value in Enumerable.Range(1, ids.Length))
+        {
+            publishedId = store.Create(userData, 0, TestSaveFactory.Create((byte)value));
+        }
+
+        IReadOnlyList<SaveGameCheckpoint> remaining =
+            SaveGameCheckpointStore.ListCheckpoints(userData, 0);
+        Assert.Equal(cap, remaining.Count);
+        Assert.Contains(remaining, checkpoint => checkpoint.Id == publishedId);
+        Assert.True(File.Exists(SaveGamePaths.GetCheckpointPath(userData, 0, publishedId)));
+    }
+
     [Fact]
     public void ReadRefusesACorruptedStoredFile()
     {
@@ -174,6 +202,9 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
     }
 
     private static readonly DateTimeOffset FixedTime = new(2026, 8, 1, 12, 0, 0, TimeSpan.Zero);
+
+    private static string CheckpointId(char suffix) =>
+        $"20260801-120000-000-{new string(suffix, 32)}";
 
     private string CreateUserData()
     {

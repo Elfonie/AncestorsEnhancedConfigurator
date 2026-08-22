@@ -23,6 +23,8 @@ public sealed record FeatureSettingRowViewModel(
 
     public string ValueLabel => Editor?.HasCurrentOverride == true
         ? "Custom override"
+        : Editor?.ShowUnknownGameValue == true && !HasPresetValues
+            ? "Game controlled"
         : ActivePresetName is not null
             ? $"{ActivePresetName} game preset"
             : HasPresetValues
