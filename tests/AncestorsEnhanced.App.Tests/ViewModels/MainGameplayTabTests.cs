@@ -2,6 +2,7 @@ using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.Platform;
 
 namespace AncestorsEnhanced.App.Tests.ViewModels;
 
@@ -76,12 +77,32 @@ public sealed class MainGameplayTabTests
     }
 
     [Fact]
-    public void GameplayResearchValuesAreReadOnlyReferenceData()
+    public void DiagnosticsNavigationIsIndependentOfOtherViews()
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),
             new NoopEditor(),
             _ => new NoopManager());
+
+        viewModel.ShowDiagnosticsCommand.Execute(null);
+
+        Assert.True(viewModel.ShowDiagnosticsView);
+        Assert.False(viewModel.ShowGraphicsView);
+        Assert.False(viewModel.ShowSaveGamesView);
+        Assert.False(viewModel.ShowGameplayView);
+        Assert.False(viewModel.ShowProfilesView);
+        Assert.False(viewModel.ShowSettingsView);
+    }
+
+    [Fact]
+    public async Task GameplayResearchValuesAreReadOnlyReferenceDataForTheSupportedBuild()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
 
         Assert.Equal(7, viewModel.GameplayResearchValues.Count);
         Assert.Contains(
@@ -92,21 +113,25 @@ public sealed class MainGameplayTabTests
             Assert.False(string.IsNullOrWhiteSpace(value.Name));
             Assert.False(string.IsNullOrWhiteSpace(value.StockValue));
             Assert.False(string.IsNullOrWhiteSpace(value.Description));
+            Assert.Contains("deterministic PAK", value.Evidence, StringComparison.Ordinal);
+            Assert.Contains("Not editable", value.Editability, StringComparison.Ordinal);
         });
     }
 
     [Fact]
-    public void GameplayDifficultyModesAreIndependentAndExposeOnlyPlannedControls()
+    public async Task GameplayDifficultyModesAreIndependentAndExposeOnlyPlannedControls()
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),
             new NoopEditor(),
             _ => new NoopManager());
 
+        await viewModel.InitializeAsync();
+
         Assert.True(viewModel.IsGameplaySimpleMode);
         Assert.False(viewModel.IsGameplayAdvancedMode);
-        Assert.Equal(4, viewModel.GameplayDifficultyPresets.Count);
-        Assert.Equal(5, viewModel.GameplaySimpleControls.Count);
+        Assert.Equal(5, viewModel.GameplayDifficultyPresets.Count);
+        Assert.Equal(4, viewModel.GameplaySimpleControls.Count);
         Assert.Contains(viewModel.GameplaySimpleControls, control =>
             control.Name == "Food need" &&
             control.StockValue == "24 portions per day · game default");
@@ -129,6 +154,100 @@ public sealed class MainGameplayTabTests
         Assert.False(viewModel.IsGameplayAdvancedMode);
     }
 
+    [Fact]
+    public async Task GameplayCatalogIsHiddenForAnUnverifiedBuild()
+    {
+        GameInspectionSnapshot supported = CreateSnapshot();
+        var viewModel = new MainViewModel(
+            new FixedInspector(supported with
+            {
+                Installation = supported.Installation! with { BuildId = "not-supported" },
+            }),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
+
+        Assert.Empty(viewModel.GameplayDifficultyPresets);
+        Assert.Empty(viewModel.GameplaySimpleControls);
+        Assert.Empty(viewModel.GameplayResearchValues);
+        Assert.Contains("only for verified Steam build", viewModel.GameplayDraftStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GameplayCatalogRequiresTheExactResearchedContentSignature()
+    {
+        GameInspectionSnapshot supported = CreateSnapshot();
+        var viewModel = new MainViewModel(
+            new FixedInspector(supported with
+            {
+                Installation = supported.Installation! with { ContentSignature = "PAK5:other" },
+            }),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
+
+        Assert.Empty(viewModel.GameplaySimpleControls);
+        Assert.Equal("Exact game identity required", viewModel.GameplayReadiness.Title);
+    }
+
+    [Fact]
+    public async Task GameplayReadinessBlocksWhenAdditionalPaksCannotBeInspectedForAssetConflicts()
+    {
+        GameInspectionSnapshot supported = CreateSnapshot() with
+        {
+            PakFiles =
+            [
+                new PakFileSnapshot(
+                    "SomeMod_P.pak",
+                    "SomeMod_P.pak",
+                    123,
+                    DateTimeOffset.UnixEpoch,
+                    PakClassification.PatchStyle),
+            ],
+        };
+        var viewModel = new MainViewModel(
+            new FixedInspector(supported),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
+
+        Assert.NotEmpty(viewModel.GameplaySimpleControls);
+        Assert.Equal("External PAKs detected", viewModel.GameplayReadiness.Title);
+        Assert.True(viewModel.GameplayReadiness.IsBlocked);
+    }
+
+    [Fact]
+    public async Task EditingASimpleControlMarksTheCurrentDraftAsCustomWithoutCreatingAPak()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
+        Assert.Single(viewModel.GameplaySimpleControls, control => control.Name == "Food need").MultiplierPercent = 120;
+
+        Assert.Equal("Custom gameplay draft · no PAK created", viewModel.GameplayDraftStatus);
+    }
+
+    [Fact]
+    public async Task HardwareRecommendationIsAvailableOnlyAfterALocalProbeReturnsEnoughData()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new NoopEditor(),
+            _ => new NoopManager(),
+            hardwareProbe: new FixedHardwareProbe());
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("Balanced", viewModel.HardwareDiagnostics.Recommendation.PresetName);
+        Assert.True(viewModel.CanStageHardwareRecommendation);
+    }
+
     private static GameInspectionSnapshot CreateSnapshot() =>
         new(
             DateTimeOffset.UnixEpoch,
@@ -139,7 +258,8 @@ public sealed class MainGameplayTabTests
                 "library",
                 "install",
                 "5495393",
-                ExecutableExists: true),
+                ExecutableExists: true,
+                ContentSignature: AncestorsEnhanced.Core.AncestorsGameProfile.SupportedContentSignature),
             "user-data",
             [],
             null,
@@ -149,6 +269,17 @@ public sealed class MainGameplayTabTests
     private sealed class FixedInspector(GameInspectionSnapshot snapshot) : IReadOnlyGameInspector
     {
         public GameInspectionSnapshot Inspect() => snapshot;
+    }
+
+    private sealed class FixedHardwareProbe : IHardwareProbe
+    {
+        public HardwareSnapshot Inspect() => new(
+            "Windows",
+            "CPU",
+            8,
+            4,
+            16UL * 1024 * 1024 * 1024,
+            [new GraphicsAdapterSnapshot("GPU", 8UL * 1024 * 1024 * 1024)]);
     }
 
     private sealed class NoopEditor : IGameSettingsEditor

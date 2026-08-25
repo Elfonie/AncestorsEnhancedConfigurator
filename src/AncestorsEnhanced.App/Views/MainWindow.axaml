@@ -74,6 +74,12 @@
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
                       Content="Settings" />
+        <ToggleButton Classes="nav"
+                      Command="{Binding ShowDiagnosticsCommand}"
+                      IsChecked="{Binding ShowDiagnosticsView, Mode=OneWay}"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Left"
+                      Content="Diagnostics" />
       </StackPanel>
       </Grid>
     </Border>
@@ -179,6 +185,29 @@
           </StackPanel>
         </Border>
 
+        <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+          <StackPanel Spacing="8">
+            <TextBlock Text="AEC graphics presets" FontWeight="SemiBold" Foreground="#E6ECEF" />
+            <TextBlock Text="Each preset is staged through the normal review flow; no file changes until you confirm." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding BuiltInGraphicsPresets}">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
+                  <Button Margin="0,0,8,0" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}">
+                    <StackPanel Spacing="1"><TextBlock Text="{Binding Name}" /><TextBlock Text="{Binding Summary}" FontSize="11" /></StackPanel>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <ToggleButton Classes="mode" Command="{Binding ShowAllGraphicsCommand}" IsChecked="{Binding IsAllGraphicsFilter}" Content="All" />
+          <ToggleButton Classes="mode" Command="{Binding ShowModifiedGraphicsCommand}" IsChecked="{Binding IsModifiedGraphicsFilter}" Content="Modified" />
+          <ToggleButton Classes="mode" Command="{Binding ShowGameDefaultsGraphicsCommand}" IsChecked="{Binding IsGameDefaultsGraphicsFilter}" Content="Game defaults" />
+        </StackPanel>
+
         <ItemsControl ItemsSource="{Binding FeatureGroups}"
                       IsEnabled="{Binding CanEditSettings}">
           <ItemsControl.ItemTemplate>
@@ -214,6 +243,12 @@
                           CornerRadius="0,0,9,9"
                           ClipToBounds="True"
                           IsVisible="{Binding IsExpanded}">
+                    <StackPanel>
+                    <Button Content="Reset custom overrides in this group"
+                            Command="{Binding $parent[Window].DataContext.ResetGraphicsGroupCommand}"
+                            CommandParameter="{Binding}"
+                            HorizontalAlignment="Right"
+                            Margin="14,8,14,4" />
                     <ItemsControl ItemsSource="{Binding Settings}">
                       <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:FeatureSettingRowViewModel">
@@ -399,7 +434,8 @@
                         </Border>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
-                  </ItemsControl>
+                    </ItemsControl>
+                    </StackPanel>
                   </Border>
                 </Grid>
               </Border>
@@ -577,6 +613,24 @@
             <TextBlock Text="{Binding SaveManager.SteamCloudWarning}" TextWrapping="Wrap" Foreground="#D6BC84" FontSize="12" />
           </Border>
 
+          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding SaveManager.StatusAccent}" BorderThickness="1">
+            <StackPanel Spacing="3">
+              <TextBlock Text="Backup health" FontWeight="SemiBold" Foreground="#E6ECEF" />
+              <TextBlock Text="{Binding SaveManager.BackupHealthSummary}" TextWrapping="Wrap" Foreground="{Binding SaveManager.StatusAccent}" />
+              <TextBlock Text="This checks what AEC could read during the latest scan. It does not claim a checkpoint was loaded successfully in-game."
+                         IsVisible="{Binding SaveManager.HasBackupHealthWarning}" FontSize="12" Foreground="#D6BC84" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,180" ColumnSpacing="10">
+              <TextBox PlaceholderText="Search checkpoint name, note or origin"
+                       Text="{Binding SaveManager.CheckpointSearchText}" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding SaveManager.CheckpointOriginFilters}"
+                        SelectedItem="{Binding SaveManager.CheckpointOriginFilter, Mode=TwoWay}" />
+            </Grid>
+          </Border>
+
           <ItemsControl ItemsSource="{Binding SaveManager.Slots}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:SaveGameSlotViewModel">
@@ -595,11 +649,14 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
                           <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                            <StackPanel Spacing="0">
                             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="14">
                               <StackPanel Spacing="1">
-                                <TextBlock Text="{Binding CreatedLabel}" FontWeight="SemiBold" Foreground="#E1E7EA" />
+                                <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" Foreground="#E1E7EA" />
+                                <TextBlock Text="{Binding CreatedLabel}" FontSize="12" Foreground="#82939D" />
                                 <TextBlock Text="{Binding OriginLabel}" FontSize="12" Foreground="#B4D941" />
                                 <TextBlock Text="{Binding SizeLabel}" FontSize="12" Foreground="#71828D" />
+                                <TextBlock Text="{Binding Note}" IsVisible="{Binding HasNote}" FontSize="12" Foreground="#D6BC84" TextWrapping="Wrap" />
                               </StackPanel>
                               <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
                                 <Button Classes="Ghost" Content="Delete" Padding="12,6" Foreground="#D6BC84" Command="{Binding OpenDeleteConfirmCommand}" IsEnabled="{Binding CanDelete}" IsVisible="{Binding !IsDeleteConfirmVisible}" />
@@ -608,11 +665,18 @@
                               </StackPanel>
 
                               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                <ToggleButton Content="Favorite" IsChecked="{Binding IsFavorite, Mode=TwoWay}" />
+                                <Button Content="Details" Command="{Binding ToggleMetadataEditorCommand}" />
                                 <Button Command="{Binding OpenRestoreConfirmCommand}" IsEnabled="{Binding CanRestore}" Content="Restore" Padding="12,6" IsVisible="{Binding !IsRestoreConfirmVisible}" />
                                 <Button IsVisible="{Binding IsRestoreConfirmVisible}" IsEnabled="{Binding CanRestore}" Classes="PrimaryAction" Content="Confirm restore" Padding="12,6" Command="{Binding LoadCommand}" />
                                 <Button IsVisible="{Binding IsRestoreConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelRestoreConfirmCommand}" />
                               </StackPanel>
                             </Grid>
+                            <StackPanel IsVisible="{Binding IsMetadataEditorVisible}" Spacing="6" Margin="0,8,0,0">
+                              <TextBox PlaceholderText="Checkpoint name optional" Text="{Binding Title}" MaxLength="80" />
+                              <TextBox PlaceholderText="Note optional" Text="{Binding Note}" MaxLength="400" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="52" />
+                            </StackPanel>
+                            </StackPanel>
                           </Border>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
@@ -682,7 +746,7 @@
               <StackPanel Spacing="10">
                 <StackPanel Spacing="3">
                   <TextBlock Text="Presets" FontWeight="SemiBold" Foreground="#B8D7E5" />
-                  <TextBlock Text="Preset selection is deliberately not active yet. These are the planned, understandable directions—not a claim that a PAK has been applied." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Presets create a local draft only. They never claim that a PAK has been applied." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding GameplayDifficultyPresets}">
                   <ItemsControl.ItemTemplate>
@@ -707,7 +771,7 @@
               <StackPanel Spacing="10">
                 <StackPanel Spacing="3">
                   <TextBlock Text="Simple controls" FontWeight="SemiBold" Foreground="#B8D7E5" />
-                  <TextBlock Text="These are the first five categories intended for custom 10% steps. They are still showing the unmodified game defaults." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="These are the four independently supported categories for custom 10% drafts. Coupled vitality values stay in Advanced research until their runtime behavior is verified." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding GameplaySimpleControls}">
                   <ItemsControl.ItemTemplate>
@@ -748,10 +812,12 @@
                           <StackPanel Spacing="2">
                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6ECEF" />
                             <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Evidence}" FontSize="11" Foreground="#71828D" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Editability}" FontSize="11" Foreground="#D6BC84" TextWrapping="Wrap" />
                           </StackPanel>
                           <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Right">
                             <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="#B4D941" HorizontalAlignment="Right" />
-                            <TextBlock Text="Research only" FontSize="11" Foreground="#71828D" HorizontalAlignment="Right" />
+                            <TextBlock Text="Locked research" FontSize="11" Foreground="#71828D" HorizontalAlignment="Right" />
                           </StackPanel>
                         </Grid>
                       </Border>
@@ -762,10 +828,11 @@
             </Border>
           </StackPanel>
 
-          <Border Padding="14,11" CornerRadius="7" Background="#211C18" BorderBrush="#765536" BorderThickness="1">
+          <Border Padding="14,11" CornerRadius="7" Background="#211C18" BorderBrush="{Binding GameplayReadiness.AccentColor}" BorderThickness="1">
             <StackPanel Spacing="4">
-              <TextBlock Text="Applying difficulty is not enabled yet" FontWeight="SemiBold" Foreground="#E8D5B5" />
-              <TextBlock Text="AEC will not enable presets or percentage controls until every included value has deterministic PAK creation, exact asset verification, conflict handling and an in-game loading check. This page currently writes nothing." FontSize="12" Foreground="#E8D5B5" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding GameplayReadiness.Title}" FontWeight="SemiBold" Foreground="#E8D5B5" />
+              <TextBlock Text="{Binding GameplayReadiness.Description}" FontSize="12" Foreground="#E8D5B5" TextWrapping="Wrap" />
+              <TextBlock Text="This page currently writes nothing." FontSize="12" Foreground="#E8D5B5" />
             </StackPanel>
           </Border>
         </StackPanel>
@@ -789,7 +856,7 @@
                   IsVisible="{Binding IsCreatingProfile}">
             <StackPanel Spacing="10" MaxWidth="660">
               <TextBlock Text="Create graphics profile" FontWeight="SemiBold" Foreground="#DCEEFF" />
-              <TextBlock Text="This saves your active custom graphics values. Game defaults, save games and external mods are never included." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              <TextBlock Text="This saves the current editable graphics setup, including direct game graphics values. Save games and external mods are never included." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
               <TextBlock Text="Set at least one graphics setting to Custom before saving a profile."
                          IsVisible="{Binding !HasCustomProfileSettings}"
                          FontSize="12" Foreground="#D6BC84" TextWrapping="Wrap" />
@@ -824,7 +891,47 @@
                   IsVisible="{Binding !HasUserProfiles}">
             <StackPanel Spacing="5">
               <TextBlock Text="No saved profiles yet" FontWeight="SemiBold" Foreground="#B8D7E5" />
-              <TextBlock Text="Create a profile from active custom graphics values or import a .aecprofile file. Loaded values are always reviewed before anything is applied." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              <TextBlock Text="Create a profile from the current editable graphics setup or import a .aecprofile file. Loaded values are always reviewed before anything is applied." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="#211C18" BorderBrush="#765536" BorderThickness="1"
+                  IsVisible="{Binding HasProfilePendingDeletion}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Delete this profile?" FontWeight="SemiBold" Foreground="#E8D5B5" />
+              <TextBlock Text="{Binding ProfilePendingDeletion.Name, StringFormat=This permanently removes {0} from My profiles.}" FontSize="12" Foreground="#E8D5B5" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Cancel" Command="{Binding CancelProfileDeletionCommand}" />
+                <Button Classes="DangerAction" Content="Delete profile" Command="{Binding ConfirmProfileDeletionCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1"
+                  IsVisible="{Binding HasProfilePendingRename}">
+            <StackPanel Spacing="8" MaxWidth="660">
+              <TextBlock Text="Rename profile" FontWeight="SemiBold" Foreground="#DCEEFF" />
+              <TextBlock Text="AEC first writes a validated renamed copy. Only then is the original removed, so a failed write cannot lose the profile." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              <TextBox Text="{Binding RenamedProfileName}" MaxLength="80" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Cancel" Command="{Binding CancelProfileRenameCommand}" />
+                <Button Classes="PrimaryAction" Content="Rename profile" Command="{Binding ConfirmProfileRenameCommand}" IsEnabled="{Binding CanConfirmProfileRename}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1"
+                  IsVisible="{Binding HasProfileComparison}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding ProfileComparisonName, StringFormat=Compare: {0}}" FontWeight="SemiBold" Foreground="{DynamicResource InfoTextBrush}" />
+              <ItemsControl ItemsSource="{Binding ProfileComparisonRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ProfileComparisonRowViewModel">
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" Margin="0,2">
+                      <TextBlock Text="{Binding Name}" />
+                      <TextBlock Grid.Column="1" Text="{Binding CurrentValue}" Foreground="#9CB0BC" />
+                      <TextBlock Grid.Column="2" Text="{Binding ProfileValue}" Foreground="#B4D941" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
             </StackPanel>
           </Border>
           <ItemsControl ItemsSource="{Binding UserProfiles}">
@@ -837,6 +944,9 @@
                     <TextBlock Text="{Binding Contents}" FontSize="12" Foreground="#B4D941" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,0,0">
                       <Button Classes="DangerAction" Content="Delete" Command="{Binding $parent[Window].DataContext.RequestProfileDeletionCommand}" CommandParameter="{Binding}" />
+                      <Button Content="Rename" Command="{Binding $parent[Window].DataContext.RequestProfileRenameCommand}" CommandParameter="{Binding}" />
+                      <Button Content="Duplicate" Command="{Binding $parent[Window].DataContext.DuplicateProfileCommand}" CommandParameter="{Binding}" />
+                      <Button Content="Compare" Command="{Binding $parent[Window].DataContext.CompareProfileCommand}" CommandParameter="{Binding}" />
                       <Button Content="Export" Click="ExportProfileClick" />
                       <Button Classes="PrimaryAction" Content="Load profile" Click="LoadStoredProfileClick" />
                     </StackPanel>
@@ -851,17 +961,6 @@
             <StackPanel Spacing="3">
               <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
               <TextBlock Text="Accessibility options and maintenance for Ancestors Enhanced Configurator." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-          <Border Padding="14,11" CornerRadius="7" Background="#211C18" BorderBrush="#765536" BorderThickness="1"
-                  IsVisible="{Binding HasProfilePendingDeletion}">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Delete this profile?" FontWeight="SemiBold" Foreground="#E8D5B5" />
-              <TextBlock Text="{Binding ProfilePendingDeletion.Name, StringFormat=This permanently removes {0} from My profiles.}" FontSize="12" Foreground="#E8D5B5" TextWrapping="Wrap" />
-              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button Content="Cancel" Command="{Binding CancelProfileDeletionCommand}" />
-                <Button Classes="DangerAction" Content="Delete profile" Command="{Binding ConfirmProfileDeletionCommand}" />
-              </StackPanel>
             </StackPanel>
           </Border>
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1">
@@ -914,6 +1013,87 @@
                       ToolTip.Tip="Shows every unchanged file that will be restored before anything is written." />
             </StackPanel>
           </Border>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding ShowDiagnosticsView}" Spacing="12">
+          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <StackPanel Spacing="3">
+                <TextBlock Text="Diagnostics" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
+                <TextBlock Text="Read-only inspection data for support and conflict triage. Copying the report redacts Windows user paths." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              </StackPanel>
+              <Button Grid.Column="1" Content="Copy diagnostics" Click="CopyDiagnosticsClick" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1">
+            <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
+              <TextBlock Text="AEC status" Foreground="#71828D" />
+              <TextBlock Grid.Column="1" Text="{Binding DetectionStatus}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="1" Text="Installation" Foreground="#71828D" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding InstallationDetails}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="2" Text="System.sav" Foreground="#71828D" />
+              <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding BinarySettingsStatus}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="3" Text="System" Foreground="#71828D" />
+              <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SystemDiagnostics}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="4" Text="CPU" Foreground="#71828D" />
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding HardwareDiagnostics.Cpu}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="5" Text="Memory" Foreground="#71828D" />
+              <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding HardwareDiagnostics.Memory}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="6" Text="GPU / VRAM" Foreground="#71828D" />
+              <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding HardwareDiagnostics.Graphics}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="7" Text="Recommendation" Foreground="#71828D" />
+              <StackPanel Grid.Row="7" Grid.Column="1" Spacing="4">
+                <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.PresetName}" FontWeight="SemiBold" Foreground="#B4D941" />
+                <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.Description}" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                <Button Content="Stage recommended preset" Command="{Binding LoadHardwareRecommendationCommand}" IsEnabled="{Binding CanStageHardwareRecommendation}" HorizontalAlignment="Left" />
+              </StackPanel>
+              <TextBlock Grid.Row="8" Text="Hardware status" Foreground="#71828D" />
+              <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding HardwareDiagnostics.Status}" Foreground="#D6BC84" TextWrapping="Wrap" />
+            </Grid>
+          </Border>
+          <Expander Header="Configuration files">
+            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ConfigurationFiles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ConfigurationFileRowViewModel">
+                  <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
+                    <Grid ColumnDefinitions="170,*,210">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#8B9AA4" />
+                      <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="#B4D941" TextWrapping="Wrap" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+          <Expander Header="PAK packages">
+            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding PakFiles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:PakFileRowViewModel">
+                  <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
+                    <Grid ColumnDefinitions="250,180,*">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#8B9AA4" />
+                      <TextBlock Grid.Column="2" Text="{Binding Classification}" Foreground="#C7B98C" TextWrapping="Wrap" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+          <Expander Header="Inspection notes">
+            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Notices}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:NoticeRowViewModel">
+                  <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
+                    <Grid ColumnDefinitions="90,*">
+                      <TextBlock Text="{Binding Severity}" FontWeight="SemiBold" Foreground="#D6BC84" />
+                      <TextBlock Grid.Column="1" Text="{Binding Message}" TextWrapping="Wrap" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
         </StackPanel>
       </StackPanel>
     </ScrollViewer>
@@ -1029,6 +1209,25 @@
           </StackPanel>
         </Grid>
         </Border>
+    </Grid>
+    <Grid Grid.ColumnSpan="2"
+          ZIndex="110"
+          IsVisible="{Binding IsOnboardingVisible}"
+          Focusable="True"
+          AutomationProperties.Name="Welcome to Ancestors Enhanced">
+      <Border Background="#E60C1115" />
+      <Border MaxWidth="650" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+              CornerRadius="9" Background="#15232C" BorderBrush="#3B7598" BorderThickness="1">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding OnboardingTitle}" FontSize="21" FontWeight="SemiBold" Foreground="#DCEEFF" />
+          <TextBlock Text="{Binding OnboardingDescription}" TextWrapping="Wrap" Foreground="#B8D7E5" />
+          <TextBlock Text="You can open this Configurator safely: no game files change until you explicitly review and confirm a supported edit." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Skip" Command="{Binding SkipOnboardingCommand}" />
+            <Button Classes="PrimaryAction" Content="{Binding OnboardingActionLabel}" Command="{Binding AdvanceOnboardingCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
     </Grid>
 
     <Border Grid.ColumnSpan="2"

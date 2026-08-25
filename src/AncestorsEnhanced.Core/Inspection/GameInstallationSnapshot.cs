@@ -9,4 +9,5 @@ public sealed record GameInstallationSnapshot(
     string? BuildId,
     bool ExecutableExists,
     string? ContentSignature = null,
-    bool ContentSignatureReadFailed = false);
+    bool ContentSignatureReadFailed = false,
+    string? CompatibilityPrefixPath = null);

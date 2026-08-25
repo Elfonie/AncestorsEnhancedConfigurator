@@ -4,7 +4,8 @@ namespace AncestorsEnhanced.App.Accessibility;
 
 public sealed record AccessibilityPreferences(
     bool HighContrastEnabled = false,
-    bool DiscordRichPresenceEnabled = false);
+    bool DiscordRichPresenceEnabled = false,
+    bool HasCompletedOnboarding = false);
 
 public sealed class AccessibilityPreferencesStore
 {

@@ -72,6 +72,31 @@ public sealed class EditableSettingsCatalogTests
     }
 
     [Theory]
+    [InlineData("r.DOF.Gather.RingCount", "3")]
+    [InlineData("r.DOF.Gather.AccumulatorQuality", "1")]
+    [InlineData("r.DOF.Gather.EnableBokehSettings", "0")]
+    [InlineData("r.Shadow.MaxCSMResolution", "4096")]
+    [InlineData("r.VolumetricFog.GridPixelSize", "4")]
+    [InlineData("r.CapsuleShadows", "1")]
+    [InlineData("r.TranslucencyLightingVolumeDim", "64")]
+    [InlineData("r.SSS.Scale", "0.75")]
+    public void VerifiedStockAdvancedControlsAcceptOnlyCataloguedValues(string key, string value)
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot();
+        SettingEditSnapshot editor = Assert.IsType<SettingEditSnapshot>(
+            EditableSettingsCatalog.Create(snapshot, key, null));
+
+        Assert.True(EditableSettingsCatalog.TryValidate(
+            snapshot,
+            new SettingChangeRequest("Advanced setting", editor.FileName, editor.Section, key, value),
+            out _));
+        Assert.False(EditableSettingsCatalog.TryValidate(
+            snapshot,
+            new SettingChangeRequest("Advanced setting", editor.FileName, editor.Section, key, "not-a-stock-choice"),
+            out _));
+    }
+
+    [Theory]
     [InlineData(StoreKind.EpicGames, HostKind.Windows, CompatibilityLayerKind.None)]
     [InlineData(StoreKind.Gog, HostKind.Windows, CompatibilityLayerKind.None)]
     [InlineData(StoreKind.Steam, HostKind.Linux, CompatibilityLayerKind.Proton)]

@@ -4,6 +4,7 @@ using AncestorsEnhanced.Core.Profiles;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 
@@ -155,6 +156,16 @@ public partial class MainWindow : Window
         {
             viewModel.LoadProfileCommand.Execute(row);
         }
+    }
+
+    private async void CopyDiagnosticsClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel || Clipboard is null)
+        {
+            return;
+        }
+
+        await Clipboard.SetTextAsync(viewModel.CreateDiagnosticsReport());
     }
 
     private static string SanitizeFileName(string name)

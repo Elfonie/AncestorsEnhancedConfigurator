@@ -26,6 +26,17 @@ public static class EditableSettingsCatalog
             ["r.MotionBlur.Amount"] = Number(-1, -1, 1, 0.05m),
             ["r.MotionBlur.Max"] = Number(-1, -1, 100, 1),
             ["r.DepthOfFieldQuality"] = Quality(defaultValue: 0, maximum: 4),
+            ["r.DOF.Gather.RingCount"] = Choice("4", ("3", "3 rings"), ("4", "4 rings"), ("5", "5 rings")),
+            ["r.DOF.Gather.AccumulatorQuality"] = Quality(defaultValue: 1, maximum: 1),
+            ["r.DOF.Gather.PostfilterMethod"] = Choice("1", ("1", "Median 3×3"), ("2", "Maximum 3×3")),
+            ["r.DOF.Gather.EnableBokehSettings"] = Toggle(defaultValue: true),
+            ["r.DOF.Scatter.EnableBokehSettings"] = Toggle(defaultValue: true),
+            ["r.DOF.Recombine.Quality"] = Quality(defaultValue: 1, maximum: 2),
+            ["r.DOF.TemporalAAQuality"] = Quality(defaultValue: 1, maximum: 1),
+            ["r.DOF.Kernel.MaxForegroundRadius"] = Choice(
+                "0.025", ("0.006", "0.006"), ("0.012", "0.012"), ("0.025", "0.025")),
+            ["r.DOF.Kernel.MaxBackgroundRadius"] = Choice(
+                "0.025", ("0.006", "0.006"), ("0.012", "0.012"), ("0.025", "0.025")),
 
             ["r.PostProcessAAQuality"] = Quality(defaultValue: 4, maximum: 6),
             ["r.TemporalAACurrentFrameWeight"] = Number(0.15m, 0.01m, 1, 0.01m),
@@ -84,10 +95,33 @@ public static class EditableSettingsCatalog
             ["r.DistanceFieldShadowing"] = Toggle(defaultValue: true),
             ["r.DistanceFieldAO"] = Toggle(defaultValue: true),
             ["r.VolumetricFog"] = Toggle(defaultValue: true),
+            ["r.Shadow.MaxCSMResolution"] = Choice(
+                "2048", ("512", "512 px"), ("1024", "1024 px"), ("2048", "2048 px"), ("4096", "4096 px")),
+            ["r.Shadow.RadiusThreshold"] = Choice(
+                "0.04", ("0", "0"), ("0.01", "0.01"), ("0.04", "0.04"), ("0.05", "0.05"), ("0.06", "0.06")),
+            ["r.Shadow.CSM.TransitionScale"] = Choice(
+                "0.8", ("0", "0"), ("0.25", "0.25"), ("0.8", "0.8"), ("1.0", "1.0")),
+            ["r.Shadow.PreShadowResolutionFactor"] = Choice("1.0", ("0.5", "50%"), ("1.0", "100%")),
+            ["r.AOQuality"] = Choice("2", ("1", "Low"), ("2", "Medium")),
+            ["r.VolumetricFog.GridPixelSize"] = Choice(
+                "8", ("4", "4 px (highest cost)"), ("8", "8 px"), ("16", "16 px (lowest cost)")),
+            ["r.VolumetricFog.GridSizeZ"] = Choice("128", ("64", "64 slices"), ("128", "128 slices")),
+            ["r.VolumetricFog.HistoryMissSupersampleCount"] = Choice(
+                "4", ("4", "4 samples"), ("16", "16 samples")),
+            ["r.LightMaxDrawDistanceScale"] = Choice("1", ("0", "Off"), (".5", "50%"), ("1", "100%")),
+            ["r.CapsuleShadows"] = Toggle(defaultValue: true),
 
             ["r.RefractionQuality"] = Quality(defaultValue: 2, maximum: 2),
             ["r.SSR.Quality"] = Quality(defaultValue: 2, maximum: 4),
+            ["r.TranslucencyLightingVolumeDim"] = Choice(
+                "48", ("24", "24³"), ("32", "32³"), ("48", "48³"), ("64", "64³")),
+            ["r.TranslucencyVolumeBlur"] = Toggle(defaultValue: true),
             ["r.DetailMode"] = Quality(defaultValue: 1, maximum: 2),
+            ["r.MaterialQualityLevel"] = Quality(defaultValue: 1, maximum: 2),
+            ["r.SSS.Scale"] = Choice("1", ("0", "Off"), ("0.75", "75%"), ("1", "100%")),
+            ["r.SSS.Quality"] = Choice("1", (("-1", "Automatic")), ("0", "Off"), ("1", "Low")),
+            ["r.SSS.SampleSet"] = Quality(defaultValue: 1, maximum: 2),
+            ["r.SSS.HalfRes"] = Toggle(defaultValue: true),
             ["r.EmitterSpawnRateScale"] = Number(0.5m, 0, 2, 0.05m),
             ["r.ParticleLightQuality"] = Toggle(defaultValue: true),
             ["!StartupMovies"] = new(

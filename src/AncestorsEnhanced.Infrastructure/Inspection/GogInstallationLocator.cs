@@ -9,7 +9,9 @@ internal sealed class GogInstallationLocator(
 {
     public IReadOnlyList<GameInstallationSnapshot> Find() =>
         environment.GetGogInstallCandidates()
-            .Select(path => factory.CreateWindows(StoreKind.Gog, path, null))
+            .Select(path => environment.Host == HostKind.Linux
+                ? factory.CreateLinux(StoreKind.Gog, path, null, CompatibilityLayerKind.Proton)
+                : factory.CreateWindows(StoreKind.Gog, path, null))
             .OfType<GameInstallationSnapshot>()
             .ToArray();
 }

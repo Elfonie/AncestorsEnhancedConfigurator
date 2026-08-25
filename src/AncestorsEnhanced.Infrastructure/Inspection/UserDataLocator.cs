@@ -13,16 +13,26 @@ internal sealed class UserDataLocator(
         GameInstallationSnapshot? installation,
         List<InspectionNotice> notices)
     {
-        if (installation is { Host: HostKind.Linux, Store: StoreKind.Steam })
+        if (installation is { Host: HostKind.Linux })
         {
-            string users = Path.Combine(
-                installation.LibraryRoot,
-                "steamapps",
-                "compatdata",
-                AncestorsGameProfile.SteamAppId,
-                "pfx",
-                "drive_c",
-                "users");
+            string? prefix = installation.Store == StoreKind.Steam
+                ? Path.Combine(
+                    installation.LibraryRoot,
+                    "steamapps",
+                    "compatdata",
+                    AncestorsGameProfile.SteamAppId,
+                    "pfx")
+                : installation.CompatibilityPrefixPath;
+            if (string.IsNullOrWhiteSpace(prefix))
+            {
+                notices.Add(new InspectionNotice(
+                    InspectionSeverity.Warning,
+                    "userdata.prefix-not-found",
+                    "The launcher did not provide an Ancestors Wine/Proton prefix. Start the game once and reload."));
+                return null;
+            }
+
+            string users = Path.Combine(prefix, "drive_c", "users");
             if (fileSystem.DirectoryExists(users))
             {
                 // Only accept a user whose Ancestors Saved directory actually exists.
@@ -50,7 +60,7 @@ internal sealed class UserDataLocator(
             notices.Add(new InspectionNotice(
                 InspectionSeverity.Warning,
                 "userdata.not-found",
-                "The Ancestors Proton prefix was not found. Start the game once."));
+                "The Ancestors Wine/Proton prefix was not found. Start the game once."));
             return null;
         }
 

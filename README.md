@@ -1,6 +1,6 @@
 # Ancestors Enhanced Configurator
 
-A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It exposes verified graphics options, manages local save checkpoints, and provides a small set of experimental save modifications.
+A portable desktop configurator for **Ancestors: The Humankind Odyssey**. It exposes verified graphics options, manages local save checkpoints, and documents build-bound gameplay difficulty research.
 
 Release packages are self-contained. Extract the archive and start the application; no installer or separate .NET runtime is required.
 
@@ -20,17 +20,17 @@ Release packages are self-contained. Extract the archive and start the applicati
 2. Close the game, extract the Configurator archive, and start the application.
 3. Adjust the settings, select **Review**, and confirm the changes.
 
-Creating normal save checkpoints and automatic checkpoints is allowed while the game is running. Restoring a checkpoint or creating or restoring an experimental save modification requires the game to be closed.
+Creating normal save checkpoints and automatic checkpoints is allowed while the game is running. Restoring a checkpoint requires the game to be closed.
 
 ## Compatibility
 
-| Installation | Detection | Graphics editing | Save checkpoints | Experimental save modifications |
-| --- | --- | --- | --- | --- |
-| Steam on Windows | Supported | Supported for the verified build | Supported | Available, experimental |
-| Epic Games on Windows | Supported | Supported with a verified content signature | Supported with a verified installation | Available, experimental |
-| GOG on Windows | Supported | Supported with a verified content signature | Supported with a verified installation | Available, experimental |
-| Steam through Proton on Linux | Supported | Supported for a verified installation | Supported | Available, experimental |
-| Heroic | Detection only | Read-only | Read-only | Unavailable |
+| Installation | Detection | Graphics editing | Save checkpoints |
+| --- | --- | --- | --- |
+| Steam on Windows | Supported | Supported for the verified build | Supported |
+| Epic Games on Windows | Supported | Supported with a verified content signature | Supported with a verified installation |
+| GOG on Windows | Supported | Supported with a verified content signature | Supported with a verified installation |
+| Steam through Proton on Linux | Supported | Supported for a verified installation | Supported |
+| Heroic | Detection only | Read-only | Read-only |
 
 Detection alone never authorises a write. Before changing a file, the Configurator verifies the game identity, installation context, and target. Missing or contradictory evidence disables editing instead of guessing.
 
@@ -119,7 +119,7 @@ The publish profiles create self-contained single-file builds. GitHub Actions bu
 
 ## Project status
 
-Automated tests verify code paths and file-safety rules. They do not replace release testing with a real Ancestors installation, a Proton environment, Steam Cloud, or real in-game save modifications.
+Automated tests verify code paths and file-safety rules. They do not replace release testing with a real Ancestors installation, a Proton environment, Steam Cloud, or real in-game checkpoint restore.
 
 Ancestors Enhanced Configurator is an unofficial community project and is not affiliated with Panache Digital Games or Private Division.
 

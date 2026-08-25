@@ -10,6 +10,27 @@ namespace AncestorsEnhanced.App.Tests.ViewModels;
 public sealed class MainViewModelTests
 {
     [Fact]
+    public void OnboardingExplainsSafetyAndPersistsCompletionOnlyWhenDismissed()
+    {
+        int completionCount = 0;
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            showOnboarding: true,
+            onboardingCompleted: () => completionCount++);
+
+        Assert.True(viewModel.IsOnboardingVisible);
+        Assert.Contains("detects", viewModel.OnboardingDescription, StringComparison.OrdinalIgnoreCase);
+
+        viewModel.AdvanceOnboardingCommand.Execute(null);
+        viewModel.AdvanceOnboardingCommand.Execute(null);
+        viewModel.AdvanceOnboardingCommand.Execute(null);
+
+        Assert.False(viewModel.IsOnboardingVisible);
+        Assert.Equal(1, completionCount);
+    }
+
+    [Fact]
     public void HighContrastChangeUsesTheInjectedApplicationThemeHandler()
     {
         bool? observed = null;
@@ -319,10 +340,10 @@ public sealed class MainViewModelTests
         FeatureGroupRowViewModel shadows = Assert.Single(
             viewModel.FeatureGroups,
             group => group.Id == "shadows-lighting");
-        Assert.Equal(8, shadows.Settings.Count);
+        Assert.Equal(17, shadows.Settings.Count);
         Assert.All(shadows.Settings, setting => Assert.True(setting.ShowDescription));
         Assert.Contains(shadows.Settings, setting => setting.Name == "CSM maximum resolution");
-        Assert.DoesNotContain(shadows.Settings, setting => setting.Name == "Fog history supersamples");
+        Assert.Contains(shadows.Settings, setting => setting.Name == "Fog history supersamples");
 
         viewModel.SearchText = "r.Shadow.MaxResolution";
 
@@ -563,6 +584,54 @@ public sealed class MainViewModelTests
             setting.Key == "mod.VignettePercent" && setting.Value == "50");
         Assert.DoesNotContain(saved.Profile.Graphics, setting =>
             setting.Key == "VL01E01_Vignette_Intensity");
+    }
+
+    [Fact]
+    public async Task DuplicateProfileCreatesAnIndependentSavedCopy()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion, "My setup", "Description", DateTimeOffset.UnixEpoch,
+            "1.0.0", [new ProfileSetting("r.ViewDistanceScale", "1.2")], [], []);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor(), profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.DuplicateProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.Equal(2, profiles.List().Count);
+        Assert.Contains(profiles.List(), item => item.Profile.Name == "My setup copy");
+        Assert.Contains("Created copy", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RenameProfileCreatesTheReplacementBeforeRemovingTheOriginal()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion, "Before", null, DateTimeOffset.UnixEpoch,
+            "1.0.0", [new ProfileSetting("r.ViewDistanceScale", "1.2")], [], []);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor(), profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.RequestProfileRenameCommand.Execute(Assert.Single(viewModel.UserProfiles));
+        viewModel.RenamedProfileName = "After";
+        viewModel.ConfirmProfileRenameCommand.Execute(null);
+
+        StoredUserProfile renamed = Assert.Single(profiles.List());
+        Assert.Equal("After", renamed.Profile.Name);
+        Assert.Null(viewModel.ProfilePendingRename);
+        Assert.Contains("Renamed profile", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuiltInGraphicsPresetsCoverQualityVramAndCinematicUseCases()
+    {
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
+
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "High Quality");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Ultra");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Low VRAM");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Cinematic");
     }
 
     [Fact]

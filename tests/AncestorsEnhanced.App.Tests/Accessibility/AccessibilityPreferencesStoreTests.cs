@@ -25,6 +25,16 @@ public sealed class AccessibilityPreferencesStoreTests : IDisposable
     }
 
     [Fact]
+    public void OnboardingCompletionPersistsOutsideGameData()
+    {
+        var store = new AccessibilityPreferencesStore(_directory);
+
+        Assert.True(store.TrySave(new AccessibilityPreferences(HasCompletedOnboarding: true)));
+
+        Assert.True(store.Load().HasCompletedOnboarding);
+    }
+
+    [Fact]
     public void InvalidPreferenceFileFailsClosedToTheDefault()
     {
         Directory.CreateDirectory(_directory);

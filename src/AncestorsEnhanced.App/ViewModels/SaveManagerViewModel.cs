@@ -21,6 +21,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private int _settingsVersion;
     private bool _disposed;
     private string? _toolSettingsWarning;
+    private Dictionary<string, CheckpointMetadata> _checkpointMetadata = new(StringComparer.Ordinal);
 
     private const string ToolSettingsFileName = "AncestorsEnhanced_ToolSettings.json";
     private static readonly System.Text.Json.JsonSerializerOptions JsonSettings =
@@ -46,6 +47,12 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial bool KeepRunningInTrayWhenClosing { get; set; } = true;
+
+    [ObservableProperty]
+    public partial string CheckpointSearchText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string CheckpointOriginFilter { get; set; } = "All";
 
     private int _cooldownMinutes = 5;
 
@@ -121,7 +128,13 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public int[] CooldownChoices { get; } = [5, 10, 20];
 
+    public string[] CheckpointOriginFilters { get; } = ["All", "Manual", "AutoBackup", "PreRestore"];
+
     public bool HasNoSlots => !HasSlots;
+
+    public string BackupHealthSummary { get; private set; } = "No checkpoint health data loaded yet.";
+
+    public bool HasBackupHealthWarning { get; private set; }
 
     public string? LastRecoveryMessage { get; private set; }
 
@@ -174,13 +187,28 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 checkpoint => () => RunDelete(slot.SlotNumber, checkpoint.Id),
                 () => !IsGameRunning,
                 () => CanMutate,
-                expandedSlots.Contains(slot.SlotNumber)))
+                expandedSlots.Contains(slot.SlotNumber),
+                metadataProvider: checkpoint => GetCheckpointMetadata(checkpoint),
+                metadataChanged: SaveCheckpointMetadata))
             .ToArray();
+
+        RemoveMetadataForMissingCheckpoints(snapshot);
+        ApplyCheckpointFilter();
 
 
         StatusMessage = snapshot.RecoveryMessage ??
             (HasSlots ? "Save games loaded successfully." : "No save games loaded yet.");
         StatusAccent = snapshot.RecoveryMessage is not null || HasSlots ? "#B4D941" : "#7A877A";
+
+        int readableSlots = snapshot.Slots.Count(slot => slot.Exists && slot.ErrorMessage is null);
+        int checkpointCount = snapshot.Slots.Sum(slot => slot.Checkpoints.Count);
+        int unreadableSlots = snapshot.Slots.Count(slot => slot.ErrorMessage is not null);
+        HasBackupHealthWarning = unreadableSlots > 0 || snapshot.RecoveryMessage is not null;
+        BackupHealthSummary = HasBackupHealthWarning
+            ? $"{readableSlots} readable save slot(s) · {checkpointCount} checkpoint(s) · {unreadableSlots} slot(s) need attention"
+            : $"{readableSlots} readable save slot(s) · {checkpointCount} checkpoint(s) available";
+        OnPropertyChanged(nameof(BackupHealthSummary));
+        OnPropertyChanged(nameof(HasBackupHealthWarning));
 
         NotifyState();
     }
@@ -438,6 +466,10 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
+    partial void OnCheckpointSearchTextChanged(string value) => ApplyCheckpointFilter();
+
+    partial void OnCheckpointOriginFilterChanged(string value) => ApplyCheckpointFilter();
+
     private string ToolSettingsPath() =>
         Path.Combine(_userDataDirectory, ToolSettingsFileName);
 
@@ -468,6 +500,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 CooldownMinutes = settings.WatchdogIntervalMinutes;
                 IsWatchdogEnabled = settings.IsWatchdogEnabled;
                 KeepRunningInTrayWhenClosing = settings.KeepRunningInTrayWhenClosing;
+                _checkpointMetadata = (settings.CheckpointMetadata ?? new Dictionary<string, CheckpointMetadata>())
+                    .Where(pair => IsValidMetadataKey(pair.Key) && IsValidMetadata(pair.Value))
+                    .ToDictionary(pair => pair.Key, pair => NormalizeMetadata(pair.Value), StringComparer.Ordinal);
             }
             finally
             {
@@ -544,6 +579,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             IsWatchdogEnabled = IsWatchdogEnabled,
             WatchdogIntervalMinutes = _cooldownMinutes,
             KeepRunningInTrayWhenClosing = KeepRunningInTrayWhenClosing,
+            CheckpointMetadata = new Dictionary<string, CheckpointMetadata>(_checkpointMetadata, StringComparer.Ordinal),
         };
 
         string? directory = Path.GetDirectoryName(ToolSettingsPath());
@@ -702,6 +738,63 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanConfigureAutoBackup));
         OnPropertyChanged(nameof(CanResetToolSettings));
     }
+
+    private CheckpointMetadata? GetCheckpointMetadata(SaveGameCheckpoint checkpoint) =>
+        _checkpointMetadata.GetValueOrDefault(CheckpointMetadataKey(checkpoint));
+
+    private void SaveCheckpointMetadata(SaveGameCheckpoint checkpoint, CheckpointMetadata metadata)
+    {
+        string key = CheckpointMetadataKey(checkpoint);
+        CheckpointMetadata normalized = NormalizeMetadata(metadata);
+        if (string.IsNullOrWhiteSpace(normalized.Title) && string.IsNullOrWhiteSpace(normalized.Note) && !normalized.IsFavorite)
+        {
+            _checkpointMetadata.Remove(key);
+        }
+        else
+        {
+            _checkpointMetadata[key] = normalized;
+        }
+        SaveSettings();
+    }
+
+    private void RemoveMetadataForMissingCheckpoints(SaveGamesSnapshot snapshot)
+    {
+        var active = snapshot.Slots
+            .SelectMany(slot => slot.Checkpoints)
+            .Select(CheckpointMetadataKey)
+            .ToHashSet(StringComparer.Ordinal);
+        string[] staleKeys = _checkpointMetadata.Keys.Where(key => !active.Contains(key)).ToArray();
+        foreach (string key in staleKeys)
+        {
+            _checkpointMetadata.Remove(key);
+        }
+        if (staleKeys.Length > 0)
+        {
+            SaveSettings();
+        }
+    }
+
+    private void ApplyCheckpointFilter()
+    {
+        foreach (SaveGameSlotViewModel slot in Slots)
+        {
+            slot.SetCheckpointFilter(CheckpointSearchText, CheckpointOriginFilter);
+        }
+    }
+
+    private static string CheckpointMetadataKey(SaveGameCheckpoint checkpoint) =>
+        checkpoint.SlotNumber + ":" + checkpoint.Id;
+
+    private static bool IsValidMetadataKey(string key) =>
+        key.Length is > 2 and <= 256 && !key.Any(char.IsControl);
+
+    private static bool IsValidMetadata(CheckpointMetadata? metadata) =>
+        metadata is not null && (metadata.Title?.Length ?? 0) <= 80 && (metadata.Note?.Length ?? 0) <= 400;
+
+    private static CheckpointMetadata NormalizeMetadata(CheckpointMetadata metadata) => new(
+        string.IsNullOrWhiteSpace(metadata.Title) ? null : metadata.Title.Trim(),
+        string.IsNullOrWhiteSpace(metadata.Note) ? null : metadata.Note.Trim(),
+        metadata.IsFavorite);
 
     private static bool IsExpectedException(Exception exception) =>
         exception is IOException or UnauthorizedAccessException or InvalidOperationException or

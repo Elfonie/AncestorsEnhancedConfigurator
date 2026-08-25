@@ -5,6 +5,7 @@ using AncestorsEnhanced.App.Views;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Inspection;
 using AncestorsEnhanced.Infrastructure.Profiles;
+using AncestorsEnhanced.Infrastructure.Platform;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -76,7 +77,14 @@ public partial class App : Application
                     preferences = preferences with { DiscordRichPresenceEnabled = enabled };
                     accessibilityPreferences.TrySave(preferences);
                     SetDiscordRichPresence(enabled);
-                });
+                },
+                showOnboarding: !preferences.HasCompletedOnboarding,
+                onboardingCompleted: () =>
+                {
+                    preferences = preferences with { HasCompletedOnboarding = true };
+                    accessibilityPreferences.TrySave(preferences);
+                },
+                hardwareProbe: new SystemHardwareProbe());
             var window = new MainWindow
             {
                 DataContext = viewModel,

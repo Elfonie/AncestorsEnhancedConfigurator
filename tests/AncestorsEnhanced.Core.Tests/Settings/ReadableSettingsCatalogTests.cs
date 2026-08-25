@@ -96,6 +96,32 @@ public sealed class ReadableSettingsCatalogTests
     }
 
     [Fact]
+    public void VerifiedStockAdvancedValuesExposeReviewedEditors()
+    {
+        IReadOnlyList<FeatureGroupSnapshot> groups =
+            ReadableSettingsCatalog.CreateFeatureGroups(CreateSnapshot([], [], buildId: "5495393"));
+
+        string[] ids =
+        [
+            "dof-rings",
+            "dof-gather-bokeh",
+            "shadow-csm-resolution",
+            "ao-quality",
+            "fog-grid-pixel-size",
+            "capsule-shadows",
+            "translucency-volume",
+            "sss-scale",
+        ];
+
+        foreach (string id in ids)
+        {
+            FeatureSettingSnapshot setting = Assert.Single(groups.SelectMany(group => group.Settings), setting => setting.Id == id);
+            Assert.NotNull(setting.Editor);
+            Assert.True(setting.Editor!.CanSetCustomValue);
+        }
+    }
+
+    [Fact]
     public void CreateFeatureGroupsUsesTheLastDuplicateIniEntry()
     {
         GameInspectionSnapshot snapshot = CreateSnapshot(

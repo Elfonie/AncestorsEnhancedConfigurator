@@ -70,6 +70,26 @@ public sealed class SaveManagerViewModelTests
         Assert.Equal("#B4D941", viewModel.StatusAccent);
     }
 
+    [Fact]
+    public void BackupHealthSummarizesReadableSlotsAndFlagsInspectionProblems()
+    {
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", [])),
+            "user-data");
+        var readable = new SaveGameSlotSnapshot(
+            "0", "Savegame0.sav", "path-0", true, 42, DateTimeOffset.UnixEpoch,
+            [new SaveGameCheckpoint("cp-1", DateTimeOffset.UnixEpoch, "0", 42, "hash", "Manual")]);
+        var broken = new SaveGameSlotSnapshot(
+            "1", "Savegame1.sav", "path-1", true, null, null, [], "Unreadable save");
+
+        viewModel.Refresh(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", [readable, broken]));
+
+        Assert.True(viewModel.HasBackupHealthWarning);
+        Assert.Contains("1 readable save slot", viewModel.BackupHealthSummary, StringComparison.Ordinal);
+        Assert.Contains("1 checkpoint", viewModel.BackupHealthSummary, StringComparison.Ordinal);
+        Assert.Contains("1 slot(s) need attention", viewModel.BackupHealthSummary, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("Cheat:MaxNeuronalEnergy")]
     [InlineData("Cheat:MaxNeeds")]
@@ -90,6 +110,58 @@ public sealed class SaveManagerViewModelTests
             () => true);
 
         Assert.Equal("Legacy modified checkpoint", viewModel.OriginLabel);
+    }
+
+    [Fact]
+    public void CheckpointMetadataIsReportedWithoutChangingTheCheckpoint()
+    {
+        var checkpoint = new SaveGameCheckpoint(
+            "checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");
+        CheckpointMetadata? saved = null;
+        var viewModel = new SaveGameCheckpointViewModel(
+            checkpoint,
+            () => Task.CompletedTask,
+            () => Task.CompletedTask,
+            () => true,
+            metadataChanged: metadata => saved = metadata);
+
+        viewModel.Title = "Before evolution";
+        viewModel.Note = "Keep this safe";
+        viewModel.IsFavorite = true;
+
+        Assert.Equal("Before evolution", viewModel.DisplayTitle);
+        Assert.True(viewModel.HasNote);
+        Assert.Equal("Before evolution", saved!.Title);
+        Assert.Equal("Keep this safe", saved.Note);
+        Assert.True(saved.IsFavorite);
+        Assert.Equal("checkpoint", checkpoint.Id);
+    }
+
+    [Fact]
+    public void CheckpointFiltersSearchMetadataAndOrigin()
+    {
+        var checkpoints = new[]
+        {
+            new SaveGameCheckpoint("manual", DateTimeOffset.UnixEpoch, "0", 1, "manual", "Manual"),
+            new SaveGameCheckpoint("auto", DateTimeOffset.UnixEpoch, "0", 1, "auto", "AutoBackup"),
+        };
+        var slot = new SaveGameSlotSnapshot("0", "Savegame0.sav", "path-0", true, 1, DateTimeOffset.UnixEpoch, checkpoints);
+        var viewModel = new SaveGameSlotViewModel(
+            slot,
+            () => Task.CompletedTask,
+            _ => () => Task.CompletedTask,
+            _ => () => Task.CompletedTask,
+            metadataProvider: checkpoint => checkpoint.Id == "manual"
+                ? new CheckpointMetadata("Before evolution", "Important", false)
+                : null);
+
+        viewModel.SetCheckpointFilter("evolution", "All");
+        Assert.Single(viewModel.VisibleCheckpoints);
+        Assert.Equal("manual", viewModel.VisibleCheckpoints[0].Id);
+
+        viewModel.SetCheckpointFilter("", "AutoBackup");
+        Assert.Single(viewModel.VisibleCheckpoints);
+        Assert.Equal("auto", viewModel.VisibleCheckpoints[0].Id);
     }
 
     [Fact]

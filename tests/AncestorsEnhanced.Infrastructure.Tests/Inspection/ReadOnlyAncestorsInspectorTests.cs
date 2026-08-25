@@ -369,6 +369,9 @@ public sealed class ReadOnlyAncestorsInspectorTests
     {
         using TemporaryDirectory temporaryDirectory = new();
         string install = CreateStoreInstallation(temporaryDirectory.CreateDirectory("HeroicGog"));
+        string prefix = temporaryDirectory.CreateDirectory("HeroicPrefix");
+        string saved = Directory.CreateDirectory(Path.Combine(
+            prefix, "drive_c", "users", "steamuser", "AppData", "Local", "Ancestors", "Saved")).FullName;
         string heroic = temporaryDirectory.CreateDirectory("Heroic");
         string configs = Directory.CreateDirectory(Path.Combine(heroic, "games_config")).FullName;
         string escaped = install.Replace("\\", "\\\\", StringComparison.Ordinal);
@@ -377,7 +380,8 @@ public sealed class ReadOnlyAncestorsInspectorTests
             $$"""
             {
               "title": "Ancestors The Humankind Odyssey",
-              "install_path": "{{escaped}}"
+              "install_path": "{{escaped}}",
+              "winePrefix": "{{prefix.Replace("\\", "\\\\", StringComparison.Ordinal)}}"
             }
             """);
 
@@ -391,6 +395,8 @@ public sealed class ReadOnlyAncestorsInspectorTests
         Assert.Equal(HostKind.Linux, installation.Host);
         Assert.Equal(CompatibilityLayerKind.Proton, installation.CompatibilityLayer);
         Assert.Equal(install, installation.InstallDirectory);
+        Assert.Equal(prefix, installation.CompatibilityPrefixPath);
+        Assert.Equal(saved, inspector.Inspect().UserDataDirectory);
     }
 
     [Fact]
@@ -422,6 +428,68 @@ public sealed class ReadOnlyAncestorsInspectorTests
         Assert.Equal(StoreKind.Heroic, installation.Store);
         Assert.Equal(install, installation.InstallDirectory);
         Assert.Equal(CompatibilityLayerKind.Proton, installation.CompatibilityLayer);
+    }
+
+    [Fact]
+    public void InspectFindsStandaloneLegendaryInstalledFileOnLinux()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string install = CreateStoreInstallation(temporaryDirectory.CreateDirectory("LegendaryEpic"));
+        string legendary = temporaryDirectory.CreateDirectory("legendary");
+        string escaped = install.Replace("\\", "\\\\", StringComparison.Ordinal);
+        File.WriteAllText(
+            Path.Combine(legendary, "installed.json"),
+            $$"""
+            {
+              "Ancestors": {
+                "title": "Ancestors The Humankind Odyssey",
+                "installPath": "{{escaped}}",
+                "version": "legendary-build"
+              }
+            }
+            """);
+
+        GameInstallationSnapshot installation = Assert.IsType<GameInstallationSnapshot>(new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment([], null, HostKind.Linux, HeroicConfigs: [legendary])).Inspect().Installation);
+
+        Assert.Equal(StoreKind.Heroic, installation.Store);
+        Assert.Equal("legendary-build", installation.BuildId);
+        Assert.Equal(HostKind.Linux, installation.Host);
+    }
+
+    [Fact]
+    public void InspectUsesLinuxCompatibilityIdentityForEpicCandidates()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string epicInstall = CreateStoreInstallation(temporaryDirectory.CreateDirectory("Epic"));
+        string manifests = temporaryDirectory.CreateDirectory("EpicManifests");
+        File.WriteAllText(
+            Path.Combine(manifests, "ancestors.item"),
+            $$"""{ "DisplayName": "Ancestors The Humankind Odyssey", "InstallLocation": "{{epicInstall.Replace("\\", "\\\\", StringComparison.Ordinal)}}", "BuildVersion": "epic-build" }""");
+
+        GameInstallationSnapshot epic = Assert.IsType<GameInstallationSnapshot>(new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment([], null, HostKind.Linux, EpicManifests: [manifests])).Inspect().Installation);
+
+        Assert.Equal(StoreKind.EpicGames, epic.Store);
+        Assert.Equal(HostKind.Linux, epic.Host);
+        Assert.Equal(CompatibilityLayerKind.Proton, epic.CompatibilityLayer);
+    }
+
+    [Fact]
+    public void InspectUsesLinuxCompatibilityIdentityForGogCandidates()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string install = CreateStoreInstallation(temporaryDirectory.CreateDirectory("Gog"));
+
+        GameInstallationSnapshot gog = Assert.IsType<GameInstallationSnapshot>(new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment([], null, HostKind.Linux, GogCandidates: [install])).Inspect().Installation);
+
+        Assert.Equal(StoreKind.Gog, gog.Store);
+        Assert.Equal(HostKind.Linux, gog.Host);
+        Assert.Equal(CompatibilityLayerKind.Proton, gog.CompatibilityLayer);
     }
 
     private sealed class TemporaryDirectory : IDisposable

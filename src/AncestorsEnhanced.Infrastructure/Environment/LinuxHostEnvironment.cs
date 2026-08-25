@@ -17,8 +17,10 @@ internal sealed class LinuxHostEnvironment : IHostEnvironment
         new[]
         {
             Path.Combine(_home, ".steam", "steam"),
+            Path.Combine(_home, ".steam", "root"),
             Path.Combine(_home, ".local", "share", "Steam"),
             Path.Combine(_home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+            Path.Combine(_home, ".var", "app", "com.valvesoftware.Steam", ".steam", "steam"),
         }
         .Select(Normalize)
         .OfType<string>()
@@ -32,7 +34,10 @@ internal sealed class LinuxHostEnvironment : IHostEnvironment
         new[]
         {
             Path.Combine(_home, ".config", "heroic"),
+            Path.Combine(_home, ".local", "share", "heroic"),
+            Path.Combine(_home, ".config", "legendary"),
             Path.Combine(_home, ".var", "app", "com.heroicgameslauncher.hgl", "config", "heroic"),
+            Path.Combine(_home, ".var", "app", "com.heroicgameslauncher.hgl", "data", "heroic"),
         }
         .Select(Normalize)
         .OfType<string>()
