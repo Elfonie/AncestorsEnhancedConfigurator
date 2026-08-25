@@ -83,27 +83,27 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             new ProfileSetting("r.SceneColorFringeQuality", "0"),
             new ProfileSetting("r.Tonemapper.Sharpen", "0.4"),
             new ProfileSetting("mod.VignettePercent", "50")])),
-        new("Performance Tweak", "Lower GPU-heavy graphics settings without resetting other choices", CreateBuiltInProfile("Performance Tweak", [
+        new("Performance Tweak", "Reduce GPU-heavy effects", CreateBuiltInProfile("Performance Tweak", [
             new ProfileSetting("r.ViewDistanceScale", "0.8"),
             new ProfileSetting("r.ShadowQuality", "1"),
             new ProfileSetting("r.VolumetricFog", "0"),
             new ProfileSetting("r.SSR.Quality", "0")])),
-        new("Balanced Tweak", "Moderate quality adjustments without resetting other choices", CreateBuiltInProfile("Balanced Tweak", [
+        new("Balanced Tweak", "Moderate quality baseline", CreateBuiltInProfile("Balanced Tweak", [
             new ProfileSetting("r.ViewDistanceScale", "1"),
             new ProfileSetting("r.ShadowQuality", "3"),
             new ProfileSetting("r.SSR.Quality", "2")])),
-        new("High Quality Tweak", "Higher detail adjustments without resetting other choices", CreateBuiltInProfile("High Quality Tweak", [
+        new("High Quality Tweak", "Increase detail and reflections", CreateBuiltInProfile("High Quality Tweak", [
             new ProfileSetting("r.ViewDistanceScale", "1.2"),
             new ProfileSetting("r.ShadowQuality", "4"),
             new ProfileSetting("r.MaxAnisotropy", "16"),
             new ProfileSetting("r.SSR.Quality", "3")])),
-        new("Ultra Tweak", "Stock-backed high-end renderer adjustments without resetting other choices", CreateBuiltInProfile("Ultra Tweak", [
+        new("Ultra Tweak", "High-end renderer adjustments", CreateBuiltInProfile("Ultra Tweak", [
             new ProfileSetting("r.ViewDistanceScale", "1.2"),
             new ProfileSetting("r.Shadow.MaxResolution", "4096"),
             new ProfileSetting("r.ShadowQuality", "5"),
             new ProfileSetting("r.VolumetricFog.GridPixelSize", "4"),
             new ProfileSetting("r.MaxAnisotropy", "16")])),
-        new("Low VRAM Tweak", "Conservative texture streaming without resetting other choices", CreateBuiltInProfile("Low VRAM Tweak", [
+        new("Low VRAM Tweak", "Conservative texture streaming", CreateBuiltInProfile("Low VRAM Tweak", [
             new ProfileSetting("r.Streaming.PoolSize", "2048"),
             new ProfileSetting("r.Streaming.MipBias", "1"),
             new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1"),
@@ -312,6 +312,18 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ? "No gameplay mod active"
         : GameplayDraftStatus;
 
+    public string HomeTitle => IsBusy
+        ? "Checking Ancestors…"
+        : DetectionStatus switch
+        {
+            "Ancestors is ready" => "Ready to play",
+            "Scan failed" => "Attention required",
+            "Ancestors installation not detected" => "Game not found",
+            "Ancestors detected but not supported for editing" => "Unsupported game version",
+            "Ancestors detected with problems" => "Attention required",
+            _ => "Checking Ancestors…",
+        };
+
     public string HomeSavesSummary => SaveManager is null
         ? "Save games will appear after detection."
         : SaveManager.HasSlots
@@ -324,12 +336,30 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool ShowDiagnosticsView => IsDiagnosticsView;
 
+    public bool IsGraphicsSectionActive => ShowGraphicsView || IsProfilesView;
+
+    public bool IsSettingsSectionActive => IsSettingsView || IsDiagnosticsView;
+
+    public string PageContextLabel => IsProfilesView
+        ? "Graphics / Profiles"
+        : IsDiagnosticsView
+            ? "Settings / Diagnostics"
+            : IsHomeView
+                ? "Home"
+                : IsGameplayView
+                    ? "Gameplay"
+                    : IsSaveGamesView
+                        ? "Saves"
+                        : "Graphics";
+
     public string SystemDiagnostics { get; }
 
     public bool CanStageHardwareRecommendation =>
         HardwareDiagnostics.Recommendation.CanStagePreset && !IsAnyOperationRunning;
 
     public bool CanRunDetailedHardwareDetection => OperatingSystem.IsWindows() && !IsAnyOperationRunning;
+
+    public bool CanShowHardwareScanAction => !CanStageHardwareRecommendation && CanRunDetailedHardwareDetection;
 
     public string OnboardingTitle => OnboardingStep switch
     {
@@ -695,6 +725,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             IsDetailedHardwareDetectionRunning = false;
             OnPropertyChanged(nameof(CanStageHardwareRecommendation));
             OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+            OnPropertyChanged(nameof(CanShowHardwareScanAction));
         }
     }
 
@@ -850,16 +881,26 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             UserProfile source = _profileLibrary.Read(profile.Id);
             ProfileComparisonName = source.Name;
-            ProfileComparisonRows = source.Graphics.Select(setting =>
+            var profileSettings = source.Graphics.ToDictionary(setting => setting.Key, StringComparer.OrdinalIgnoreCase);
+            var resetKeys = _editors.Values
+                .Where(editor => editor.ShowOverrideToggle && editor.HasCurrentOverride && !profileSettings.ContainsKey(editor.Key))
+                .Select(editor => editor.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            ProfileComparisonRows = profileSettings.Keys
+                .Concat(resetKeys)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(key =>
             {
                 FeatureSettingSnapshot? current = _allFeatureGroups
                     .SelectMany(group => group.Settings)
-                    .FirstOrDefault(candidate => string.Equals(candidate.TechnicalKey, setting.Key, StringComparison.OrdinalIgnoreCase));
-                TryGetEditorByTechnicalKey(setting.Key, out SettingEditorViewModel? editor);
+                    .FirstOrDefault(candidate => string.Equals(candidate.TechnicalKey, key, StringComparison.OrdinalIgnoreCase));
+                TryGetEditorByTechnicalKey(key, out SettingEditorViewModel? editor);
                 return new ProfileComparisonRowViewModel(
-                    current?.Name ?? setting.Key,
+                    current?.Name ?? key,
                     editor?.GetProfileComparisonValue() ?? "Not available for this game setup",
-                    setting.Value);
+                    profileSettings.TryGetValue(key, out ProfileSetting? setting)
+                        ? setting.Value
+                        : "→ Game default");
             }).ToArray();
             OnPropertyChanged(nameof(HasProfileComparison));
         }
@@ -1022,6 +1063,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowProfilesView));
         OnPropertyChanged(nameof(ShowSettingsView));
         OnPropertyChanged(nameof(ShowDiagnosticsView));
+        OnPropertyChanged(nameof(IsGraphicsSectionActive));
+        OnPropertyChanged(nameof(IsSettingsSectionActive));
+        OnPropertyChanged(nameof(PageContextLabel));
     }
 
     [RelayCommand]
@@ -1405,6 +1449,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnIsBusyChanged(bool value)
     {
         NotifyMutationAvailability();
+        OnPropertyChanged(nameof(HomeTitle));
     }
 
     private void OnMutationGateChanged(object? sender, EventArgs e) =>
@@ -1422,6 +1467,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanConfirmProfileRename));
         OnPropertyChanged(nameof(CanStageHardwareRecommendation));
         OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+        OnPropertyChanged(nameof(CanShowHardwareScanAction));
     }
 
     partial void OnIsReviewingChangesChanged(bool value)
@@ -1444,6 +1490,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         DetectionColor = statusColor;
         DetectionDotColor = dotColor;
         OnPropertyChanged(nameof(DetectionStatus));
+        OnPropertyChanged(nameof(HomeTitle));
     }
 
     private async Task<bool> RefreshFromDiskAsync()
@@ -1452,6 +1499,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _lastRefreshRecoveredOperation = false;
         _lastSaveRecoveryMessage = null;
         IsBusy = true;
+        OnPropertyChanged(nameof(HomeTitle));
         DetectionStatus = "Scanning game files";
         ShowMessage("Reading the installation and settings...", "#FF5A00");
         try
@@ -1570,6 +1618,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         finally
         {
             IsBusy = false;
+            OnPropertyChanged(nameof(HomeTitle));
         }
     }
 
@@ -1633,7 +1682,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 context.UserDataDirectory,
                 watchdog,
                 dispatchToUi: null,
-                mutationGate: _mutationGate);
+                mutationGate: _mutationGate,
+                storeName: context.Store.ToString());
             viewModel.Refresh(snapshot);
             return viewModel;
         }

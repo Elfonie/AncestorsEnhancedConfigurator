@@ -12,6 +12,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private readonly string _userDataDirectory;
     private readonly Action<Action> _dispatchToUi;
     private readonly UiMutationGate? _mutationGate;
+    private readonly string _storeName;
     private bool _loadingSettings;
     private readonly object _settingsWriteGate = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
@@ -78,8 +79,14 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public string SteamCloudWarning { get; } =
-        "Steam Cloud: do not choose a conflict option automatically. Compare save dates and sizes first. Local files are the intended version only after a deliberate local restore; when unsure, copy the local saves before deciding.";
+    public string CloudWarningTitle => _storeName.Equals("Steam", StringComparison.OrdinalIgnoreCase)
+        ? "Steam Cloud saves"
+        : $"{_storeName} cloud saves";
+
+    public string CloudWarning =>
+        $"Do not choose a {_storeName} cloud conflict option automatically. Compare save dates and sizes first. After a deliberate local restore, verify which copy should remain authoritative.";
+
+    public string SteamCloudWarning => CloudWarning;
 
     public SaveManagerViewModel(
         ISaveGameManager manager,
@@ -103,13 +110,15 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         string userDataDirectory,
         ISaveGameWatchdog? watchdog,
         Action<Action>? dispatchToUi,
-        UiMutationGate? mutationGate)
+        UiMutationGate? mutationGate,
+        string storeName = "Steam")
     {
         ArgumentNullException.ThrowIfNull(manager);
         _manager = manager;
         _userDataDirectory = userDataDirectory;
         _watchdog = watchdog;
         _mutationGate = mutationGate;
+        _storeName = string.IsNullOrWhiteSpace(storeName) ? "Game" : storeName;
         _dispatchToUi = dispatchToUi ?? (action => Dispatcher.UIThread.Post(action));
         if (_mutationGate is not null)
         {
@@ -135,6 +144,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     public string BackupHealthSummary { get; private set; } = "No checkpoint health data loaded yet.";
 
     public bool HasBackupHealthWarning { get; private set; }
+
+    public string BackupHealthAccent { get; private set; } = "#7A877A";
 
     public string? LastRecoveryMessage { get; private set; }
 
@@ -203,12 +214,18 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         int readableSlots = snapshot.Slots.Count(slot => slot.Exists && slot.ErrorMessage is null);
         int checkpointCount = snapshot.Slots.Sum(slot => slot.Checkpoints.Count);
         int unreadableSlots = snapshot.Slots.Count(slot => slot.ErrorMessage is not null);
-        HasBackupHealthWarning = unreadableSlots > 0 || snapshot.RecoveryMessage is not null;
+        HasBackupHealthWarning = unreadableSlots > 0;
+        BackupHealthAccent = unreadableSlots > 0
+            ? "#E04D42"
+            : checkpointCount > 0
+                ? "#B4D941"
+                : "#7A877A";
         BackupHealthSummary = HasBackupHealthWarning
             ? $"{readableSlots} readable save slot(s) · {checkpointCount} checkpoint(s) · {unreadableSlots} slot(s) need attention"
             : $"{readableSlots} readable save slot(s) · {checkpointCount} checkpoint(s) available";
         OnPropertyChanged(nameof(BackupHealthSummary));
         OnPropertyChanged(nameof(HasBackupHealthWarning));
+        OnPropertyChanged(nameof(BackupHealthAccent));
 
         NotifyState();
     }

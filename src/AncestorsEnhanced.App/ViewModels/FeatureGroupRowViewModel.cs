@@ -5,6 +5,7 @@ namespace AncestorsEnhanced.App.ViewModels;
 
 public partial class FeatureGroupRowViewModel : ViewModelBase
 {
+    private bool _hasResettableChanges;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Chevron))]
     public partial bool IsExpanded { get; set; }
@@ -31,6 +32,14 @@ public partial class FeatureGroupRowViewModel : ViewModelBase
         Settings = settings;
         ShowDescription = showDescription;
         IsExpanded = isExpanded;
+        foreach (FeatureSettingRowViewModel setting in settings)
+        {
+            if (setting.Editor is { } editor)
+            {
+                editor.Changed += OnEditorChanged;
+            }
+        }
+        RefreshResettableChanges();
     }
 
     public string Id { get; }
@@ -51,8 +60,22 @@ public partial class FeatureGroupRowViewModel : ViewModelBase
 
     public bool ShowDescription { get; }
 
+    public bool HasResettableChanges => _hasResettableChanges;
+
     public string Chevron => IsExpanded ? "⌃" : "⌄";
 
     [RelayCommand]
     private void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    private void OnEditorChanged(object? sender, EventArgs e) => RefreshResettableChanges();
+
+    private void RefreshResettableChanges()
+    {
+        bool value = Settings.Any(setting => setting.Editor is { } editor && (editor.HasActiveOverride || editor.HasChanges));
+        if (_hasResettableChanges != value)
+        {
+            _hasResettableChanges = value;
+            OnPropertyChanged(nameof(HasResettableChanges));
+        }
+    }
 }

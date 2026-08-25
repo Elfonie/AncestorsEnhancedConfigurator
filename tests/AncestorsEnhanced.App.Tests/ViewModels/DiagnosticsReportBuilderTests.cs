@@ -32,7 +32,10 @@ public sealed class DiagnosticsReportBuilderTests
             [new NoticeRowViewModel("Warning", $"Read {Path.Combine(profile, "AppData", "Local", "Ancestors")}")]);
 
         Assert.DoesNotContain(userName, report, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(@"%USERPROFILE%\Games\Ancestors", report, StringComparison.Ordinal);
+        string expectedInstallation = OperatingSystem.IsWindows()
+            ? @"%USERPROFILE%\Games\Ancestors"
+            : "%HOME%/Games/Ancestors";
+        Assert.Contains(expectedInstallation, report, StringComparison.Ordinal);
         Assert.Contains("GPU and VRAM: Test GPU", report, StringComparison.Ordinal);
         Assert.Contains("Hardware recommendation: Balanced Tweak", report, StringComparison.Ordinal);
         Assert.Contains("mod.pak", report, StringComparison.Ordinal);

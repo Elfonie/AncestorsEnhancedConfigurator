@@ -143,7 +143,9 @@ public partial class SettingEditorViewModel : ViewModelBase
     /// the serialized profile representation.
     /// </summary>
     public string? GetProfileComparisonValue() =>
-        _snapshot.IsDirect || UseCustomValue ? DesiredValue : _snapshot.DefaultValue;
+        _snapshot.IsDirect || UseCustomValue
+            ? DesiredValue
+            : _snapshot.GameControlledValue ?? _snapshot.DefaultValue;
 
     public bool TryApplyProfileValue(string? value)
     {
