@@ -44,6 +44,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial bool IsWatchdogEnabled { get; set; }
 
+    [ObservableProperty]
+    public partial bool KeepRunningInTrayWhenClosing { get; set; } = true;
+
     private int _cooldownMinutes = 5;
 
     public int CooldownMinutes
@@ -427,6 +430,14 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
+    partial void OnKeepRunningInTrayWhenClosingChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            SaveSettings();
+        }
+    }
+
     private string ToolSettingsPath() =>
         Path.Combine(_userDataDirectory, ToolSettingsFileName);
 
@@ -456,6 +467,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             {
                 CooldownMinutes = settings.WatchdogIntervalMinutes;
                 IsWatchdogEnabled = settings.IsWatchdogEnabled;
+                KeepRunningInTrayWhenClosing = settings.KeepRunningInTrayWhenClosing;
             }
             finally
             {
@@ -500,6 +512,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             {
                 IsWatchdogEnabled = false;
                 CooldownMinutes = 5;
+                KeepRunningInTrayWhenClosing = true;
             }
             finally
             {
@@ -530,6 +543,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         {
             IsWatchdogEnabled = IsWatchdogEnabled,
             WatchdogIntervalMinutes = _cooldownMinutes,
+            KeepRunningInTrayWhenClosing = KeepRunningInTrayWhenClosing,
         };
 
         string? directory = Path.GetDirectoryName(ToolSettingsPath());

@@ -11,6 +11,25 @@
     <!-- Text colors -->
     <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E8E4D9" />
     <SolidColorBrush x:Key="MutedTextBrush" Color="#7A877A" />
+    <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#1A221A" />
+    <SolidColorBrush x:Key="ControlBorderBrush" Color="#3A4A2E" />
+    <SolidColorBrush x:Key="ControlTextBrush" Color="#C8CFC4" />
+    <SolidColorBrush x:Key="ControlHoverBrush" Color="#253025" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#B4D941" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#9ABF31" />
+    <SolidColorBrush x:Key="FocusBrush" Color="#B4D941" />
+    <SolidColorBrush x:Key="FocusGlowBrush" Color="#66B4D941" />
+    <SolidColorBrush x:Key="PrimaryActionBrush" Color="#9B3A12" />
+    <SolidColorBrush x:Key="PrimaryActionBorderBrush" Color="#C7591C" />
+    <SolidColorBrush x:Key="PrimaryActionHoverBrush" Color="#B54816" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#8E2F29" />
+    <SolidColorBrush x:Key="DangerBorderBrush" Color="#C44A41" />
+    <SolidColorBrush x:Key="InfoSurfaceBrush" Color="#17242B" />
+    <SolidColorBrush x:Key="InfoBorderBrush" Color="#344A56" />
+    <SolidColorBrush x:Key="InfoTextBrush" Color="#B8D7E5" />
+    <SolidColorBrush x:Key="WarningSurfaceBrush" Color="#211C18" />
+    <SolidColorBrush x:Key="WarningBorderBrush" Color="#765536" />
+    <SolidColorBrush x:Key="WarningTextBrush" Color="#E8D5B5" />
     <!-- Active ToggleSwitch colors -->
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOn" Color="#B4D941" />
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOnPointerOver" Color="#9ABF31" />
@@ -28,10 +47,10 @@
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="14,8" />
       <Setter Property="FontWeight" Value="SemiBold" />
-      <Setter Property="Background" Value="#1A221A" />
-      <Setter Property="BorderBrush" Value="#3A4A2E" />
+      <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Foreground" Value="#C8CFC4" />
+      <Setter Property="Foreground" Value="{DynamicResource ControlTextBrush}" />
       <Setter Property="Transitions">
         <Transitions>
           <BrushTransition Property="Background" Duration="0:0:0.1" />
@@ -40,9 +59,9 @@
       </Setter>
     </Style>
     <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="#253025" />
-      <Setter Property="BorderBrush" Value="#B4D941" />
-      <Setter Property="Foreground" Value="#E8E4D9" />
+      <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
     </Style>
 
     <!-- Primary action -->
@@ -51,8 +70,8 @@
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="CornerRadius" Value="7" />
       <Setter Property="Padding" Value="16,8" />
-      <Setter Property="Background" Value="#9B3A12" />
-      <Setter Property="BorderBrush" Value="#C7591C" />
+      <Setter Property="Background" Value="{DynamicResource PrimaryActionBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PrimaryActionBorderBrush}" />
       <Setter Property="Transitions">
         <Transitions>
           <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
@@ -60,8 +79,8 @@
       </Setter>
     </Style>
     <Style Selector="Button.PrimaryAction:pointerover">
-      <Setter Property="Background" Value="#B54816" />
-      <Setter Property="BorderBrush" Value="#E06A24" />
+      <Setter Property="Background" Value="{DynamicResource PrimaryActionHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
     </Style>
     <Style Selector="Button.PrimaryAction:pressed">
       <Setter Property="RenderTransform" Value="scale(0.96)" />
@@ -73,8 +92,8 @@
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="CornerRadius" Value="7" />
       <Setter Property="Padding" Value="14,8" />
-      <Setter Property="Background" Value="#8E2F29" />
-      <Setter Property="BorderBrush" Value="#C44A41" />
+      <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}" />
     </Style>
 
     <!-- Sidebar nav buttons -->
@@ -85,10 +104,10 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="HorizontalContentAlignment" Value="Left" />
-      <Setter Property="Foreground" Value="#C8CFC4" />
+      <Setter Property="Foreground" Value="{DynamicResource ControlTextBrush}" />
     </Style>
     <Style Selector="ToggleButton.nav:pointerover">
-      <Setter Property="Background" Value="#1E2720" />
+      <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />
     </Style>
     <!-- Active sidebar navigation -->
     <Style Selector="ToggleButton.nav:checked /template/ ContentPresenter#PART_ContentPresenter">
@@ -100,7 +119,7 @@
           </LinearGradientBrush>
         </Setter.Value>
       </Setter>
-      <Setter Property="Foreground" Value="#B4D941" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
       <Setter Property="BorderThickness" Value="0" />
     </Style>
     <Style Selector="Button.Ghost">
@@ -129,10 +148,10 @@
       <Setter Property="HorizontalContentAlignment" Value="Left" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Foreground" Value="#C8CFC4" />
+      <Setter Property="Foreground" Value="{DynamicResource ControlTextBrush}" />
     </Style>
     <Style Selector="Button.nav:pointerover">
-      <Setter Property="Background" Value="#1E2720" />
+      <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />
     </Style>
     <!-- Mode toggle -->
     <Style Selector="ToggleButton.mode">
@@ -152,7 +171,7 @@
           </LinearGradientBrush>
         </Setter.Value>
       </Setter>
-      <Setter Property="Foreground" Value="#B4D941" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
     </Style>
 
     <!-- Disabled -->
@@ -162,11 +181,11 @@
 
     <!-- Settings cards -->
     <Style Selector="Border.SettingCard">
-      <Setter Property="Background" Value="#121612" />
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
       <Setter Property="CornerRadius" Value="9" />
       <Setter Property="BoxShadow" Value="0 5 16 0 #33000000" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="BorderBrush" Value="#3A4A2E" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
       <Setter Property="Transitions">
         <Transitions>
           <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.2" />
@@ -180,24 +199,32 @@
       <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Border.SettingCard.InteractiveCard:pointerover">
-      <Setter Property="Background" Value="#181F18" />
-      <Setter Property="BorderBrush" Value="#FF5A00" />
+      <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
       <Setter Property="BoxShadow" Value="0 0 16 3 #FF5A0033" />
     </Style>
     <Style Selector="Border.SettingCard.InteractiveCard:focus-visible">
-      <Setter Property="BorderBrush" Value="#B4D941" />
-      <Setter Property="BoxShadow" Value="0 0 0 2 #B4D94166" />
+      <Setter Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
+      <Setter Property="BoxShadow" Value="0 0 0 2 #66B4D941" />
     </Style>
     <Style Selector="Border.SettingCard:pointerover">
-      <Setter Property="Background" Value="#141914" />
+      <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />
     </Style>
 
     <!-- Inputs -->
     <Style Selector="TextBox">
       <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
     </Style>
     <Style Selector="ComboBox">
       <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+    </Style>
+    <Style Selector="Button:focus-visible, ToggleButton:focus-visible, TextBox:focus-visible, ComboBox:focus-visible, ToggleSwitch:focus-visible">
+      <Setter Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
     </Style>
   </Application.Styles>
 </Application>

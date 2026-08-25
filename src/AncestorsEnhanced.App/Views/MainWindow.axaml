@@ -30,7 +30,8 @@
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,0,1,0">
-      <StackPanel Spacing="6">
+      <Grid RowDefinitions="Auto,*,Auto">
+      <StackPanel Grid.Row="0" Spacing="6">
         <StackPanel Spacing="1" Margin="0,0,0,14">
           <TextBlock Text="{Binding ProductName}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
           <TextBlock Text="{Binding Phase}" FontSize="12" Foreground="#7A877A" TextWrapping="Wrap" />
@@ -48,20 +49,33 @@
                       HorizontalContentAlignment="Left"
                        Content="Saves" />
         <ToggleButton Classes="nav"
-                      Command="{Binding ShowCheatCommand}"
-                      IsChecked="{Binding ShowCheatView, Mode=OneWay}"
+                      Command="{Binding ShowGameplayCommand}"
+                      IsChecked="{Binding ShowGameplayView, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
-                       Content="Cheats" />
-
+                      Content="Gameplay" />
+      </StackPanel>
+      <StackPanel Grid.Row="2" Spacing="6">
+        <ToggleButton Classes="nav"
+                      Command="{Binding ShowProfilesCommand}"
+                      IsChecked="{Binding ShowProfilesView, Mode=OneWay}"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Left"
+                      Content="Profiles" />
         <Button Classes="nav"
                 Command="{Binding RefreshCommand}"
                 IsEnabled="{Binding !IsAnyOperationRunning}"
-                Margin="0,18,0,0"
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Left"
                 Content="Reload" />
+        <ToggleButton Classes="nav"
+                      Command="{Binding ShowSettingsCommand}"
+                      IsChecked="{Binding ShowSettingsView, Mode=OneWay}"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Left"
+                      Content="Settings" />
       </StackPanel>
+      </Grid>
     </Border>
 
     <!-- Content -->
@@ -649,114 +663,228 @@
             </StackPanel>
           </Border>
         </StackPanel>
-        <StackPanel IsVisible="{Binding ShowCheatView}" Spacing="12">
-          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
-            <StackPanel Spacing="2">
-              <TextBlock Text="Cheats" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
-              <TextBlock Text="Cheats are created as separate checkpoints. Restoring one replaces the live save after creating a safety checkpoint." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+        <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="12">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <StackPanel Spacing="3">
+              <TextBlock Text="Gameplay difficulty" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
+              <TextBlock Text="A future AEC patch PAK will change gameplay rules only. Save games are never part of a difficulty preset." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+            </StackPanel>
+            <Border Grid.Column="1" Padding="4" CornerRadius="7" Background="{DynamicResource RaisedSurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+              <StackPanel Orientation="Horizontal" Spacing="2">
+                <ToggleButton Classes="mode" Command="{Binding ShowGameplaySimpleCommand}" IsChecked="{Binding IsGameplaySimpleMode, Mode=OneWay}" Content="Simple" />
+                <ToggleButton Classes="mode" Command="{Binding ShowGameplayAdvancedCommand}" IsChecked="{Binding IsGameplayAdvancedMode, Mode=OneWay}" Content="Advanced" />
+              </StackPanel>
+            </Border>
+          </Grid>
+
+          <StackPanel IsVisible="{Binding IsGameplaySimpleMode}" Spacing="12">
+            <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1" IsVisible="{Binding HasGameplayDifficultyPresets}">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="Presets" FontWeight="SemiBold" Foreground="#B8D7E5" />
+                  <TextBlock Text="Preset selection is deliberately not active yet. These are the planned, understandable directions—not a claim that a PAK has been applied." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding GameplayDifficultyPresets}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GameplayDifficultyPresetViewModel">
+                      <Border Padding="12,9" Margin="0,0,0,6" CornerRadius="6" Background="#10191F" BorderBrush="#344A56" BorderThickness="1">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                          <TextBlock Text="{Binding Summary}" FontSize="12" FontWeight="SemiBold" Foreground="#B4D941" />
+                          <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1" IsVisible="{Binding HasGameplaySimpleControls}">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="Simple controls" FontWeight="SemiBold" Foreground="#B8D7E5" />
+                  <TextBlock Text="These are the first five categories intended for custom 10% steps. They are still showing the unmodified game defaults." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding GameplaySimpleControls}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GameplayDifficultyControlViewModel">
+                      <Border Padding="12,9" Margin="0,0,0,6" CornerRadius="6" Background="#10191F" BorderBrush="#344A56" BorderThickness="1">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                            <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="#B4D941" TextAlignment="Right" />
+                            <TextBlock Text="10% steps planned" FontSize="11" Foreground="#71828D" HorizontalAlignment="Right" />
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <StackPanel IsVisible="{Binding IsGameplayAdvancedMode}" Spacing="12">
+            <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1" IsVisible="{Binding HasGameplayResearchValues}">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="Advanced values" FontWeight="SemiBold" Foreground="#B8D7E5" />
+                  <TextBlock Text="Technical values with direct static code evidence. They are separate because coupling them casually can create inconsistent vitality, wound or poison behaviour." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding GameplayResearchValues}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GameplayResearchValueViewModel">
+                      <Border Padding="12,9" Margin="0,0,0,6" CornerRadius="6" Background="#10191F" BorderBrush="#344A56" BorderThickness="1">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                            <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="#B4D941" HorizontalAlignment="Right" />
+                            <TextBlock Text="Research only" FontSize="11" Foreground="#71828D" HorizontalAlignment="Right" />
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <Border Padding="14,11" CornerRadius="7" Background="#211C18" BorderBrush="#765536" BorderThickness="1">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Applying difficulty is not enabled yet" FontWeight="SemiBold" Foreground="#E8D5B5" />
+              <TextBlock Text="AEC will not enable presets or percentage controls until every included value has deterministic PAK creation, exact asset verification, conflict handling and an in-game loading check. This page currently writes nothing." FontSize="12" Foreground="#E8D5B5" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
-
-          <Border Padding="14,11" CornerRadius="7" Background="#2A1F16" BorderBrush="#6B4A26" BorderThickness="1"
-                  IsVisible="{Binding Cheat.IsGameRunning}">
-            <TextBlock Text="Game is running - close Ancestors before creating or restoring a cheat checkpoint. The cheat buttons are disabled while the game is open." FontWeight="SemiBold" Foreground="#E8C08A" TextWrapping="Wrap" />
-          </Border>
-
-          <StackPanel IsVisible="{Binding IsCheatAvailable}" Spacing="8">
-            <TextBlock Text="EXPERIMENTAL SAVEGAME CHEATS — create a modified checkpoint for the selected slot" FontSize="12" FontWeight="Bold" Foreground="#FF5A00" Margin="2,8,0,0" />
+        </StackPanel>
+        <StackPanel IsVisible="{Binding ShowProfilesView}" Spacing="12">
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
-            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="16">
-              <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="Save slot" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                <TextBlock Text="The cheat is saved as a new checkpoint for this slot." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <StackPanel Spacing="3">
+                <TextBlock Text="Profiles" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
+                <TextBlock Text="Save, share and review your graphics and future gameplay setup without changing save games." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
               </StackPanel>
-              <ComboBox Grid.Column="1" ItemsSource="{Binding Cheat.Slots}"
-                        SelectedItem="{Binding Cheat.SelectedSlot}"
-                        IsEnabled="{Binding !Cheat.IsBusy}"
-                        VerticalAlignment="Center"
-                        Width="180" MinWidth="180">
-                <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:CheatSlotChoice">
-                    <TextBlock Text="{Binding Label}" />
-                  </DataTemplate>
-                </ComboBox.ItemTemplate>
-              </ComboBox>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Content="Import profile" Click="ImportProfileClick" />
+                <Button Classes="PrimaryAction" Content="Create profile" Command="{Binding StartCreatingProfileCommand}" />
+              </StackPanel>
             </Grid>
           </Border>
-
-          <StackPanel Spacing="8">
-            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="Max Neuronal Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Creates an experimental checkpoint that sets the neuronal-energy field to 1000. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-                </StackPanel>
-                <Button Grid.Column="1" Command="{Binding Cheat.MaxNeuronalEnergyCommand}"
-                        IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
-              </Grid>
-            </Border>
-
-            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="Max Stamina and Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's stamina, energy and regimen-stamina fields to 1000. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-                </StackPanel>
-                <Button Grid.Column="1" Command="{Binding Cheat.MaxNeedsCommand}"
-                        IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
-              </Grid>
-            </Border>
-
-            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="Heal Current Ape" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's health, stamina and energy fields to 1.0. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-                </StackPanel>
-                <Button Grid.Column="1" Command="{Binding Cheat.HealCurrentApeCommand}"
-                        IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
-              </Grid>
-            </Border>
-          </StackPanel>
-
-          </StackPanel>
-
-          <Button Classes="PrimaryAction"
-                  Command="{Binding Cheat.RestoreLastCheckpointCommand}"
-                  IsVisible="{Binding Cheat.CanRestoreLastCheckpoint}"
-                  HorizontalAlignment="Left"
-                  Content="Restore this cheat checkpoint now"
-                  Margin="0,4,0,0" />
-
-          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                  IsVisible="{Binding Cheat.HasStatus}" Margin="0,0,0,2">
-            <TextBlock Text="{Binding Cheat.StatusMessage}" TextWrapping="Wrap" Foreground="{Binding Cheat.StatusAccent}" FontSize="13" FontWeight="SemiBold" />
+          <Border Padding="10,8" CornerRadius="6" Background="#17242B" BorderBrush="{Binding OperationAccent}" BorderThickness="1">
+            <TextBlock Text="{Binding OperationMessage}" FontSize="12" Foreground="{Binding OperationAccent}" TextWrapping="Wrap" />
           </Border>
-
-          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                  IsVisible="{Binding IsCheatUnavailable}">
-            <TextBlock Text="Experimental save modifications require a supported, verified Ancestors installation and detected user data. If the game is running or recovery is pending, close it and reload."
-                       TextWrapping="Wrap" Foreground="#82939D" />
+          <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1"
+                  IsVisible="{Binding IsCreatingProfile}">
+            <StackPanel Spacing="10" MaxWidth="660">
+              <TextBlock Text="Create graphics profile" FontWeight="SemiBold" Foreground="#DCEEFF" />
+              <TextBlock Text="This saves your active custom graphics values. Game defaults, save games and external mods are never included." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              <TextBlock Text="Set at least one graphics setting to Custom before saving a profile."
+                         IsVisible="{Binding !HasCustomProfileSettings}"
+                         FontSize="12" Foreground="#D6BC84" TextWrapping="Wrap" />
+              <TextBox PlaceholderText="Profile name" Text="{Binding NewProfileName}" MaxLength="80" />
+              <TextBox PlaceholderText="Short description optional" Text="{Binding NewProfileDescription}" MaxLength="400" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" />
+              <StackPanel Spacing="3">
+                <CheckBox IsChecked="True" IsEnabled="False" Content="Graphics settings" />
+                <CheckBox IsChecked="False" IsEnabled="False" Content="Gameplay settings  Coming soon" />
+                <CheckBox IsChecked="False" IsEnabled="False" Content="Display settings  Coming soon" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Cancel" Command="{Binding CancelCreatingProfileCommand}" />
+                <Button Classes="PrimaryAction" Content="Save profile" Command="{Binding CreateProfileCommand}" IsEnabled="{Binding CanSaveProfile}" />
+              </StackPanel>
+            </StackPanel>
           </Border>
-
-          <Border Padding="14,11" CornerRadius="7" BorderBrush="#3A4A2E" BorderThickness="1"
-                  IsVisible="{Binding IsCheatAvailable}">
-            <Border.Background>
-              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                <GradientStop Offset="0" Color="#16382D" />
-                <GradientStop Offset="1" Color="#0D1C16" />
-              </LinearGradientBrush>
-            </Border.Background>
-            <TextBlock Text="Experimental: savegame cheats are not yet verified with real saves in-game. A checkpoint is created first, but keep your own save backup before using them." TextWrapping="Wrap" Foreground="#E8E4D9" />
+          <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1"
+                  IsVisible="{Binding HasImportedProfile}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Imported profile" FontWeight="SemiBold" Foreground="#DCEEFF" />
+              <TextBlock Text="{Binding ImportedProfile.Name}" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding ImportedProfile.Description}" FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ImportedProfile.Contents}" FontSize="12" Foreground="#B4D941" />
+              <TextBlock Text="{Binding ImportedProfile.SettingCount, StringFormat={}{0} settings checked}" FontSize="12" Foreground="#82939D" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Add to My profiles" Command="{Binding AddImportedProfileToLibraryCommand}" />
+                <Button Classes="PrimaryAction" Content="Load for review" Command="{Binding LoadImportedProfileCommand}" />
+              </StackPanel>
+            </StackPanel>
           </Border>
-
-          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#3B3120" BorderThickness="1">
-            <TextBlock Text="{Binding Cheat.SteamCloudWarning}" TextWrapping="Wrap" Foreground="#D6BC84" FontSize="12" />
+          <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1"
+                  IsVisible="{Binding !HasUserProfiles}">
+            <StackPanel Spacing="5">
+              <TextBlock Text="No saved profiles yet" FontWeight="SemiBold" Foreground="#B8D7E5" />
+              <TextBlock Text="Create a profile from active custom graphics values or import a .aecprofile file. Loaded values are always reviewed before anything is applied." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+            </StackPanel>
           </Border>
-
+          <ItemsControl ItemsSource="{Binding UserProfiles}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:UserProfileRowViewModel">
+                <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,0,8">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#EBF0F3" />
+                    <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Contents}" FontSize="12" Foreground="#B4D941" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,0,0">
+                      <Button Content="Export" Click="ExportProfileClick" />
+                      <Button Classes="PrimaryAction" Content="Load profile" Click="LoadStoredProfileClick" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding ShowSettingsView}" Spacing="12">
+          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
+            <StackPanel Spacing="3">
+              <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
+              <TextBlock Text="Accessibility options and maintenance for Ancestors Enhanced Configurator." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding IsHighContrastEnabled, Mode=TwoWay}"
+                            OffContent="Off" OnContent="On"
+                            AutomationProperties.Name="Use high contrast mode"
+                            VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="High contrast" FontWeight="SemiBold" Foreground="{DynamicResource InfoTextBrush}" />
+                <TextBlock Text="Uses brighter text, clearer borders and a visible keyboard focus throughout AEC. This does not change Ancestors, your save games or your graphics settings." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="#17242B" BorderBrush="#344A56" BorderThickness="1"
+                  IsVisible="{Binding IsSaveManagerAvailable}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding SaveManager.KeepRunningInTrayWhenClosing, Mode=TwoWay}"
+                            IsEnabled="{Binding SaveManager.CanConfigureAutoBackup}"
+                            OffContent="Off" OnContent="On"
+                            AutomationProperties.Name="Keep running in tray when closing"
+                            VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="Keep auto-backup running when I close the window" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                <TextBlock Text="When Auto-Backup is enabled, closing AEC hides it in the system tray instead of stopping it. You can open it again or choose Exit from the tray menu." FontSize="12" Foreground="#82939D" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="#211C18" BorderBrush="#765536" BorderThickness="1">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Ancestors Enhanced maintenance" FontWeight="SemiBold" Foreground="#E8D5B5" />
+              <TextBlock Text="Remove Ancestors Enhanced from my game restores files changed by this Configurator to their state before you first used it. Your save games and other mods are not removed." FontSize="12" Foreground="#C7B98C" TextWrapping="Wrap" />
+              <TextBlock Text="No removable Configurator changes were found." IsVisible="{Binding !HasRemovableToolChanges}" FontSize="12" Foreground="#9CB0BC" />
+              <Button Command="{Binding RemoveToolChangesCommand}"
+                      IsEnabled="{Binding CanRemoveToolChanges}"
+                      HorizontalAlignment="Left"
+                      Content="Remove Ancestors Enhanced from my game"
+                      ToolTip.Tip="Shows every unchanged file that will be restored before anything is written." />
+            </StackPanel>
+          </Border>
         </StackPanel>
       </StackPanel>
     </ScrollViewer>
@@ -787,20 +915,14 @@
                   IsEnabled="{Binding CanRestoreGameDefaults}"
                   IsVisible="{Binding ShowGraphicsView}"
                   Margin="0,0,8,0"
-                  Content="Clear my custom overrides"
-                  ToolTip.Tip="Reviews and removes the custom graphics values currently shown in the editor. Undo history and pre-tool baselines are kept." />
+                  Content="Use game graphics settings"
+                  ToolTip.Tip="Removes only custom graphics values set in this Configurator. The graphics presets selected in the game will be used again." />
           <Button Command="{Binding RevertLastCommand}"
                   IsEnabled="{Binding CanUndo}"
                   IsVisible="{Binding ShowGraphicsView}"
                   Margin="0,0,8,0"
                   Padding="16,7"
-                  Content="Undo" />
-          <Button Command="{Binding RemoveToolChangesCommand}"
-                  IsVisible="{Binding HasRemovableToolChanges}"
-                  IsEnabled="{Binding CanRemoveToolChanges}"
-                  Margin="0,0,8,0"
-                  Content="Remove tool changes"
-                  ToolTip.Tip="Restores every tool-owned settings file to its recorded state from before the configurator first changed it." />
+                  Content="Undo last apply" />
           <Button Command="{Binding DiscardChangesCommand}"
                   IsVisible="{Binding ShowPendingActions}"
                   Margin="0,0,8,0"

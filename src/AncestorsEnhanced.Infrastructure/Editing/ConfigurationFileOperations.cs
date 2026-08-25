@@ -12,6 +12,7 @@ internal static class ConfigurationFileOperations
         new(StringComparer.OrdinalIgnoreCase)
         {
             "AncestorsEnhanced-Vignette_P.pak",
+            "AncestorsEnhanced-Gameplay_P.pak",
             "pakchunk99-WindowsNoEditor_P.pak",
         };
 

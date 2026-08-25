@@ -62,7 +62,7 @@ internal sealed class SettingsChangePlanner(
 
         PlanIniChanges(expandedRequests, targets, configDirectory, filePlans, previews);
         PlanSystemSaveChanges(snapshot, expandedRequests, targets, userDataDirectory, filePlans, previews);
-        PlanVignetteChange(snapshot, expandedRequests, targets, filePlans, previews);
+        PlanVignetteChange(snapshot, expandedRequests, filePlans, previews);
 
         if (filePlans.Count == 0)
         {
@@ -238,12 +238,11 @@ internal sealed class SettingsChangePlanner(
     private static void PlanVignetteChange(
         GameInspectionSnapshot snapshot,
         IReadOnlyList<SettingChangeRequest> requests,
-        Dictionary<SettingChangeRequest, SettingFileTarget> targets,
         List<ConfigurationFileChangePlan> filePlans,
         List<SettingChangePreview> previews)
     {
         SettingChangeRequest? request = requests.SingleOrDefault(candidate =>
-            targets[candidate] == SettingFileTarget.Pak);
+            string.Equals(candidate.Key, "mod.VignettePercent", StringComparison.Ordinal));
         if (request is null)
         {
             return;

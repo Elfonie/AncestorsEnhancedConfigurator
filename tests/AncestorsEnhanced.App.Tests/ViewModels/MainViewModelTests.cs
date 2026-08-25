@@ -2,12 +2,28 @@ using System.Globalization;
 using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.Profiles;
 using AncestorsEnhanced.Core.SaveGames;
 
 namespace AncestorsEnhanced.App.Tests.ViewModels;
 
 public sealed class MainViewModelTests
 {
+    [Fact]
+    public void HighContrastChangeUsesTheInjectedApplicationThemeHandler()
+    {
+        bool? observed = null;
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            highContrastEnabled: false,
+            highContrastChanged: enabled => observed = enabled);
+
+        viewModel.IsHighContrastEnabled = true;
+
+        Assert.True(observed);
+    }
+
     [Fact]
     public async Task InspectionStartsAfterConstruction()
     {
@@ -424,6 +440,178 @@ public sealed class MainViewModelTests
         Assert.True(sharpening.Editor!.ShowUnknownGameValue);
     }
 
+    [Fact]
+    public async Task LoadingSavedProfileStagesValuesForNormalReview()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Clean high",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [new ProfileSetting("r.ViewDistanceScale", "1.5")],
+            [],
+            []);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.ShowProfilesCommand.Execute(null);
+        viewModel.LoadProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.True(viewModel.ShowGraphicsView, viewModel.OperationMessage);
+        Assert.True(viewModel.HasPendingChanges);
+        Assert.Contains("Loaded Clean high", viewModel.OperationMessage, StringComparison.Ordinal);
+        Assert.False(viewModel.IsReviewingChanges);
+    }
+
+    [Fact]
+    public async Task LoadingMatchingProfileDoesNotShowAReviewWarning()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Current setup",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [new ProfileSetting("r.ViewDistanceScale", "1.2")],
+            [],
+            []);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.LoadProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.False(viewModel.HasPendingChanges);
+        Assert.Equal("#B4D941", viewModel.OperationAccent);
+        Assert.Contains("already matches", viewModel.OperationMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Review the pending changes", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GameplayProfileDoesNotStageAnyValuesUntilGameplayPakSupportExists()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Future gameplay",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [],
+            [],
+            [new ProfileSetting("r.ViewDistanceScale", "1.5")]);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.LoadProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.False(viewModel.HasPendingChanges);
+        Assert.Contains("Gameplay profiles are not available", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreatingProfileStoresTechnicalKeysNotUiIds()
+    {
+        var profiles = new RecordingProfileLibrary();
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.StartCreatingProfileCommand.Execute(null);
+        viewModel.NewProfileName = "My setup";
+        viewModel.CreateProfileCommand.Execute(null);
+
+        StoredUserProfile saved = Assert.Single(profiles.List());
+        ProfileSetting setting = Assert.Single(saved.Profile.Graphics);
+        Assert.Equal("r.ViewDistanceScale", setting.Key);
+        Assert.Equal("1.2", setting.Value);
+        Assert.Equal("My setup", saved.Profile.Name);
+    }
+
+    [Fact]
+    public async Task CreatingProfileUsesTheVignetteEditorKeyInsteadOfItsAssetLabel()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot() with
+        {
+            Vignette = new VignetteModSnapshot(50, IsEditable: true, "Managed patch"),
+        };
+        var profiles = new RecordingProfileLibrary();
+        var viewModel = new MainViewModel(
+            new FixedInspector(snapshot),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+        viewModel.NewProfileName = "Reduced vignette";
+
+        viewModel.CreateProfileCommand.Execute(null);
+
+        StoredUserProfile saved = Assert.Single(profiles.List());
+        Assert.Contains(saved.Profile.Graphics, setting =>
+            setting.Key == "mod.VignettePercent" && setting.Value == "50");
+        Assert.DoesNotContain(saved.Profile.Graphics, setting =>
+            setting.Key == "VL01E01_Vignette_Intensity");
+    }
+
+    [Fact]
+    public async Task FailedProfileSaveIsReportedWithoutThrowingFromTheCommand()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: new FailingProfileLibrary());
+        await viewModel.InitializeAsync();
+        viewModel.NewProfileName = "My setup";
+
+        viewModel.CreateProfileCommand.Execute(null);
+
+        Assert.Contains("The profile was not saved", viewModel.OperationMessage, StringComparison.Ordinal);
+        Assert.False(viewModel.IsCreatingProfile);
+    }
+
+    [Fact]
+    public async Task ProfileSaveAvailabilityUpdatesWhenAnOverrideChanges()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot() with
+        {
+            ConfigurationFiles =
+            [
+                new ConfigurationFileSnapshot(
+                    "Engine.ini",
+                    "Engine.ini",
+                    Exists: true,
+                    0,
+                    DateTimeOffset.UnixEpoch,
+                    [],
+                    null),
+            ],
+        };
+        var viewModel = new MainViewModel(new FixedInspector(snapshot), new RecordingEditor());
+        await viewModel.InitializeAsync();
+        viewModel.NewProfileName = "My setup";
+
+        Assert.False(viewModel.HasCustomProfileSettings);
+        Assert.False(viewModel.CanSaveProfile);
+
+        SettingEditorViewModel editor = FindViewDistanceEditor(viewModel);
+        editor.UseCustomValue = true;
+
+        Assert.True(viewModel.HasCustomProfileSettings);
+        Assert.True(viewModel.CanSaveProfile);
+    }
+
     private static SettingEditorViewModel FindViewDistanceEditor(MainViewModel viewModel) =>
         Assert.Single(
                 viewModel.FeatureGroups.SelectMany(group => group.Settings),
@@ -504,6 +692,38 @@ public sealed class MainViewModelTests
 
         public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
             new(false, "not used");
+    }
+
+    private sealed class RecordingProfileLibrary(params StoredUserProfile[] profiles) : IUserProfileLibrary
+    {
+        private readonly Dictionary<string, UserProfile> _profiles = profiles.ToDictionary(profile => profile.Id, profile => profile.Profile);
+
+        public IReadOnlyList<StoredUserProfile> List() =>
+            _profiles.Select(pair => new StoredUserProfile(pair.Key, pair.Value)).ToArray();
+
+        public UserProfile Read(string id) => _profiles[id];
+
+        public StoredUserProfile Save(UserProfile profile)
+        {
+            UserProfile validated = UserProfileCodec.Deserialize(UserProfileCodec.Serialize(profile));
+            string id = Guid.NewGuid().ToString("N");
+            _profiles.Add(id, validated);
+            return new StoredUserProfile(id, validated);
+        }
+
+        public UserProfile ReadExternal(string path) => throw new NotSupportedException();
+    }
+
+    private sealed class FailingProfileLibrary : IUserProfileLibrary
+    {
+        public IReadOnlyList<StoredUserProfile> List() => [];
+
+        public UserProfile Read(string id) => throw new FileNotFoundException();
+
+        public StoredUserProfile Save(UserProfile profile) =>
+            throw new InvalidDataException("unsupported test value");
+
+        public UserProfile ReadExternal(string path) => throw new NotSupportedException();
     }
 
     private sealed class RecordingEditor : IGameSettingsEditor

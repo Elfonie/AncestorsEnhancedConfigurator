@@ -147,4 +147,27 @@ public sealed class SettingEditorViewModelTests
         Assert.False(viewModel.ShowValueEditor);
         Assert.True(viewModel.ShowUnknownGameValue);
     }
+
+    [Fact]
+    public void ProfileValueIsValidatedBeforeItChangesTheEditor()
+    {
+        var viewModel = new SettingEditorViewModel(new SettingEditSnapshot(
+            "Engine.ini",
+            "SystemSettings",
+            "r.ViewDistanceScale",
+            SettingEditorKind.Number,
+            "1.2",
+            null,
+            0.5m,
+            2m,
+            0.05m));
+
+        Assert.False(viewModel.CanApplyProfileValue("1.23"));
+        Assert.False(viewModel.TryApplyProfileValue("1.23"));
+        Assert.False(viewModel.HasChanges);
+
+        Assert.True(viewModel.TryApplyProfileValue("1.5"));
+        Assert.True(viewModel.HasChanges);
+        Assert.Equal("1.5", viewModel.CreateRequest("View distance").Value);
+    }
 }

@@ -1,8 +1,12 @@
+using AncestorsEnhanced.App.Discord;
+using AncestorsEnhanced.App.Accessibility;
 using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.App.Views;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Inspection;
+using AncestorsEnhanced.Infrastructure.Profiles;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
@@ -27,20 +31,83 @@ public partial class App : Application
                 return;
             }
 
+            var accessibilityPreferences = new AccessibilityPreferencesStore();
+            AccessibilityPreferences preferences = accessibilityPreferences.Load();
+            AccessibilityTheme.Apply(this, preferences.HighContrastEnabled);
+
             var viewModel = new MainViewModel(
                 ReadOnlyAncestorsInspector.CreateDefault(),
-                new SafeGameSettingsEditor());
+                new SafeGameSettingsEditor(),
+                profileLibrary: new UserProfileLibrary(),
+                highContrastEnabled: preferences.HighContrastEnabled,
+                highContrastChanged: enabled =>
+                {
+                    AccessibilityTheme.Apply(this, enabled);
+                    accessibilityPreferences.TrySave(new AccessibilityPreferences(enabled));
+                });
+            var discordPresence = new DiscordRichPresenceService();
             var window = new MainWindow
             {
                 DataContext = viewModel,
             };
-            window.Opened += async (_, _) => await viewModel.InitializeAsync();
+            var trayIcon = new TrayIcon
+            {
+                Icon = window.Icon,
+                ToolTipText = "Ancestors Enhanced Configurator",
+                IsVisible = false,
+            };
+            var trayIcons = new TrayIcons { trayIcon };
+            TrayIcon.SetIcons(this, trayIcons);
+
+            bool exitingFromTray = false;
+            void ShowWindow()
+            {
+                trayIcon.IsVisible = false;
+                window.Show();
+                window.WindowState = WindowState.Normal;
+                window.Activate();
+            }
+
+            trayIcon.Clicked += (_, _) => ShowWindow();
+            var openMenuItem = new NativeMenuItem { Header = "Open Ancestors Enhanced" };
+            openMenuItem.Click += (_, _) => ShowWindow();
+            var exitMenuItem = new NativeMenuItem { Header = "Exit" };
+            exitMenuItem.Click += (_, _) =>
+            {
+                exitingFromTray = true;
+                trayIcon.IsVisible = false;
+                window.Close();
+            };
+            trayIcon.Menu = new NativeMenu
+            {
+                Items = { openMenuItem, exitMenuItem },
+            };
+            window.Closing += (_, eventArgs) =>
+            {
+                if (!exitingFromTray && viewModel.ShouldKeepRunningInTrayOnClose)
+                {
+                    eventArgs.Cancel = true;
+                    trayIcon.IsVisible = true;
+                    window.Hide();
+                }
+            };
+            window.Opened += async (_, _) =>
+            {
+                discordPresence.Start();
+                await viewModel.InitializeAsync();
+            };
             int retryCount = 0;
             const int MaxAutomaticRetries = 3;
             DispatcherTimer? retryTimer = null;
+            var discordTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            discordTimer.Tick += (_, _) => discordPresence.RunCallbacks();
+            discordTimer.Start();
             window.Closed += (_, _) =>
             {
                 retryTimer?.Stop();
+                discordTimer.Stop();
+                discordPresence.Dispose();
+                trayIcon.Dispose();
                 viewModel.Dispose();
             };
             retryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
@@ -51,8 +118,7 @@ public partial class App : Application
                     return;
                 }
 
-                bool allAvailable = !viewModel.IsCheatUnavailable && !viewModel.IsSaveManagerUnavailable;
-                if (allAvailable)
+                if (!viewModel.IsSaveManagerUnavailable)
                 {
                     retryTimer.Stop();
                     return;

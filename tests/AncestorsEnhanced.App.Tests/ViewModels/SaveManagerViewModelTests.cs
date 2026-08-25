@@ -71,10 +71,10 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Theory]
-    [InlineData("Cheat:MaxNeuronalEnergy", "Max Neuronal Energy cheat")]
-    [InlineData("Cheat:MaxNeeds", "Max Stamina and Energy cheat")]
-    [InlineData("Cheat:HealClan", "Heal Current Ape cheat")]
-    public void LegacyCheatOriginsRemainReadable(string origin, string expected)
+    [InlineData("Cheat:MaxNeuronalEnergy")]
+    [InlineData("Cheat:MaxNeeds")]
+    [InlineData("Cheat:HealClan")]
+    public void LegacyModifiedCheckpointOriginsRemainReadable(string origin)
     {
         var checkpoint = new SaveGameCheckpoint(
             "checkpoint",
@@ -89,7 +89,7 @@ public sealed class SaveManagerViewModelTests
             () => Task.CompletedTask,
             () => true);
 
-        Assert.Equal(expected, viewModel.OriginLabel);
+        Assert.Equal("Legacy modified checkpoint", viewModel.OriginLabel);
     }
 
     [Fact]
@@ -613,6 +613,36 @@ public sealed class SaveManagerViewModelTests
             ToolSettings settings = System.Text.Json.JsonSerializer.Deserialize<ToolSettings>(
                 File.ReadAllBytes(settingsPath))!;
             Assert.Equal(10, settings.WatchdogIntervalMinutes);
+            Assert.True(settings.KeepRunningInTrayWhenClosing);
+        }
+        finally
+        {
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TrayClosePreferenceIsSavedAndLoaded()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        try
+        {
+            using (var viewModel = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog: null))
+            {
+                Assert.True(viewModel.KeepRunningInTrayWhenClosing);
+                viewModel.KeepRunningInTrayWhenClosing = false;
+            }
+
+            using var reloaded = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog: null);
+
+            Assert.False(reloaded.KeepRunningInTrayWhenClosing);
         }
         finally
         {

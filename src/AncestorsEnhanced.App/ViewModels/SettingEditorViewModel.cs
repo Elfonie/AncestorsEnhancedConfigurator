@@ -51,6 +51,8 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public IReadOnlyList<SettingChoiceViewModel> Choices { get; }
 
+    public string Key => _snapshot.Key;
+
     public bool IsToggle => _snapshot.Kind == SettingEditorKind.Toggle;
 
     public bool IsNumber => _snapshot.Kind == SettingEditorKind.Number;
@@ -120,6 +122,80 @@ public partial class SettingEditorViewModel : ViewModelBase
             _snapshot.Section,
             _snapshot.Key,
             _snapshot.IsDirect || UseCustomValue ? DesiredValue : null);
+
+    public bool TryGetCustomProfileValue(out string? value)
+    {
+        value = null;
+        if (!ShowOverrideToggle || !UseCustomValue || HasUnsupportedCurrentValue)
+        {
+            return false;
+        }
+
+        value = DesiredValue;
+        return value is not null;
+    }
+
+    public bool TryApplyProfileValue(string? value)
+    {
+        if (!CanApplyProfileValue(value))
+        {
+            return false;
+        }
+
+        switch (_snapshot.Kind)
+        {
+            case SettingEditorKind.Toggle:
+                UseCustomValue = true;
+                ToggleValue = value == "1";
+                return true;
+            case SettingEditorKind.Number:
+                decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal number);
+                UseCustomValue = true;
+                NumberValue = number;
+                return true;
+            case SettingEditorKind.Choice:
+                SettingChoiceViewModel? choice = Choices.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Value, value, StringComparison.Ordinal));
+                if (choice is null)
+                {
+                    return false;
+                }
+                UseCustomValue = true;
+                SelectedChoice = choice;
+                return true;
+            case SettingEditorKind.Presence:
+                UseCustomValue = true;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public bool CanApplyProfileValue(string? value)
+    {
+        if (!CanSetCustomValue || string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return _snapshot.Kind switch
+        {
+            SettingEditorKind.Toggle => value is "0" or "1",
+            SettingEditorKind.Number when decimal.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out decimal number) =>
+                number >= Minimum && number <= Maximum && IsOnIncrement(number),
+            SettingEditorKind.Choice => Choices.Any(candidate =>
+                string.Equals(candidate.Value, value, StringComparison.Ordinal)),
+            SettingEditorKind.Presence => string.Equals(
+                value,
+                _snapshot.DefaultValue,
+                StringComparison.Ordinal),
+            _ => false,
+        };
+    }
 
     public void Reset()
     {
@@ -200,6 +276,17 @@ public partial class SettingEditorViewModel : ViewModelBase
         _snapshot.CurrentOverride ??
         _snapshot.GameControlledValue ??
         _snapshot.DefaultValue;
+
+    private bool IsOnIncrement(decimal value)
+    {
+        if (_snapshot.Increment is not > 0 || _snapshot.Minimum is null)
+        {
+            return true;
+        }
+
+        decimal steps = (value - _snapshot.Minimum.Value) / _snapshot.Increment.Value;
+        return decimal.Abs(steps - decimal.Round(steps)) < 0.000001m;
+    }
 
     private void NotifyStateChanged()
     {

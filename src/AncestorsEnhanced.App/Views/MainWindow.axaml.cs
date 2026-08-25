@@ -1,7 +1,10 @@
 using System.ComponentModel;
 using AncestorsEnhanced.App.ViewModels;
+using AncestorsEnhanced.Core.Profiles;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 
 namespace AncestorsEnhanced.App.Views;
@@ -59,4 +62,105 @@ public partial class MainWindow : Window
     }
 
     private IInputElement? _restoreFocus;
+
+    private async void ImportProfileClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel || StorageProvider is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<IStorageFile> files = await StorageProvider.OpenFilePickerAsync(
+                new FilePickerOpenOptions
+                {
+                    Title = "Import Ancestors Enhanced profile",
+                    AllowMultiple = false,
+                    FileTypeFilter =
+                    [
+                        new FilePickerFileType("Ancestors Enhanced profile")
+                        {
+                            Patterns = ["*.aecprofile"],
+                        },
+                    ],
+                });
+            IStorageFile? file = files.Count > 0 ? files[0] : null;
+            if (file is not null && file.TryGetLocalPath() is string path)
+            {
+                viewModel.ImportProfile(path);
+            }
+            else if (file is not null)
+            {
+                viewModel.ReportProfileFileError("import");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            viewModel.ReportProfileFileError("import");
+        }
+    }
+
+    private async void ExportProfileClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: UserProfileRowViewModel row } ||
+            DataContext is not MainViewModel viewModel ||
+            StorageProvider is null)
+        {
+            return;
+        }
+
+        UserProfile? profile = viewModel.GetProfileForExport(row.Id);
+        if (profile is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IStorageFile? file = await StorageProvider.SaveFilePickerAsync(
+                new FilePickerSaveOptions
+                {
+                    Title = "Export Ancestors Enhanced profile",
+                    SuggestedFileName = SanitizeFileName(profile.Name) + ".aecprofile",
+                    DefaultExtension = "aecprofile",
+                    FileTypeChoices =
+                    [
+                        new FilePickerFileType("Ancestors Enhanced profile")
+                        {
+                            Patterns = ["*.aecprofile"],
+                        },
+                    ],
+                });
+            if (file is null)
+            {
+                return;
+            }
+
+            await using Stream stream = await file.OpenWriteAsync();
+            byte[] content = UserProfileCodec.Serialize(profile);
+            await stream.WriteAsync(content);
+            await stream.FlushAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            viewModel.ReportProfileFileError("export");
+        }
+    }
+
+    private void LoadStoredProfileClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: UserProfileRowViewModel row } &&
+            DataContext is MainViewModel viewModel)
+        {
+            viewModel.LoadProfileCommand.Execute(row);
+        }
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        char[] invalid = Path.GetInvalidFileNameChars();
+        string value = string.Concat(name.Select(character => invalid.Contains(character) ? '_' : character)).Trim();
+        return string.IsNullOrWhiteSpace(value) ? "AncestorsEnhancedProfile" : value;
+    }
 }

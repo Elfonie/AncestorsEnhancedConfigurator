@@ -3,6 +3,7 @@ using System.Globalization;
 using AncestorsEnhanced.Core;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.Profiles;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Core.Settings;
 using AncestorsEnhanced.Infrastructure.Editing;
@@ -17,6 +18,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
     private readonly Func<VerifiedGameContext, ISaveGameManager> _saveManagerFactory;
+    private readonly IUserProfileLibrary _profileLibrary;
     private readonly GameContextVerifier _gameContextVerifier;
     private readonly UiMutationGate _mutationGate = new();
     private VerifiedGameContext? _verifiedGameContext;
@@ -29,6 +31,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private GameInspectionSnapshot? _snapshot;
     private SettingsChangePlan? _reviewPlan;
     private bool _reviewIsToolChangeRemoval;
+    private readonly Action<bool>? _highContrastChanged;
 
     [ObservableProperty]
     public partial string DetectionStatus { get; set; } = "Not checked yet";
@@ -112,15 +115,121 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial SaveManagerViewModel? SaveManager { get; set; }
 
     [ObservableProperty]
-    public partial bool IsCheatView { get; set; }
+    public partial bool IsGameplayView { get; set; }
 
     [ObservableProperty]
-    public partial CheatViewModel? Cheat { get; set; }
+    public partial bool IsGameplayAdvancedMode { get; set; }
+
+    [ObservableProperty]
+    public partial IReadOnlyList<GameplayDifficultyPresetViewModel> GameplayDifficultyPresets { get; set; } =
+    [
+        new(
+            "Game default",
+            "100% across every available control",
+            "No gameplay patch is created. This is the reference point for all future percentage changes."),
+        new(
+            "Explorer (planned)",
+            "Lower survival pressure",
+            "Will reduce the food, water, sleep and fall-damage categories together after the PAK load path is verified."),
+        new(
+            "Survival (planned)",
+            "Higher survival pressure",
+            "Will raise the same simple categories together. It will not silently alter combat, QTEs or animal damage."),
+        new(
+            "Custom (planned)",
+            "Choose each simple category yourself",
+            "Each available category will use 10% steps relative to the game default."),
+    ];
+
+    [ObservableProperty]
+    public partial IReadOnlyList<GameplayDifficultyControlViewModel> GameplaySimpleControls { get; set; } =
+    [
+        new(
+            "Food need",
+            "24 portions per day · game default",
+            "Higher is harder: the named Food NeededPerDay value defines a larger food requirement."),
+        new(
+            "Water need",
+            "30 portions per day · game default",
+            "Higher is harder: the named Liquid NeededPerDay value defines a larger liquid requirement."),
+        new(
+            "Sleep need",
+            "16 portions per day · game default",
+            "Higher is harder: the named Sleep NeededPerDay value defines a larger sleep requirement."),
+        new(
+            "Energy recovery",
+            "1.0 energy per second · game default",
+            "Higher is easier while energy regeneration is active. Normal stamina and health limits still apply."),
+        new(
+            "Fall damage",
+            "Minor 2.5% · Major 5% · game default",
+            "Higher is harder: minor and major falls use separate, named damage values and will remain a paired Simple control."),
+    ];
+
+    [ObservableProperty]
+    public partial IReadOnlyList<GameplayResearchValueViewModel> GameplayResearchValues { get; set; } =
+    [
+        new(
+            "Energy recovery delay",
+            "1.5 seconds",
+            "The delay before resting enables energy regeneration. This is not a regeneration rate."),
+        new(
+            "Cumulative energy-loss threshold",
+            "0.50 energy",
+            "Recorded energy loss at or beyond this threshold triggers one stamina penalty, then the accumulator resets."),
+        new(
+            "Cumulative energy-loss stamina penalty",
+            "0.15 stamina",
+            "The penalty is one absolute stamina subtraction per threshold crossing; excess loss is not carried over."),
+        new(
+            "Major wound base recovery time",
+            "480 minutes",
+            "The game multiplies this by one minus the applicable wound-duration ability modifiers, clamped to 0–1."),
+        new(
+            "Minor wound stamina penalty",
+            "0.15 maximum stamina",
+            "While wounded, this is a maximum-stamina modifier, not an immediate current-stamina drain."),
+        new(
+            "Major wound stamina penalty",
+            "0.30 maximum stamina",
+            "While wounded, this is a maximum-stamina modifier, not an immediate current-stamina drain."),
+        new(
+            "Major poison stamina penalty",
+            "0.25 maximum stamina",
+            "While majorly poisoned, this is a maximum-stamina modifier. The minor-poison override is not known."),
+    ];
+
+    [ObservableProperty]
+    public partial bool IsProfilesView { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsSettingsView { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsHighContrastEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial IReadOnlyList<UserProfileRowViewModel> UserProfiles { get; set; } = [];
+
+    [ObservableProperty]
+    public partial ImportedProfileViewModel? ImportedProfile { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsCreatingProfile { get; set; }
+
+    [ObservableProperty]
+    public partial string NewProfileName { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string NewProfileDescription { get; set; } = "";
 
     public MainViewModel(
         IReadOnlyGameInspector inspector,
         IGameSettingsEditor settingsEditor,
-        Func<VerifiedGameContext, ISaveGameManager>? saveManagerFactory = null)
+        Func<VerifiedGameContext, ISaveGameManager>? saveManagerFactory = null,
+        IUserProfileLibrary? profileLibrary = null,
+        bool highContrastEnabled = false,
+        Action<bool>? highContrastChanged = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(settingsEditor);
@@ -128,30 +237,56 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _gameContextVerifier = new GameContextVerifier(inspector);
         _settingsEditor = settingsEditor;
         _saveManagerFactory = saveManagerFactory ?? (context => new SafeSaveGameManager(context, _gameContextVerifier));
+        _profileLibrary = profileLibrary ?? EmptyUserProfileLibrary.Instance;
+        _highContrastChanged = highContrastChanged;
+        IsHighContrastEnabled = highContrastEnabled;
         _mutationGate.Changed += OnMutationGateChanged;
 
         ProductName = "Ancestors Enhanced Configurator";
         string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-        Phase = $"{version} Graphics, Saves and Cheats";
+        Phase = $"{version} Graphics, Saves and Gameplay";
     }
 
     public string ProductName { get; }
 
     public string Phase { get; }
 
-    public bool ShowGraphicsView => !IsSaveGamesView && !IsCheatView;
+    public bool ShowGraphicsView => !IsSaveGamesView && !IsGameplayView && !IsProfilesView && !IsSettingsView;
 
     public bool ShowSaveGamesView => IsSaveGamesView;
 
-    public bool ShowCheatView => IsCheatView;
+    public bool ShowGameplayView => IsGameplayView;
 
-    public bool IsCheatAvailable => Cheat is not null;
+    public bool HasGameplayResearchValues => GameplayResearchValues.Count > 0;
 
-    public bool IsCheatUnavailable => Cheat is null;
+    public bool IsGameplaySimpleMode => !IsGameplayAdvancedMode;
+
+    public bool HasGameplayDifficultyPresets => GameplayDifficultyPresets.Count > 0;
+
+    public bool HasGameplaySimpleControls => GameplaySimpleControls.Count > 0;
+
+    public bool ShowProfilesView => IsProfilesView;
+
+    public bool ShowSettingsView => IsSettingsView;
+
+    public bool HasUserProfiles => UserProfiles.Count > 0;
+
+    public bool HasImportedProfile => ImportedProfile is not null;
+
+    public bool HasCustomProfileSettings => _editors.Values.Any(editor =>
+        editor.TryGetCustomProfileValue(out _));
+
+    public bool CanSaveProfile =>
+        !IsAnyOperationRunning &&
+        HasCustomProfileSettings &&
+        !string.IsNullOrWhiteSpace(NewProfileName);
 
     public bool IsSaveManagerAvailable => SaveManager is not null;
 
     public bool IsSaveManagerUnavailable => SaveManager is null;
+
+    public bool ShouldKeepRunningInTrayOnClose =>
+        SaveManager is { IsWatchdogEnabled: true, KeepRunningInTrayWhenClosing: true };
 
     public bool HasPendingChanges => PendingChanges.Count > 0;
 
@@ -169,8 +304,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool IsAnyOperationRunning =>
         IsBusy ||
         _mutationGate.IsBusy ||
-        (SaveManager?.IsBusy ?? false) ||
-        (Cheat?.IsBusy ?? false);
+        (SaveManager?.IsBusy ?? false);
     public bool CanEditSettings => !IsReviewingChanges && !IsAnyOperationRunning;
 
     public bool CanRestoreGameDefaults =>
@@ -200,18 +334,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     public string ReviewSummary => _reviewIsToolChangeRemoval
-        ? ReviewChanges.Count == 1
-            ? "Remove tool changes from 1 file"
-            : $"Remove tool changes from {ReviewChanges.Count} files"
+        ? "Remove Ancestors Enhanced from my game"
         : ReviewChanges.Count == 1
         ? "Review 1 change before writing"
         : $"Review {ReviewChanges.Count} changes before writing";
 
     public string ReviewDescription => _reviewIsToolChangeRemoval
-        ? "Only unchanged files managed by this tool will be returned to their captured original state"
+        ? "The listed files will be restored to their state before you first used this Configurator. Save games and other mods are not changed"
         : "Check the old and new values before anything is written";
 
-    public string ConfirmReviewLabel => _reviewIsToolChangeRemoval ? "Confirm removal" : "Confirm & Apply";
+    public string ConfirmReviewLabel => _reviewIsToolChangeRemoval ? "Remove from my game" : "Confirm & Apply";
 
     public string PendingSummary => PendingChanges.Count switch
     {
@@ -229,6 +361,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public async Task InitializeAsync()
     {
+        RefreshProfileLibrary();
         if (await RefreshFromDiskAsync())
         {
             ShowMessage(
@@ -271,55 +404,265 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ShowSaveGames()
     {
-        IsCheatView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsSettingsView = false;
         IsSaveGamesView = true;
         UpdateViewVisibility();
     }
 
     [RelayCommand]
-    private void ShowCheat()
+    private void ShowGameplay()
     {
         IsSaveGamesView = false;
-        IsCheatView = true;
+        IsProfilesView = false;
+        IsSettingsView = false;
+        IsGameplayView = true;
         UpdateViewVisibility();
     }
 
+    [RelayCommand]
+    private void ShowGameplaySimple() => IsGameplayAdvancedMode = false;
+
+    [RelayCommand]
+    private void ShowGameplayAdvanced() => IsGameplayAdvancedMode = true;
+
+    [RelayCommand]
+    private void ShowProfiles()
+    {
+        IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsSettingsView = false;
+        IsProfilesView = true;
+        RefreshProfileLibrary();
+        UpdateViewVisibility();
+    }
+
+    [RelayCommand]
+    private void ShowSettings()
+    {
+        IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsSettingsView = true;
+        UpdateViewVisibility();
+    }
+
+    [RelayCommand]
+    private void StartCreatingProfile()
+    {
+        if (IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        IsCreatingProfile = true;
+        NewProfileName = "";
+        NewProfileDescription = "";
+    }
+
+    [RelayCommand]
+    private void CancelCreatingProfile() => IsCreatingProfile = false;
+
+    [RelayCommand]
+    private void CreateProfile()
+    {
+        if (IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        var graphics = new List<ProfileSetting>();
+        foreach ((string id, SettingEditorViewModel editor) in _editors)
+        {
+            if (!EditableSettingsCatalog.IsDefined(editor.Key))
+            {
+                ShowMessage($"{FindSettingName(id)} cannot be included because this setting is not supported by profiles yet.", "#D6BC84");
+                return;
+            }
+            if (editor.TryGetCustomProfileValue(out string? value))
+            {
+                graphics.Add(new ProfileSetting(editor.Key, value!));
+            }
+        }
+        if (graphics.Count == 0)
+        {
+            ShowMessage("There are no custom graphics values to save yet.", "#D6BC84");
+            return;
+        }
+
+        try
+        {
+            string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+            var profile = new UserProfile(
+                UserProfile.CurrentSchemaVersion,
+                NewProfileName.Trim(),
+                string.IsNullOrWhiteSpace(NewProfileDescription) ? null : NewProfileDescription.Trim(),
+                DateTimeOffset.UtcNow,
+                version,
+                graphics,
+                [],
+                []);
+            StoredUserProfile saved = _profileLibrary.Save(profile);
+            RefreshProfileLibrary();
+            IsCreatingProfile = false;
+            ShowMessage($"Saved profile: {saved.Profile.Name}", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The profile was not saved: {exception.Message}", "#E04D42");
+        }
+    }
+
+    public void ImportProfile(string path)
+    {
+        if (IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            UserProfile profile = _profileLibrary.ReadExternal(path);
+            ImportedProfile = new ImportedProfileViewModel(profile, Path.GetFileName(path));
+            ShowMessage("Profile checked. Choose whether to add it to your library or load it for review.", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The profile was not imported: {exception.Message}", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void AddImportedProfileToLibrary()
+    {
+        if (ImportedProfile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            StoredUserProfile saved = _profileLibrary.Save(ImportedProfile.Profile);
+            RefreshProfileLibrary();
+            ImportedProfile = null;
+            ShowMessage($"Added to My profiles: {saved.Profile.Name}", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The profile was not saved: {exception.Message}", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void LoadImportedProfile()
+    {
+        if (ImportedProfile is not null)
+        {
+            LoadProfileForReview(ImportedProfile.Profile);
+        }
+    }
+
+    [RelayCommand]
+    private void LoadProfile(UserProfileRowViewModel? profile)
+    {
+        if (profile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            LoadProfileForReview(_profileLibrary.Read(profile.Id));
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The saved profile could not be loaded: {exception.Message}", "#E04D42");
+        }
+    }
+
+    public UserProfile? GetProfileForExport(string id)
+    {
+        try
+        {
+            return _profileLibrary.Read(id);
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The saved profile could not be exported: {exception.Message}", "#E04D42");
+            return null;
+        }
+    }
+
+    public void ReportProfileFileError(string action) =>
+        ShowMessage($"The profile {action} could not be completed.", "#E04D42");
+
     private void OnChildPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SaveManagerViewModel.IsBusy) ||
-            e.PropertyName == nameof(CheatViewModel.IsBusy))
+        if (e.PropertyName == nameof(SaveManagerViewModel.IsBusy))
         {
             NotifyMutationAvailability();
-        }
-
-        if (sender is CheatViewModel cheat &&
-            e.PropertyName == nameof(CheatViewModel.IsGameRunning) &&
-            SaveManager is not null)
-        {
-            SaveManager.IsGameRunning = cheat.IsGameRunning;
-        }
-
-        if (sender is SaveManagerViewModel saves &&
-            e.PropertyName == nameof(SaveManagerViewModel.Slots) &&
-            Cheat is not null)
-        {
-            Cheat.UpdateSlotAvailability(saves.Slots);
         }
     }
     private void UpdateViewVisibility()
     {
         OnPropertyChanged(nameof(ShowGraphicsView));
         OnPropertyChanged(nameof(ShowSaveGamesView));
-        OnPropertyChanged(nameof(ShowCheatView));
+        OnPropertyChanged(nameof(ShowGameplayView));
+        OnPropertyChanged(nameof(ShowProfilesView));
+        OnPropertyChanged(nameof(ShowSettingsView));
     }
 
     [RelayCommand]
     private void ShowGraphics()
     {
-        IsCheatView = false;
         IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsSettingsView = false;
         UpdateViewVisibility();
     }
+
+    partial void OnIsGameplayViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowGameplayView));
+        OnPropertyChanged(nameof(ShowProfilesView));
+        OnPropertyChanged(nameof(ShowSettingsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnIsGameplayAdvancedModeChanged(bool value) =>
+        OnPropertyChanged(nameof(IsGameplaySimpleMode));
+
+    partial void OnIsProfilesViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowProfilesView));
+        OnPropertyChanged(nameof(ShowSettingsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnIsSettingsViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowSettingsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnIsHighContrastEnabledChanged(bool value)
+    {
+        _highContrastChanged?.Invoke(value);
+    }
+
+    partial void OnUserProfilesChanged(IReadOnlyList<UserProfileRowViewModel> value) =>
+        OnPropertyChanged(nameof(HasUserProfiles));
+
+    partial void OnImportedProfileChanged(ImportedProfileViewModel? value) =>
+        OnPropertyChanged(nameof(HasImportedProfile));
+
+    partial void OnNewProfileNameChanged(string value) =>
+        OnPropertyChanged(nameof(CanSaveProfile));
 
     [RelayCommand]
     private void DiscardChanges()
@@ -550,14 +893,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowBottomBar));
     }
 
-    partial void OnIsCheatViewChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ShowCheatView));
-        OnPropertyChanged(nameof(ShowGraphicsView));
-        OnPropertyChanged(nameof(ShowSaveGamesView));
-        OnPropertyChanged(nameof(ShowBottomBar));
-    }
-
     partial void OnSaveManagerChanging(SaveManagerViewModel? oldValue, SaveManagerViewModel? newValue)
     {
         if (oldValue is not null) oldValue.PropertyChanged -= OnChildPropertyChanged;
@@ -569,19 +904,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsSaveManagerAvailable));
         OnPropertyChanged(nameof(IsAnyOperationRunning));
         OnPropertyChanged(nameof(IsSaveManagerUnavailable));
-    }
-
-    partial void OnCheatChanging(CheatViewModel? oldValue, CheatViewModel? newValue)
-    {
-        if (oldValue is not null) oldValue.PropertyChanged -= OnChildPropertyChanged;
-        if (newValue is not null) newValue.PropertyChanged += OnChildPropertyChanged;
-    }
-
-    partial void OnCheatChanged(CheatViewModel? value)
-    {
-        OnPropertyChanged(nameof(IsCheatAvailable));
-        OnPropertyChanged(nameof(IsCheatUnavailable));
-        OnPropertyChanged(nameof(IsAnyOperationRunning));
     }
 
     private CancellationTokenSource? _searchDebounceSource;
@@ -636,6 +958,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(HasCustomProfileSettings));
+        OnPropertyChanged(nameof(CanSaveProfile));
     }
 
     partial void OnIsReviewingChangesChanged(bool value)
@@ -677,7 +1001,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 snapshot = await Task.Run(_inspector.Inspect);
             }
             bool canKeepChildState = _verifiedGameContext?.Matches(snapshot) == true &&
-                SaveManager is not null && Cheat is not null;
+                SaveManager is not null;
             _saveGamesRefreshFailed = false;
             _snapshot = snapshot;
             _verifiedGameContext = VerifyGameContext(snapshot);
@@ -735,16 +1059,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 SaveManager?.Dispose();
                 SaveManager = await CreateSaveManagerAsync();
                 SaveManager?.Activate();
-                Cheat?.Dispose();
-                Cheat = CreateCheat();
-                Cheat?.Start();
                 _saveGamesRefreshFailed = _verifiedGameContext is not null && SaveManager is null;
                 _lastSaveRecoveryMessage = SaveManager?.LastRecoveryMessage;
-            }
-            if (Cheat is not null && SaveManager is not null)
-            {
-                SaveManager.IsGameRunning = Cheat.IsGameRunning;
-                Cheat.UpdateSlotAvailability(SaveManager.Slots);
             }
             return true;
         }
@@ -776,8 +1092,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             PendingChanges = [];
             SaveManager?.Dispose();
             SaveManager = null;
-            Cheat?.Dispose();
-            Cheat = null;
             ShowMessage($"Scan failed: {exception.Message}", "#E04D42");
             LogDetection("failed: " + exception.Message);
             return false;
@@ -857,28 +1171,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ShowMessage($"Could not load save games: {exception.Message}", "#E04D42");
             return null;
         }
-    }
-
-    private CheatViewModel? CreateCheat()
-    {
-        if (_verifiedGameContext is not { } context)
-        {
-            return null;
-        }
-
-        var service = new SaveGameCheatService(context, _gameContextVerifier);
-        return new CheatViewModel(
-            service,
-            async (slot, checkpointId) =>
-            {
-                if (SaveManager is null)
-                {
-                    return new SaveGameOperationResult(false, "Save manager is not available; reload first.");
-                }
-
-                return await SaveManager.RunLoad(slot, checkpointId);
-            },
-            _mutationGate);
     }
 
     private void RebuildEditors()
@@ -1031,6 +1323,89 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(ShowPendingActions));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(HasCustomProfileSettings));
+        OnPropertyChanged(nameof(CanSaveProfile));
+    }
+
+    private void RefreshProfileLibrary()
+    {
+        try
+        {
+            UserProfiles = _profileLibrary.List()
+                .Select(profile => new UserProfileRowViewModel(
+                    profile.Id,
+                    profile.Profile.Name,
+                    profile.Profile.Description ?? "No description",
+                    ProfileContents(profile.Profile),
+                    profile.Profile))
+                .ToArray();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            UserProfiles = [];
+            ShowMessage("Your local profile library could not be read.", "#D6BC84");
+        }
+    }
+
+    private static string ProfileContents(UserProfile profile)
+    {
+        var sections = new List<string>(3);
+        if (profile.Graphics.Count > 0) sections.Add("Graphics");
+        if (profile.Display.Count > 0) sections.Add("Display");
+        if (profile.Gameplay.Count > 0) sections.Add("Gameplay");
+        return string.Join(" · ", sections);
+    }
+
+    private void LoadProfileForReview(UserProfile profile)
+    {
+        if (_snapshot is null || IsAnyOperationRunning)
+        {
+            ShowMessage("Reload the game settings before loading a profile.", "#D6BC84");
+            return;
+        }
+        if (HasPendingChanges || IsReviewingChanges)
+        {
+            ShowMessage("Apply or discard the pending changes before loading a profile.", "#D6BC84");
+            return;
+        }
+        if (profile.Gameplay.Count > 0)
+        {
+            ShowMessage("Gameplay profiles are not available yet. No settings were loaded.", "#D6BC84");
+            return;
+        }
+        if (profile.Display.Count > 0)
+        {
+            ShowMessage("Display settings in profiles are not available yet. No settings were loaded.", "#D6BC84");
+            return;
+        }
+
+        var candidates = new List<(SettingEditorViewModel Editor, ProfileSetting Setting)>();
+        foreach (ProfileSetting setting in profile.Graphics)
+        {
+            if (!TryGetEditorByTechnicalKey(setting.Key, out SettingEditorViewModel? editor) || editor is null ||
+                !editor.CanApplyProfileValue(setting.Value))
+            {
+                ShowMessage($"{profile.Name} contains a setting that is not supported by this game setup. No settings were loaded.", "#E04D42");
+                return;
+            }
+            candidates.Add((editor, setting));
+        }
+
+        foreach ((SettingEditorViewModel editor, ProfileSetting setting) in candidates)
+        {
+            _ = editor.TryApplyProfileValue(setting.Value);
+        }
+
+        ShowGraphics();
+        UpdatePendingChanges();
+        if (HasPendingChanges)
+        {
+            ShowMessage($"Loaded {profile.Name}. Review the pending changes before applying them.", "#FF5A00");
+        }
+        else
+        {
+            ShowMessage($"{profile.Name} already matches your current setup. No changes are needed.", "#B4D941");
+        }
     }
 
     private void CloseReview()
@@ -1055,6 +1430,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             .First(setting => string.Equals(setting.Id, settingId, StringComparison.Ordinal))
             .Name;
 
+    private bool TryGetEditorByTechnicalKey(string key, out SettingEditorViewModel? editor)
+    {
+        editor = null;
+        editor = _editors.Values.FirstOrDefault(candidate => string.Equals(
+            candidate.Key,
+            key,
+            StringComparison.OrdinalIgnoreCase));
+        return editor is not null;
+    }
+
     private void LogDetection(string result)
     {
         string store = _snapshot?.Installation?.Store.ToString() ?? "unknown";
@@ -1070,6 +1455,22 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OperationAccent = accent;
     }
 
+    private sealed class EmptyUserProfileLibrary : IUserProfileLibrary
+    {
+        public static readonly EmptyUserProfileLibrary Instance = new();
+
+        public IReadOnlyList<StoredUserProfile> List() => [];
+
+        public UserProfile Read(string id) =>
+            throw new NotSupportedException("The profile library is not available.");
+
+        public StoredUserProfile Save(UserProfile profile) =>
+            throw new NotSupportedException("The profile library is not available.");
+
+        public UserProfile ReadExternal(string path) =>
+            throw new NotSupportedException("The profile library is not available.");
+    }
+
     private static string GetAccentColor(ReadableSettingState state) => state switch
     {
         ReadableSettingState.Enabled => "#B4D941",
@@ -1079,9 +1480,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     };
 
     private static bool IsExpectedUserOperationException(Exception exception) =>
-        exception is IOException or UnauthorizedAccessException or InvalidOperationException or
-            ArgumentException or NotSupportedException or System.Text.DecoderFallbackException or
-            System.Text.Json.JsonException;
+        exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or
+        ArgumentException or NotSupportedException or System.Text.DecoderFallbackException or
+        System.Text.Json.JsonException;
 
     private static string FormatBytes(long bytes)
     {
@@ -1145,7 +1546,5 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _searchDebounceTask = null;
         SaveManager?.Dispose();
         SaveManager = null;
-        Cheat?.Dispose();
-        Cheat = null;
     }
 }
