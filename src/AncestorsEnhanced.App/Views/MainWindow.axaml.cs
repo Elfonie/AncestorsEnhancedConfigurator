@@ -5,7 +5,6 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Input.Platform;
-using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -15,8 +14,6 @@ namespace AncestorsEnhanced.App.Views;
 public partial class MainWindow : Window
 {
     private MainViewModel? _subscribedViewModel;
-    private readonly Dictionary<TextBlock, IBrush?> _standardTextForegrounds = [];
-    private readonly Dictionary<Border, (IBrush? Background, IBrush? BorderBrush)> _standardBorderBrushes = [];
 
     public MainWindow()
     {
@@ -40,18 +37,11 @@ public partial class MainWindow : Window
             {
                 Dispatcher.UIThread.Post(() => this.FindControl<Button>("OnboardingPrimaryButton")?.Focus(NavigationMethod.Tab));
             }
-            ApplyHighContrastOverrides(_subscribedViewModel.IsHighContrastEnabled);
         }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.IsHighContrastEnabled) &&
-            DataContext is MainViewModel themeViewModel)
-        {
-            ApplyHighContrastOverrides(themeViewModel.IsHighContrastEnabled);
-        }
-
         if (e.PropertyName == nameof(MainViewModel.IsReviewingChanges) &&
             DataContext is MainViewModel { IsReviewingChanges: true })
         {
@@ -140,45 +130,6 @@ public partial class MainWindow : Window
         return ReviewOverlay is { IsVisible: true }
             ? this.FindControl<Border>("ReviewDialog")
             : null;
-    }
-
-    private void ApplyHighContrastOverrides(bool enabled)
-    {
-        if (enabled)
-        {
-            foreach (TextBlock textBlock in this.GetVisualDescendants().OfType<TextBlock>())
-            {
-                if (!_standardTextForegrounds.ContainsKey(textBlock))
-                {
-                    _standardTextForegrounds[textBlock] = textBlock.Foreground;
-                }
-                textBlock.Foreground = Brushes.White;
-            }
-
-            foreach (Border border in this.GetVisualDescendants().OfType<Border>())
-            {
-                if (!_standardBorderBrushes.ContainsKey(border))
-                {
-                    _standardBorderBrushes[border] = (border.Background, border.BorderBrush);
-                }
-                border.Background = Brushes.Black;
-                border.BorderBrush = Brushes.White;
-            }
-            return;
-        }
-
-        foreach ((TextBlock textBlock, IBrush? foreground) in _standardTextForegrounds)
-        {
-            textBlock.Foreground = foreground;
-        }
-        _standardTextForegrounds.Clear();
-
-        foreach ((Border border, (IBrush? background, IBrush? borderBrush)) in _standardBorderBrushes)
-        {
-            border.Background = background;
-            border.BorderBrush = borderBrush;
-        }
-        _standardBorderBrushes.Clear();
     }
 
     private async void ImportProfileClick(object? sender, RoutedEventArgs e)

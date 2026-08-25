@@ -32,6 +32,12 @@ public static class AccessibilityTheme
         ["WarningSurfaceBrush"] = "#211C18",
         ["WarningBorderBrush"] = "#765536",
         ["WarningTextBrush"] = "#E8D5B5",
+        ["SecondaryTextBrush"] = "#9CB0BC",
+        ["TechnicalTextBrush"] = "#71828D",
+        ["SuccessTextBrush"] = "#B4D941",
+        ["ReviewSurfaceBrush"] = "#10191F",
+        ["ReviewBorderBrush"] = "#3B7598",
+        ["ReviewTextBrush"] = "#DCEEFF",
     };
 
     private static readonly IReadOnlyDictionary<string, string> HighContrastColors = new Dictionary<string, string>
@@ -61,6 +67,12 @@ public static class AccessibilityTheme
         ["WarningSurfaceBrush"] = "#000000",
         ["WarningBorderBrush"] = "#FFFF00",
         ["WarningTextBrush"] = "#FFFFFF",
+        ["SecondaryTextBrush"] = "#FFFFFF",
+        ["TechnicalTextBrush"] = "#F0F0F0",
+        ["SuccessTextBrush"] = "#FFFF00",
+        ["ReviewSurfaceBrush"] = "#000000",
+        ["ReviewBorderBrush"] = "#00FFFF",
+        ["ReviewTextBrush"] = "#FFFFFF",
     };
 
     public static void Apply(Application application, bool highContrastEnabled)

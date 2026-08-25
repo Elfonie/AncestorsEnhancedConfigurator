@@ -9,8 +9,8 @@
         x:Class="AncestorsEnhanced.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         x:CompileBindings="True"
-        MinWidth="640"
-        MinHeight="480"
+        MinWidth="780"
+        MinHeight="600"
         Icon="/Assets/aec-icon.ico"
         Title="Ancestors Enhanced Configurator">
 
@@ -34,7 +34,7 @@
       <StackPanel Grid.Row="0" Spacing="6">
         <StackPanel Spacing="1" Margin="0,0,0,14">
           <TextBlock Text="{Binding ProductName}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
-          <TextBlock Text="Configurator" FontSize="12" Foreground="#7A877A" TextWrapping="Wrap" />
+          <TextBlock Text="Configurator" FontSize="12" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
         </StackPanel>
         <ToggleButton Classes="nav"
                       Command="{Binding ShowHomeCommand}"
@@ -85,13 +85,9 @@
                      FontSize="23"
                      FontWeight="SemiBold"
                      Foreground="{DynamicResource PrimaryTextBrush}" />
-          <TextBlock Text="{Binding PageContextLabel}"
-                     FontSize="12"
-                     Foreground="#748691"
-                     IsVisible="False" />
         </StackPanel>
         <Button Grid.Column="1"
-                Content="Reload"
+                Content="Reload game data"
                 Command="{Binding RefreshCommand}"
                 IsEnabled="{Binding !IsAnyOperationRunning}"
                 VerticalAlignment="Center" />
@@ -529,90 +525,6 @@
           </StackPanel>
         </Border>
 
-        <Expander Header="Files and diagnostics"
-                  IsExpanded="False"
-                  IsVisible="False"
-                  FontSize="14"
-                  Foreground="#D6DEE3">
-          <StackPanel Margin="0,10,0,0" Spacing="10">
-            <Border Padding="13" CornerRadius="7" Background="{DynamicResource SurfaceBrush}">
-              <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
-                <TextBlock Text="Installation" Foreground="#71828D" />
-                <TextBlock Grid.Column="1" Text="{Binding InstallationPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="1" Text="User data" Foreground="#71828D" />
-                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding UserDataPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="2" Text="System.sav" Foreground="#71828D" />
-                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding BinarySettingsPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="3" Text="Status" Foreground="#71828D" />
-                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding BinarySettingsStatus}" TextWrapping="Wrap" Foreground="#C3A66A" />
-              </Grid>
-            </Border>
-
-            <Expander Header="Configuration files">
-              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ConfigurationFiles}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:ConfigurationFileRowViewModel">
-                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
-                      <Grid ColumnDefinitions="170,*,210">
-                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#8B9AA4" />
-                        <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="#B4D941" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Expander>
-
-            <Expander Header="Raw INI entries">
-              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Settings}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:SettingRowViewModel">
-                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
-                      <Grid ColumnDefinitions="120,2*,2*,60" ColumnSpacing="8">
-                        <TextBlock Text="{Binding Source}" Foreground="#71828D" />
-                        <TextBlock Grid.Column="1" Text="{Binding Setting}" TextWrapping="Wrap" />
-                        <TextBlock Grid.Column="2" Text="{Binding Value}" TextWrapping="Wrap" Foreground="#E8E4D9" />
-                        <TextBlock Grid.Column="3" Text="{Binding Location}" Foreground="#71828D" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Expander>
-
-            <Expander Header="PAK packages">
-              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding PakFiles}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:PakFileRowViewModel">
-                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
-                      <Grid ColumnDefinitions="250,180,*">
-                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#8B9AA4" />
-                        <TextBlock Grid.Column="2" Text="{Binding Classification}" Foreground="#C7B98C" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Expander>
-
-            <Expander Header="Inspection notes">
-              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Notices}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:NoticeRowViewModel">
-                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
-                      <Grid ColumnDefinitions="90,*">
-                        <TextBlock Text="{Binding Severity}" FontWeight="SemiBold" Foreground="#D6BC84" />
-                        <TextBlock Grid.Column="1" Text="{Binding Message}" TextWrapping="Wrap" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Expander>
-          </StackPanel>
-        </Expander>
         <Border IsVisible="{Binding IsAdvancedMode}" Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <TextBlock Text="Need technical information? Open Diagnostics for files, PAKs and inspection notes." FontSize="12" Foreground="#9CB0BC" VerticalAlignment="Center" TextWrapping="Wrap" />
@@ -675,6 +587,11 @@
           </Border>
 
           <StackPanel IsVisible="{Binding IsSaveManagerAvailable}" Spacing="12">
+          <Border Padding="12,9" CornerRadius="7" Background="#211C18" BorderBrush="#D6BC84" BorderThickness="1"
+                  IsVisible="{Binding SaveManager.IsGameRunning}">
+            <TextBlock Text="Ancestors is running. Checkpoints can be created, but restoring is disabled until the game closes."
+                       Foreground="#E8D5B5" TextWrapping="Wrap" />
+          </Border>
           <Border Padding="14,10" CornerRadius="7" BorderThickness="1"
                   BorderBrush="{Binding SaveManager.StatusAccent}"
                   Background="{DynamicResource SurfaceBrush}"
@@ -1282,37 +1199,39 @@
               Padding="0" />
       <Border x:Name="ReviewDialog"
               MaxWidth="900"
+              Margin="20"
               MaxHeight="580"
               Padding="20"
               HorizontalAlignment="Center"
               VerticalAlignment="Center"
               CornerRadius="9"
-              Background="#15232C"
-              BorderBrush="#3B7598"
+              Background="{DynamicResource RaisedSurfaceBrush}"
+              BorderBrush="{DynamicResource ReviewBorderBrush}"
               BorderThickness="1">
         <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="9">
           <TextBlock Text="{Binding ReviewSummary}"
                      FontSize="20"
                      FontWeight="SemiBold"
-                     Foreground="#DCEEFF" />
+                     Foreground="{DynamicResource ReviewTextBrush}" />
           <TextBlock Grid.Row="1"
                      Text="{Binding ReviewDescription}"
-                     Foreground="#8CA9BA" />
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource SecondaryTextBrush}" />
           <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <StackPanel>
               <Grid ColumnDefinitions="1.2*,1.2*,Auto,1.2*" ColumnSpacing="10" Margin="0,0,0,4">
-                <TextBlock Text="Setting" FontSize="12" FontWeight="SemiBold" Foreground="#8CA9BA" />
-                <TextBlock Grid.Column="1" Text="Current value" FontSize="12" FontWeight="SemiBold" Foreground="#8CA9BA" />
-                <TextBlock Grid.Column="3" Text="New value" FontSize="12" FontWeight="SemiBold" Foreground="#8CA9BA" />
+                <TextBlock Text="Setting" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" />
+                <TextBlock Grid.Column="1" Text="Current value" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" />
+                <TextBlock Grid.Column="3" Text="New value" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" />
               </Grid>
               <ItemsControl ItemsSource="{Binding ReviewChanges}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ChangeReviewRowViewModel">
-                  <Border Margin="0,0,0,5" Padding="11" CornerRadius="5" Background="#10191F">
+                  <Border Margin="0,0,0,5" Padding="11" CornerRadius="5" Background="{DynamicResource ReviewSurfaceBrush}">
                     <Grid ColumnDefinitions="1.2*,1.2*,Auto,1.2*" ColumnSpacing="10">
                       <StackPanel>
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding TechnicalKey}" FontSize="11" Foreground="#687984" />
+                        <TextBlock Text="{Binding TechnicalKey}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TechnicalTextBrush}" />
                       </StackPanel>
                       <TextBlock Grid.Column="1" Text="{Binding Before}" TextWrapping="Wrap" Foreground="#8E9DA6" />
                       <TextBlock Grid.Column="2" Text="→" Foreground="#71818C" />

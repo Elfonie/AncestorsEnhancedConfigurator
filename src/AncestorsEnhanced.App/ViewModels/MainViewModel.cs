@@ -392,7 +392,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool CanRunDetailedHardwareDetection => OperatingSystem.IsWindows() && !IsAnyOperationRunning;
 
     public bool CanShowHardwareScanAction =>
-        !HasAcknowledgedDetailedHardwareScan &&
+        (!HasAcknowledgedDetailedHardwareScan || _detailedHardwareSnapshot is null) &&
         !CanStageHardwareRecommendation &&
         CanRunDetailedHardwareDetection;
 
@@ -787,11 +787,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             HardwareSnapshot detailedSnapshot = await Task.Run(() => _hardwareProbe.Inspect(includeDetailedGraphics: true));
             HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(detailedSnapshot);
             _detailedHardwareSnapshot = detailedSnapshot;
-            if (!HasAcknowledgedDetailedHardwareScan)
-            {
-                HasAcknowledgedDetailedHardwareScan = true;
-                _detailedHardwareScanCompleted?.Invoke(detailedSnapshot);
-            }
+            HasAcknowledgedDetailedHardwareScan = true;
+            _detailedHardwareScanCompleted?.Invoke(detailedSnapshot);
             ShowMessage("Detailed hardware detection completed. Review the recommendation before staging it.", "#B4D941");
         }
         finally
@@ -1965,7 +1962,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         CloseReview();
         UpdatePendingChanges();
-        ApplyViewMode();
+        if (GraphicsFilter != "All")
+        {
+            ApplyViewMode();
+        }
         if (HasPendingChanges)
         {
             ShowMessage("Review the pending values, then apply or discard them.", "#FF5A00");

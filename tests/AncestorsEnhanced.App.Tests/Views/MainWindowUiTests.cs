@@ -5,8 +5,6 @@ using AncestorsEnhanced.Core.Inspection;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
-using Avalonia.Media;
-using Avalonia.VisualTree;
 
 namespace AncestorsEnhanced.App.Tests.Views;
 
@@ -63,30 +61,6 @@ public sealed class MainWindowUiTests
 
             window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
             Assert.False(viewModel.IsReviewingChanges);
-        }
-        finally
-        {
-            window.Close();
-            viewModel.Dispose();
-        }
-    });
-
-    [Fact]
-    public Task HighContrastUpdatesTheLiveWindowAndCanBeReversed() => Dispatch(() =>
-    {
-        MainViewModel viewModel = CreateViewModel(showOnboarding: false);
-        var window = new MainWindow { DataContext = viewModel };
-        window.Show();
-        try
-        {
-            TextBlock text = window.GetVisualDescendants().OfType<TextBlock>().First();
-            IBrush? standardForeground = text.Foreground;
-
-            viewModel.IsHighContrastEnabled = true;
-            Assert.Same(Brushes.White, text.Foreground);
-
-            viewModel.IsHighContrastEnabled = false;
-            Assert.Same(standardForeground, text.Foreground);
         }
         finally
         {

@@ -30,6 +30,14 @@
     <SolidColorBrush x:Key="WarningSurfaceBrush" Color="#211C18" />
     <SolidColorBrush x:Key="WarningBorderBrush" Color="#765536" />
     <SolidColorBrush x:Key="WarningTextBrush" Color="#E8D5B5" />
+    <!-- Semantic text/surface resources used by page content. Keep these dynamic
+         so a high-contrast switch never breaks data-bound status colors. -->
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="#9CB0BC" />
+    <SolidColorBrush x:Key="TechnicalTextBrush" Color="#71828D" />
+    <SolidColorBrush x:Key="SuccessTextBrush" Color="#B4D941" />
+    <SolidColorBrush x:Key="ReviewSurfaceBrush" Color="#10191F" />
+    <SolidColorBrush x:Key="ReviewBorderBrush" Color="#3B7598" />
+    <SolidColorBrush x:Key="ReviewTextBrush" Color="#DCEEFF" />
     <!-- Active ToggleSwitch colors -->
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOn" Color="#B4D941" />
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOnPointerOver" Color="#9ABF31" />

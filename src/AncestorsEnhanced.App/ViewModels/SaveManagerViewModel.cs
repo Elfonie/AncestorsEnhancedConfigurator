@@ -400,6 +400,13 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        // Persist the in-memory metadata before the disposed guard closes the
+        // queue, otherwise a title/note typed just before exit is lost.
+        _metadataWriteDebounce?.Cancel();
+        _metadataWriteDebounce?.Dispose();
+        _metadataWriteDebounce = null;
+        SaveSettings(waitForCompletion: true);
+
         Task settingsWrite;
         lock (_settingsWriteGate)
         {
@@ -411,8 +418,6 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             settingsWrite = _settingsWriteTail;
         }
         GC.SuppressFinalize(this);
-        _metadataWriteDebounce?.Cancel();
-        _metadataWriteDebounce?.Dispose();
         _gameProcessTimer.Stop();
         _gameProcessTimer.Tick -= OnGameProcessTimerTick;
         if (_watchdog is not null)
@@ -457,7 +462,17 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void OnGameProcessTimerTick(object? sender, EventArgs eventArgs) => RefreshGameRunningState();
+    private void OnGameProcessTimerTick(object? sender, EventArgs eventArgs) => _ = RefreshGameRunningStateAsync();
+
+    private async Task RefreshGameRunningStateAsync()
+    {
+        bool running = await Task.Run(() =>
+        {
+            try { return _isGameRunningProbe(); }
+            catch (Exception) { return true; }
+        });
+        IsGameRunning = running;
+    }
 
     private void RefreshGameRunningState()
     {
