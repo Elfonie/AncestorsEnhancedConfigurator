@@ -170,7 +170,7 @@ public sealed class ReadableSettingsCatalogTests
             FindGroup(ReadableSettingsCatalog.CreateFeatureGroups(snapshot), "motion-blur"),
             "motion-blur-quality");
 
-        Assert.Equal("Level 4", motionBlur.Value);
+        Assert.Equal("Very high", motionBlur.Value);
     }
 
     [Fact]
@@ -316,9 +316,9 @@ public sealed class ReadableSettingsCatalogTests
 
         Assert.Equal("150%", foliage.Value);
         Assert.Equal("High", foliage.ActivePresetName);
-        Assert.Equal("Level 4", bloom.Value);
+        Assert.Equal("Very high", bloom.Value);
         Assert.Equal("Low", bloom.ActivePresetName);
-        Assert.Equal("Level 4", shadow.Value);
+        Assert.Equal("Very high", shadow.Value);
         Assert.Equal("Medium", shadow.ActivePresetName);
         Assert.Equal("Off", depthOfField.Value);
         Assert.Equal("Low", depthOfField.ActivePresetName);

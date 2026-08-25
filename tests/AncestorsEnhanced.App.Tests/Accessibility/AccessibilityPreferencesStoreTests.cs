@@ -35,6 +35,20 @@ public sealed class AccessibilityPreferencesStoreTests : IDisposable
     }
 
     [Fact]
+    public void ExperimentalGraphicsAndHardwareScanPreferencesPersist()
+    {
+        var store = new AccessibilityPreferencesStore(_directory);
+
+        Assert.True(store.TrySave(new AccessibilityPreferences(
+            ExperimentalGraphicsSettingsEnabled: true,
+            HasAcknowledgedDetailedHardwareScan: true)));
+
+        AccessibilityPreferences loaded = store.Load();
+        Assert.True(loaded.ExperimentalGraphicsSettingsEnabled);
+        Assert.True(loaded.HasAcknowledgedDetailedHardwareScan);
+    }
+
+    [Fact]
     public void InvalidPreferenceFileFailsClosedToTheDefault()
     {
         Directory.CreateDirectory(_directory);

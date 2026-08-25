@@ -165,7 +165,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        await Clipboard.SetTextAsync(viewModel.CreateDiagnosticsReport());
+        try
+        {
+            await Clipboard.SetTextAsync(viewModel.CreateDiagnosticsReport());
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or NotSupportedException)
+        {
+            viewModel.ReportProfileFileError("copy diagnostics");
+        }
     }
 
     private static string SanitizeFileName(string name)

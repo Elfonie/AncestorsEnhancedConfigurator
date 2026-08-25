@@ -9,4 +9,5 @@ public sealed record FeatureGroupSnapshot(
     bool IsEssential,
     ReadableSettingState State,
     IReadOnlyList<FeatureSettingSnapshot> Settings,
-    string? SimpleSummary = null);
+    string? SimpleSummary = null,
+    string? SimpleName = null);

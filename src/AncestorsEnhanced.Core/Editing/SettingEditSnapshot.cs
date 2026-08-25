@@ -15,4 +15,5 @@ public sealed record SettingEditSnapshot(
     string? Unit = null,
     bool IsDirect = false,
     bool CanSetCustomValue = true,
-    string? GameControlledValue = null);
+    string? GameControlledValue = null,
+    decimal DisplayMultiplier = 1);

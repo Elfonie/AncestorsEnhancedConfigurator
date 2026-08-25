@@ -46,6 +46,27 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void GraphicsAndGameplayPresetsStartCollapsedAndToggleOpen()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+
+        Assert.False(viewModel.IsGraphicsPresetsExpanded);
+        Assert.Equal("Show presets", viewModel.GraphicsPresetsToggleLabel);
+        Assert.False(viewModel.IsGameplayPresetsExpanded);
+        Assert.Equal("Show presets", viewModel.GameplayPresetsToggleLabel);
+
+        viewModel.ToggleGraphicsPresetsCommand.Execute(null);
+        viewModel.ToggleGameplayPresetsCommand.Execute(null);
+
+        Assert.True(viewModel.IsGraphicsPresetsExpanded);
+        Assert.Equal("Hide presets", viewModel.GraphicsPresetsToggleLabel);
+        Assert.True(viewModel.IsGameplayPresetsExpanded);
+        Assert.Equal("Hide presets", viewModel.GameplayPresetsToggleLabel);
+    }
+
+    [Fact]
     public async Task InspectionStartsAfterConstruction()
     {
         var inspector = new CountingInspector(CreateSnapshot());
@@ -316,7 +337,8 @@ public sealed class MainViewModelTests
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),
-            new RecordingEditor());
+            new RecordingEditor(),
+            experimentalGraphicsSettingsEnabled: true);
         await viewModel.InitializeAsync();
 
         FeatureGroupRowViewModel shadows = Assert.Single(
@@ -347,7 +369,8 @@ public sealed class MainViewModelTests
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),
-            new RecordingEditor());
+            new RecordingEditor(),
+            experimentalGraphicsSettingsEnabled: true);
         await viewModel.InitializeAsync();
         viewModel.ShowAdvancedCommand.Execute(null);
 
@@ -374,6 +397,28 @@ public sealed class MainViewModelTests
 
         Assert.Empty(viewModel.FeatureGroups);
         Assert.True(viewModel.HasNoSearchResults);
+    }
+
+    [Fact]
+    public async Task ExperimentalGraphicsSettingsRemainHiddenUntilExplicitlyEnabled()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+        await viewModel.InitializeAsync();
+        viewModel.ShowAdvancedCommand.Execute(null);
+
+        FeatureGroupRowViewModel shadows = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "shadows-lighting");
+        Assert.DoesNotContain(shadows.Settings, setting => setting.Name == "Fog history supersamples");
+
+        viewModel.IsExperimentalGraphicsSettingsEnabled = true;
+
+        shadows = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "shadows-lighting");
+        Assert.Contains(shadows.Settings, setting => setting.Name == "Fog history supersamples");
     }
 
     [Fact]
@@ -434,7 +479,8 @@ public sealed class MainViewModelTests
 
             var viewModel = new MainViewModel(
                 new FixedInspector(snapshot),
-                new RecordingEditor());
+                new RecordingEditor(),
+                experimentalGraphicsSettingsEnabled: true);
             await viewModel.InitializeAsync();
 
             FeatureGroupRowViewModel simpleTextures = Assert.Single(

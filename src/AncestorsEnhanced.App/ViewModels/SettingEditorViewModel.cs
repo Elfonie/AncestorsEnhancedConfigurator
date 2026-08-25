@@ -35,7 +35,7 @@ public partial class SettingEditorViewModel : ViewModelBase
             NumberStyles.Float,
             CultureInfo.InvariantCulture,
             out decimal number)
-            ? number
+            ? number * _snapshot.DisplayMultiplier
             : 0;
 
         Choices = snapshot.Choices?
@@ -63,11 +63,11 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public bool IsRegularEditor => !IsPresence;
 
-    public decimal Minimum => _snapshot.Minimum ?? 0;
+    public decimal Minimum => (_snapshot.Minimum ?? 0) * _snapshot.DisplayMultiplier;
 
-    public decimal Maximum => _snapshot.Maximum ?? 100;
+    public decimal Maximum => (_snapshot.Maximum ?? 100) * _snapshot.DisplayMultiplier;
 
-    public decimal Increment => _snapshot.Increment ?? 1;
+    public decimal Increment => (_snapshot.Increment ?? 1) * _snapshot.DisplayMultiplier;
 
     public string Unit => _snapshot.Unit ?? string.Empty;
 
@@ -163,7 +163,7 @@ public partial class SettingEditorViewModel : ViewModelBase
             case SettingEditorKind.Number:
                 decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal number);
                 UseCustomValue = true;
-                NumberValue = number;
+                NumberValue = number * _snapshot.DisplayMultiplier;
                 return true;
             case SettingEditorKind.Choice:
                 SettingChoiceViewModel? choice = Choices.FirstOrDefault(candidate =>
@@ -198,7 +198,9 @@ public partial class SettingEditorViewModel : ViewModelBase
                 NumberStyles.Float,
                 CultureInfo.InvariantCulture,
                 out decimal number) =>
-                number >= Minimum && number <= Maximum && IsOnIncrement(number),
+                number >= (_snapshot.Minimum ?? decimal.MinValue) &&
+                number <= (_snapshot.Maximum ?? decimal.MaxValue) &&
+                IsOnIncrement(number),
             SettingEditorKind.Choice => Choices.Any(candidate =>
                 string.Equals(candidate.Value, value, StringComparison.Ordinal)),
             SettingEditorKind.Presence => string.Equals(
@@ -220,7 +222,7 @@ public partial class SettingEditorViewModel : ViewModelBase
                 CultureInfo.InvariantCulture,
                 out decimal number))
         {
-            NumberValue = number;
+            NumberValue = number * _snapshot.DisplayMultiplier;
         }
 
         SelectedChoice = Choices.FirstOrDefault(choice =>
@@ -259,7 +261,7 @@ public partial class SettingEditorViewModel : ViewModelBase
     private string? DesiredValue => _snapshot.Kind switch
     {
         SettingEditorKind.Toggle => ToggleValue ? "1" : "0",
-        SettingEditorKind.Number => NumberValue.ToString(CultureInfo.InvariantCulture),
+        SettingEditorKind.Number => (NumberValue / _snapshot.DisplayMultiplier).ToString(CultureInfo.InvariantCulture),
         SettingEditorKind.Choice => SelectedChoice?.Value,
         SettingEditorKind.Presence => _snapshot.DefaultValue,
         _ => null,

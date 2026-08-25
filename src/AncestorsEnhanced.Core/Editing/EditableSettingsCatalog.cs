@@ -14,7 +14,8 @@ internal sealed record SettingEditorTemplate(
     IReadOnlyList<SettingChoice>? Choices = null,
     SettingFileTarget Target = SettingFileTarget.Ini,
     string? Unit = null,
-    bool IsDirect = false);
+    bool IsDirect = false,
+    decimal DisplayMultiplier = 1);
 
 public static class EditableSettingsCatalog
 {
@@ -42,7 +43,7 @@ public static class EditableSettingsCatalog
             ["r.TemporalAACurrentFrameWeight"] = Number(0.15m, 0.01m, 1, 0.01m),
             ["r.Tonemapper.Sharpen"] = Number(0.4m, 0, 2, 0.05m),
 
-            ["r.ViewDistanceScale"] = Number(1.2m, 0.5m, 2, 0.05m),
+            ["r.ViewDistanceScale"] = Number(1.2m, 0.5m, 2, 0.05m, displayMultiplier: 100, unit: "%"),
             ["foliage.DensityScale"] = Number(1.5m, 0.25m, 3, 0.05m),
             ["grass.DensityScale"] = Number(1.5m, 0.25m, 3, 0.05m),
             ["r.SkeletalMeshLODBias"] = Number(0, -2, 4, 1),
@@ -211,7 +212,8 @@ public static class EditableSettingsCatalog
             choices,
             template.Target,
             template.Unit,
-            template.IsDirect);
+            template.IsDirect,
+            DisplayMultiplier: template.DisplayMultiplier);
         editor = editor with
         {
             CanSetCustomValue = template.IsDirect || currentOverride is null || IsValidValue(editor, currentOverride),
@@ -397,13 +399,17 @@ public static class EditableSettingsCatalog
         decimal defaultValue,
         decimal minimum,
         decimal maximum,
-        decimal increment) =>
+        decimal increment,
+        decimal displayMultiplier = 1,
+        string? unit = null) =>
         new(
             SettingEditorKind.Number,
             Invariant(defaultValue),
             Minimum: minimum,
             Maximum: maximum,
-            Increment: increment);
+            Increment: increment,
+            Unit: unit,
+            DisplayMultiplier: displayMultiplier);
 
     private static SettingEditorTemplate Quality(int defaultValue, int maximum) =>
         Choice(
@@ -420,7 +426,10 @@ public static class EditableSettingsCatalog
         1 => "Low",
         2 => "Medium",
         3 => "High",
-        _ => $"Level {value}",
+        4 => "Very high",
+        5 => "Ultra",
+        6 => "Cinematic",
+        _ => $"Engine level {value}",
     };
 
     private static SettingEditorTemplate Choice(

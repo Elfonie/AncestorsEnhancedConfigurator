@@ -84,6 +84,18 @@ public partial class App : Application
                     preferences = preferences with { HasCompletedOnboarding = true };
                     accessibilityPreferences.TrySave(preferences);
                 },
+                experimentalGraphicsSettingsEnabled: preferences.ExperimentalGraphicsSettingsEnabled,
+                experimentalGraphicsSettingsChanged: enabled =>
+                {
+                    preferences = preferences with { ExperimentalGraphicsSettingsEnabled = enabled };
+                    accessibilityPreferences.TrySave(preferences);
+                },
+                hasAcknowledgedDetailedHardwareScan: preferences.HasAcknowledgedDetailedHardwareScan,
+                detailedHardwareScanAcknowledged: () =>
+                {
+                    preferences = preferences with { HasAcknowledgedDetailedHardwareScan = true };
+                    accessibilityPreferences.TrySave(preferences);
+                },
                 hardwareProbe: new SystemHardwareProbe());
             var window = new MainWindow
             {

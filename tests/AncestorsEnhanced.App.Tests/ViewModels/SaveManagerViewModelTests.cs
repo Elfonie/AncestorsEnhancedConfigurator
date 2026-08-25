@@ -138,6 +138,23 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
+    public void CheckpointMetadataIsNotReportedDuringViewModelConstruction()
+    {
+        var checkpoint = new SaveGameCheckpoint("checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");
+        int notifications = 0;
+
+        _ = new SaveGameCheckpointViewModel(
+            checkpoint,
+            () => Task.CompletedTask,
+            () => Task.CompletedTask,
+            () => true,
+            metadata: new CheckpointMetadata("Pinned", "Keep", true),
+            metadataChanged: _ => notifications++);
+
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
     public void CheckpointFiltersSearchMetadataAndOrigin()
     {
         var checkpoints = new[]

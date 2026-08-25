@@ -12,6 +12,7 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     private readonly Func<bool> _canRestore;
     private readonly Func<bool> _canMutate;
     private readonly Action<CheckpointMetadata> _metadataChanged;
+    private bool _isInitializing;
 
     public SaveGameCheckpointViewModel(
         SaveGameCheckpoint checkpoint,
@@ -32,10 +33,12 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         _canRestore = canRestore;
         _canMutate = canMutate ?? (() => true);
         _metadataChanged = metadataChanged ?? (_ => { });
+        _isInitializing = true;
         Origin = checkpoint.Origin;
         Title = metadata?.Title ?? "";
         Note = metadata?.Note ?? "";
         IsFavorite = metadata?.IsFavorite ?? false;
+        _isInitializing = false;
     }
 
     public string Id { get; }
@@ -104,7 +107,7 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
             Title = value[..80];
             return;
         }
-        SaveMetadata();
+        if (!_isInitializing) SaveMetadata();
         OnPropertyChanged(nameof(DisplayTitle));
     }
 
@@ -115,11 +118,14 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
             Note = value[..400];
             return;
         }
-        SaveMetadata();
+        if (!_isInitializing) SaveMetadata();
         OnPropertyChanged(nameof(HasNote));
     }
 
-    partial void OnIsFavoriteChanged(bool value) => SaveMetadata();
+    partial void OnIsFavoriteChanged(bool value)
+    {
+        if (!_isInitializing) SaveMetadata();
+    }
 
     [RelayCommand]
     private void CancelDeleteConfirm() => IsDeleteConfirmVisible = false;

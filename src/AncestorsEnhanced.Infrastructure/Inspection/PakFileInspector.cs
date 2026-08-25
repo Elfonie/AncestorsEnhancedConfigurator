@@ -68,7 +68,8 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
             try
             {
                 string expected = fileSystem.ReadAllText(marker).Trim();
-                string actual = Convert.ToHexString(SHA256.HashData(fileSystem.ReadAllBytes(file.FullPath)));
+                using Stream pak = fileSystem.OpenRead(file.FullPath);
+                string actual = Convert.ToHexString(SHA256.HashData(pak));
                 if (string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
                 {
                     return PakClassification.AecOwned;

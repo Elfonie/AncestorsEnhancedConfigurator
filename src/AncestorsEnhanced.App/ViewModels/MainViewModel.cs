@@ -37,6 +37,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly Action<bool>? _highContrastChanged;
     private readonly Action<bool>? _discordRichPresenceChanged;
     private readonly Action? _onboardingCompleted;
+    private readonly Action<bool>? _experimentalGraphicsSettingsChanged;
+    private readonly Action? _detailedHardwareScanAcknowledged;
 
     [ObservableProperty]
     public partial string DetectionStatus { get; set; } = "Not checked yet";
@@ -118,6 +120,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     ];
 
     [ObservableProperty]
+    public partial bool IsGraphicsPresetsExpanded { get; set; }
+
+    [ObservableProperty]
     public partial string ViewModeTitle { get; set; } = "Simple";
 
     [ObservableProperty]
@@ -184,6 +189,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial IReadOnlyList<GameplayDifficultyPresetViewModel> GameplayDifficultyPresets { get; set; } = [];
 
     [ObservableProperty]
+    public partial bool IsGameplayPresetsExpanded { get; set; }
+
+    [ObservableProperty]
     public partial IReadOnlyList<GameplayDifficultyControlViewModel> GameplaySimpleControls { get; set; } = [];
 
     [ObservableProperty]
@@ -216,6 +224,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial bool IsDiscordRichPresenceEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsExperimentalGraphicsSettingsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool HasAcknowledgedDetailedHardwareScan { get; set; }
 
     [ObservableProperty]
     public partial IReadOnlyList<UserProfileRowViewModel> UserProfiles { get; set; } = [];
@@ -258,6 +272,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         Action<bool>? discordRichPresenceChanged = null,
         bool showOnboarding = false,
         Action? onboardingCompleted = null,
+        bool experimentalGraphicsSettingsEnabled = false,
+        Action<bool>? experimentalGraphicsSettingsChanged = null,
+        bool hasAcknowledgedDetailedHardwareScan = false,
+        Action? detailedHardwareScanAcknowledged = null,
         IHardwareProbe? hardwareProbe = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
@@ -271,9 +289,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _highContrastChanged = highContrastChanged;
         _discordRichPresenceChanged = discordRichPresenceChanged;
         _onboardingCompleted = onboardingCompleted;
+        _experimentalGraphicsSettingsChanged = experimentalGraphicsSettingsChanged;
+        _detailedHardwareScanAcknowledged = detailedHardwareScanAcknowledged;
         IsHighContrastEnabled = highContrastEnabled;
         IsDiscordRichPresenceEnabled = discordRichPresenceEnabled;
         IsOnboardingVisible = showOnboarding;
+        IsExperimentalGraphicsSettingsEnabled = experimentalGraphicsSettingsEnabled;
+        HasAcknowledgedDetailedHardwareScan = hasAcknowledgedDetailedHardwareScan;
         _mutationGate.Changed += OnMutationGateChanged;
 
         ProductName = "Ancestors Enhanced Configurator";
@@ -344,6 +366,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ? "Graphics / Profiles"
         : IsDiagnosticsView
             ? "Settings / Diagnostics"
+            : IsSettingsView
+                ? "Settings"
             : IsHomeView
                 ? "Home"
                 : IsGameplayView
@@ -359,7 +383,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool CanRunDetailedHardwareDetection => OperatingSystem.IsWindows() && !IsAnyOperationRunning;
 
-    public bool CanShowHardwareScanAction => !CanStageHardwareRecommendation && CanRunDetailedHardwareDetection;
+    public bool CanShowHardwareScanAction =>
+        !HasAcknowledgedDetailedHardwareScan &&
+        !CanStageHardwareRecommendation &&
+        CanRunDetailedHardwareDetection;
 
     public string OnboardingTitle => OnboardingStep switch
     {
@@ -420,8 +447,18 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool IsAnyOperationRunning =>
         IsBusy ||
+        IsDetailedHardwareDetectionRunning ||
         _mutationGate.IsBusy ||
         (SaveManager?.IsBusy ?? false);
+
+    partial void OnIsDetailedHardwareDetectionRunningChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsAnyOperationRunning));
+        OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+        OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+        OnPropertyChanged(nameof(HomeTitle));
+    }
     public bool CanEditSettings => !IsReviewingChanges && !IsAnyOperationRunning;
 
     public bool CanRestoreGameDefaults =>
@@ -444,6 +481,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool IsGameDefaultsGraphicsFilter => GraphicsFilter == "Game defaults";
 
+    public string GraphicsPresetsToggleLabel => IsGraphicsPresetsExpanded ? "Hide presets" : "Show presets";
+
+    public string GameplayPresetsToggleLabel => IsGameplayPresetsExpanded ? "Hide presets" : "Show presets";
+
     public bool HasNoSearchResults =>
         IsAdvancedMode &&
         SearchText.Trim().Length > 0 &&
@@ -463,7 +504,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     public string ReviewSummary => _reviewIsToolChangeRemoval
-        ? "Remove Ancestors Enhanced from my game"
+        ? "Remove Configurator changes"
         : ReviewChanges.Count == 1
         ? "Review 1 change before writing"
         : $"Review {ReviewChanges.Count} changes before writing";
@@ -532,6 +573,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private void ShowAdvanced() => IsAdvancedMode = true;
 
     [RelayCommand]
+    private void ToggleGraphicsPresets() => IsGraphicsPresetsExpanded = !IsGraphicsPresetsExpanded;
+
+    [RelayCommand]
     private void ShowAllGraphics() => GraphicsFilter = "All";
 
     [RelayCommand]
@@ -595,6 +639,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void ShowGameplayAdvanced() => IsGameplayAdvancedMode = true;
+
+    [RelayCommand]
+    private void ToggleGameplayPresets() => IsGameplayPresetsExpanded = !IsGameplayPresetsExpanded;
 
     [RelayCommand]
     private void SelectGameplayPreset(GameplayDifficultyPresetViewModel? preset)
@@ -692,16 +739,31 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void LoadHardwareRecommendation()
     {
-        if (!CanStageHardwareRecommendation)
+        BuiltInGraphicsPresetViewModel? preset = BuiltInGraphicsPresets.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, HardwareDiagnostics.Recommendation.PresetName, StringComparison.Ordinal));
+        if (preset is null)
         {
             return;
         }
 
-        BuiltInGraphicsPresetViewModel? preset = BuiltInGraphicsPresets.FirstOrDefault(candidate =>
-            string.Equals(candidate.Name, HardwareDiagnostics.Recommendation.PresetName, StringComparison.Ordinal));
-        if (preset is not null)
+        if (HasPendingChanges || IsReviewingChanges)
+        {
+            // The recommendation is already staged. Reopen the ordinary review
+            // dialog instead of restaging it or only changing tabs.
+            if (!IsReviewingChanges)
+            {
+                OpenReview();
+            }
+            return;
+        }
+
+        if (CanStageHardwareRecommendation)
         {
             LoadBuiltInGraphicsPreset(preset);
+            if (HasPendingChanges)
+            {
+                OpenReview();
+            }
         }
     }
 
@@ -718,6 +780,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(
                 await Task.Run(() => _hardwareProbe.Inspect(includeDetailedGraphics: true)));
+            if (!HasAcknowledgedDetailedHardwareScan)
+            {
+                HasAcknowledgedDetailedHardwareScan = true;
+                _detailedHardwareScanAcknowledged?.Invoke();
+            }
             ShowMessage("Detailed hardware detection completed. Review the recommendation before staging it.", "#B4D941");
         }
         finally
@@ -1136,6 +1203,23 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     partial void OnIsDiscordRichPresenceEnabledChanged(bool value) =>
         _discordRichPresenceChanged?.Invoke(value);
+
+    partial void OnIsExperimentalGraphicsSettingsEnabledChanged(bool value)
+    {
+        _experimentalGraphicsSettingsChanged?.Invoke(value);
+        ApplyViewMode();
+    }
+
+    partial void OnIsGraphicsPresetsExpandedChanged(bool value) =>
+        OnPropertyChanged(nameof(GraphicsPresetsToggleLabel));
+
+    partial void OnIsGameplayPresetsExpandedChanged(bool value) =>
+        OnPropertyChanged(nameof(GameplayPresetsToggleLabel));
+
+    partial void OnHasAcknowledgedDetailedHardwareScanChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanShowHardwareScanAction));
+    }
 
     partial void OnUserProfilesChanged(IReadOnlyList<UserProfileRowViewModel> value) =>
         OnPropertyChanged(nameof(HasUserProfiles));
@@ -1751,6 +1835,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             .Where(setting => IsAdvancedMode
                 ? SettingDefinitionCatalog.IsShownInAdvancedMode(setting)
                 : SettingDefinitionCatalog.IsShownInSimpleMode(setting.Id))
+            .Where(setting => IsExperimentalGraphicsSettingsEnabled || !SettingDefinitionCatalog.IsExperimental(setting.Id))
             .Where(setting => MatchesSearch(group, setting, query))
             .Where(setting => MatchesGraphicsFilter(_editors.GetValueOrDefault(setting.Id)))
             .Select(setting => new FeatureSettingRowViewModel(
@@ -1771,7 +1856,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         return new FeatureGroupRowViewModel(
             group.Id,
             group.Category,
-            group.Name,
+            IsAdvancedMode ? group.Name : group.SimpleName ?? group.Name,
             IsAdvancedMode ? group.Summary : group.SimpleSummary ?? group.Summary,
             group.Description,
             GetAccentColor(group.State),

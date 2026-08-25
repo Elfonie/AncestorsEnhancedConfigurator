@@ -109,9 +109,20 @@ public static class UserProfileCodec
         ValidateSection(profile.Graphics, "graphics", keys);
         ValidateSection(profile.Display, "display", keys);
         ValidateSection(profile.Gameplay, "gameplay", keys);
+        ValidateUnsupportedSection(profile.Display, "display");
+        ValidateUnsupportedSection(profile.Gameplay, "gameplay");
         if (keys.Count == 0)
         {
             throw new InvalidDataException("The profile does not contain any settings.");
+        }
+    }
+
+    private static void ValidateUnsupportedSection(IReadOnlyList<ProfileSetting> settings, string section)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (settings.Count != 0)
+        {
+            throw new InvalidDataException($"The {section} section is not supported by this version of AEC.");
         }
     }
 
