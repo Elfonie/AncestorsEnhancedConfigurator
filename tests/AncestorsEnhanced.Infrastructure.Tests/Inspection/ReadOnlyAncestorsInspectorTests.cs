@@ -45,6 +45,25 @@ public sealed class ReadOnlyAncestorsInspectorTests
     }
 
     [Fact]
+    public void InspectClassifiesExactAecPackageNamesAsOwned()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        string localAppData = temporaryDirectory.CreateDirectory("LocalAppData");
+        CreateValidInstallation(steamRoot);
+        string paks = Path.Combine(
+            steamRoot, "steamapps", "common", "Ancestors The Humankind Odyssey", "Ancestors", "Content", "Paks");
+        File.WriteAllBytes(Path.Combine(paks, "AncestorsEnhanced-Vignette_P.pak"), [1]);
+        File.WriteAllBytes(Path.Combine(paks, "AncestorsEnhanced-Gameplay_P.pak"), [1]);
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment(steamRoot, localAppData)).Inspect();
+
+        Assert.Equal(2, snapshot.PakFiles.Count(pak => pak.Classification == PakClassification.AecOwned));
+    }
+
+    [Fact]
     public void InspectRejectsManifestDirectoryTraversal()
     {
         using TemporaryDirectory temporaryDirectory = new();

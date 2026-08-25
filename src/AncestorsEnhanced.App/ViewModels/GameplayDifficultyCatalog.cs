@@ -48,7 +48,7 @@ public static class GameplayDifficultyCatalog
                 true);
         }
 
-        int additionalPaks = snapshot!.PakFiles.Count(pak => pak.Classification != PakClassification.BaseGame);
+        int additionalPaks = snapshot!.PakFiles.Count(pak => pak.Classification is not PakClassification.BaseGame and not PakClassification.AecOwned);
         if (additionalPaks > 0)
         {
             return new(

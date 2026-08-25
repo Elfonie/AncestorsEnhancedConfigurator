@@ -14,8 +14,8 @@ public sealed class SystemHardwareProbe : IHardwareProbe
 {
     private static readonly Regex MemoryMegabytes = new(@"(?<!\d)(\d+(?:[.,]\d+)?)\s*(?:MB|MiB)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    public HardwareSnapshot Inspect() => OperatingSystem.IsWindows()
-        ? InspectWindows()
+    public HardwareSnapshot Inspect(bool includeDetailedGraphics = false) => OperatingSystem.IsWindows()
+        ? InspectWindows(includeDetailedGraphics)
         : OperatingSystem.IsLinux()
             ? InspectLinux()
             : new(
@@ -112,7 +112,7 @@ public sealed class SystemHardwareProbe : IHardwareProbe
         }
 
         ulong? vram = ReadPositiveUInt64(ReadTrimmedFile(Path.Combine(devicePath, "mem_info_vram_total")));
-        return new($"Linux GPU {vendor}/{device}", vram);
+        return new($"Linux GPU {vendor}/{device}", vram, IsMemoryAuthoritative: vram is not null);
     }
 
     private static string? ReadTrimmedFile(string path)
@@ -128,14 +128,14 @@ public sealed class SystemHardwareProbe : IHardwareProbe
     }
 
     [SupportedOSPlatform("windows")]
-    private static HardwareSnapshot InspectWindows()
+    private static HardwareSnapshot InspectWindows(bool includeDetailedGraphics)
     {
         try
         {
             ProcessorInventory processor = ReadProcessor();
             ulong? installedMemory = ReadInstalledMemory();
             GraphicsAdapterSnapshot[] adapters = ReadGraphicsAdapters();
-            if (!adapters.Any(adapter => adapter.ReportedMemoryBytes is not null))
+            if (includeDetailedGraphics)
             {
                 GraphicsAdapterSnapshot[] dxDiagAdapters = TryReadDxDiagAdapters();
                 if (dxDiagAdapters.Any(adapter => adapter.ReportedMemoryBytes is not null))
@@ -199,7 +199,8 @@ public sealed class SystemHardwareProbe : IHardwareProbe
         return objects.Cast<ManagementObject>()
             .Select(item => new GraphicsAdapterSnapshot(
                 ReadString(item["Name"]) ?? "Unnamed graphics adapter",
-                ReadPositiveUInt64(item["AdapterRAM"])))
+                ReadPositiveUInt64(item["AdapterRAM"]),
+                IsMemoryAuthoritative: false))
             .OrderBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -253,7 +254,8 @@ public sealed class SystemHardwareProbe : IHardwareProbe
             .Cast<XmlElement>()
             .Select(device => new GraphicsAdapterSnapshot(
                 device["CardName"]?.InnerText.Trim() is { Length: > 0 } name ? name : "Unnamed graphics adapter",
-                ParseDxDiagMemory(device["DedicatedMemory"]?.InnerText) ?? ParseDxDiagMemory(device["DisplayMemory"]?.InnerText)))
+                ParseDxDiagMemory(device["DedicatedMemory"]?.InnerText) ?? ParseDxDiagMemory(device["DisplayMemory"]?.InnerText),
+                IsMemoryAuthoritative: true))
             .OrderBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray()
             ?? [];

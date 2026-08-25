@@ -8,6 +8,10 @@ public static class DiagnosticsReportBuilder
         @"(?i)([a-z]:\\users\\)[^\\\r\n]+",
         RegexOptions.Compiled);
 
+    private static readonly Regex LinuxHomeDirectory = new(
+        @"(?m)(/home/)[^/\r\n]+",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public static string Build(
         string productName,
         string version,
@@ -63,9 +67,14 @@ public static class DiagnosticsReportBuilder
         string redacted = value;
         if (!string.IsNullOrWhiteSpace(userProfile))
         {
-            redacted = redacted.Replace(userProfile, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
+            redacted = redacted.Replace(
+                userProfile,
+                OperatingSystem.IsWindows() ? "%USERPROFILE%" : "%HOME%",
+                StringComparison.OrdinalIgnoreCase);
         }
 
-        return WindowsUserDirectory.Replace(redacted, "$1<user>");
+        return LinuxHomeDirectory.Replace(
+            WindowsUserDirectory.Replace(redacted, "$1<user>"),
+            "$1<user>");
     }
 }

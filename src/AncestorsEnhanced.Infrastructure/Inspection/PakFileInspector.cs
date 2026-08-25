@@ -56,6 +56,12 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
             return PakClassification.BaseGame;
         }
 
+        if (string.Equals(name, "AncestorsEnhanced-Vignette_P.pak", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "AncestorsEnhanced-Gameplay_P.pak", StringComparison.OrdinalIgnoreCase))
+        {
+            return PakClassification.AecOwned;
+        }
+
         return name.EndsWith("_P.pak", StringComparison.OrdinalIgnoreCase)
             ? PakClassification.PatchStyle
             : PakClassification.Unclassified;

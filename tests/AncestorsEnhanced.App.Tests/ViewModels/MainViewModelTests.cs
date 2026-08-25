@@ -209,6 +209,20 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void ProfileComparisonValueUsesTheRawSerializedValueInsteadOfTheDisplayLabel()
+    {
+        var editor = new SettingEditorViewModel(new SettingEditSnapshot(
+            "Engine.ini",
+            "SystemSettings",
+            "r.ViewDistanceScale",
+            SettingEditorKind.Number,
+            "1",
+            "1.2"));
+
+        Assert.Equal("1.2", editor.GetProfileComparisonValue());
+    }
+
+    [Fact]
     public void FailedInspectionDoesNotClaimTheGameDefault()
     {
         var row = new FeatureSettingRowViewModel(
@@ -628,10 +642,45 @@ public sealed class MainViewModelTests
     {
         var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
 
-        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "High Quality");
-        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Ultra");
-        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Low VRAM");
-        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Cinematic");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "High Quality Tweak");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Ultra Tweak");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Low VRAM Tweak");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Cinematic Tweak");
+    }
+
+    [Fact]
+    public async Task BuiltInTweakStagesOnlyItsListedSettings()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot() with
+        {
+            ConfigurationFiles =
+            [
+                new ConfigurationFileSnapshot(
+                    "Engine.ini",
+                    "Engine.ini",
+                    Exists: true,
+                    42,
+                    DateTimeOffset.UnixEpoch,
+                    [
+                        new IniSettingSnapshot("SystemSettings", "r.ViewDistanceScale", "1.2", 1),
+                        new IniSettingSnapshot("SystemSettings", "r.MotionBlurQuality", "4", 2),
+                    ],
+                    null),
+            ],
+        };
+        var viewModel = new MainViewModel(new FixedInspector(snapshot), new RecordingEditor());
+        await viewModel.InitializeAsync();
+        SettingEditorViewModel motionBlur = Assert.Single(
+            viewModel.FeatureGroups.SelectMany(group => group.Settings),
+            setting => setting.TechnicalKey == "r.MotionBlurQuality").Editor!;
+
+        Assert.True(motionBlur.HasActiveOverride);
+        viewModel.LoadBuiltInGraphicsPresetCommand.Execute(
+            viewModel.BuiltInGraphicsPresets.Single(preset => preset.Name == "Performance Tweak"));
+
+        Assert.True(motionBlur.HasActiveOverride);
+        Assert.True(viewModel.HasPendingChanges);
+        Assert.DoesNotContain(viewModel.PendingChanges, change => change.Name == "Quality and activation");
     }
 
     [Fact]

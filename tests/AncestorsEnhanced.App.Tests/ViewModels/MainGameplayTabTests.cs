@@ -220,6 +220,31 @@ public sealed class MainGameplayTabTests
     }
 
     [Fact]
+    public async Task GameplayReadinessDoesNotTreatAecOwnedPakAsAnExternalConflict()
+    {
+        GameInspectionSnapshot supported = CreateSnapshot() with
+        {
+            PakFiles =
+            [
+                new PakFileSnapshot(
+                    "AncestorsEnhanced-Vignette_P.pak",
+                    "AncestorsEnhanced-Vignette_P.pak",
+                    123,
+                    DateTimeOffset.UnixEpoch,
+                    PakClassification.AecOwned),
+            ],
+        };
+        var viewModel = new MainViewModel(
+            new FixedInspector(supported),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("Runtime loading check still required", viewModel.GameplayReadiness.Title);
+    }
+
+    [Fact]
     public async Task EditingASimpleControlMarksTheCurrentDraftAsCustomWithoutCreatingAPak()
     {
         var viewModel = new MainViewModel(
@@ -244,7 +269,7 @@ public sealed class MainGameplayTabTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal("Balanced", viewModel.HardwareDiagnostics.Recommendation.PresetName);
+        Assert.Equal("Balanced Tweak", viewModel.HardwareDiagnostics.Recommendation.PresetName);
         Assert.True(viewModel.CanStageHardwareRecommendation);
     }
 
@@ -273,13 +298,13 @@ public sealed class MainGameplayTabTests
 
     private sealed class FixedHardwareProbe : IHardwareProbe
     {
-        public HardwareSnapshot Inspect() => new(
+        public HardwareSnapshot Inspect(bool includeDetailedGraphics = false) => new(
             "Windows",
             "CPU",
             8,
             4,
             16UL * 1024 * 1024 * 1024,
-            [new GraphicsAdapterSnapshot("GPU", 8UL * 1024 * 1024 * 1024)]);
+            [new GraphicsAdapterSnapshot("GPU", 8UL * 1024 * 1024 * 1024, true)]);
     }
 
     private sealed class NoopEditor : IGameSettingsEditor

@@ -83,33 +83,33 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             new ProfileSetting("r.SceneColorFringeQuality", "0"),
             new ProfileSetting("r.Tonemapper.Sharpen", "0.4"),
             new ProfileSetting("mod.VignettePercent", "50")])),
-        new("Performance", "Lower GPU-heavy graphics settings", CreateBuiltInProfile("Performance", [
+        new("Performance Tweak", "Lower GPU-heavy graphics settings without resetting other choices", CreateBuiltInProfile("Performance Tweak", [
             new ProfileSetting("r.ViewDistanceScale", "0.8"),
             new ProfileSetting("r.ShadowQuality", "1"),
             new ProfileSetting("r.VolumetricFog", "0"),
             new ProfileSetting("r.SSR.Quality", "0")])),
-        new("Balanced", "Moderate quality with sensible costs", CreateBuiltInProfile("Balanced", [
+        new("Balanced Tweak", "Moderate quality adjustments without resetting other choices", CreateBuiltInProfile("Balanced Tweak", [
             new ProfileSetting("r.ViewDistanceScale", "1"),
             new ProfileSetting("r.ShadowQuality", "3"),
             new ProfileSetting("r.SSR.Quality", "2")])),
-        new("High Quality", "Higher draw distance, shadows and texture detail", CreateBuiltInProfile("High Quality", [
+        new("High Quality Tweak", "Higher detail adjustments without resetting other choices", CreateBuiltInProfile("High Quality Tweak", [
             new ProfileSetting("r.ViewDistanceScale", "1.2"),
             new ProfileSetting("r.ShadowQuality", "4"),
             new ProfileSetting("r.MaxAnisotropy", "16"),
             new ProfileSetting("r.SSR.Quality", "3")])),
-        new("Ultra", "Stock-backed high-end renderer values", CreateBuiltInProfile("Ultra", [
+        new("Ultra Tweak", "Stock-backed high-end renderer adjustments without resetting other choices", CreateBuiltInProfile("Ultra Tweak", [
             new ProfileSetting("r.ViewDistanceScale", "1.2"),
             new ProfileSetting("r.Shadow.MaxResolution", "4096"),
             new ProfileSetting("r.ShadowQuality", "5"),
             new ProfileSetting("r.VolumetricFog.GridPixelSize", "4"),
             new ProfileSetting("r.MaxAnisotropy", "16")])),
-        new("Low VRAM", "Conservative texture streaming and effects", CreateBuiltInProfile("Low VRAM", [
+        new("Low VRAM Tweak", "Conservative texture streaming without resetting other choices", CreateBuiltInProfile("Low VRAM Tweak", [
             new ProfileSetting("r.Streaming.PoolSize", "2048"),
             new ProfileSetting("r.Streaming.MipBias", "1"),
             new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1"),
             new ProfileSetting("r.SSR.Quality", "0"),
             new ProfileSetting("r.VolumetricFog", "0")])),
-        new("Cinematic", "Maximize stock-backed atmosphere and post-processing", CreateBuiltInProfile("Cinematic", [
+        new("Cinematic Tweak", "Atmosphere and post-processing adjustments without resetting other choices", CreateBuiltInProfile("Cinematic Tweak", [
             new ProfileSetting("r.DepthOfFieldQuality", "4"),
             new ProfileSetting("r.MotionBlurQuality", "4"),
             new ProfileSetting("r.SceneColorFringeQuality", "1"),
@@ -161,6 +161,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial HardwareDiagnosticsViewModel HardwareDiagnostics { get; set; } = HardwareDiagnosticsViewModel.FromSnapshot(EmptyHardwareProbe.Instance.Inspect());
+
+    [ObservableProperty]
+    public partial bool IsDetailedHardwareDetectionRunning { get; set; }
 
     [ObservableProperty]
     public partial bool IsSaveGamesView { get; set; }
@@ -306,6 +309,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool CanStageHardwareRecommendation =>
         HardwareDiagnostics.Recommendation.CanStagePreset && !IsAnyOperationRunning;
+
+    public bool CanRunDetailedHardwareDetection => OperatingSystem.IsWindows() && !IsAnyOperationRunning;
 
     public string OnboardingTitle => OnboardingStep switch
     {
@@ -485,7 +490,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         if (preset is not null)
         {
-            LoadProfileForReview(preset.Profile);
+            LoadBuiltInTweakForReview(preset.Profile);
         }
     }
 
@@ -641,6 +646,29 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private async Task RunDetailedHardwareDetectionAsync()
+    {
+        if (!CanRunDetailedHardwareDetection)
+        {
+            return;
+        }
+
+        IsDetailedHardwareDetectionRunning = true;
+        try
+        {
+            HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(
+                await Task.Run(() => _hardwareProbe.Inspect(includeDetailedGraphics: true)));
+            ShowMessage("Detailed hardware detection completed. Review the recommendation before staging it.", "#B4D941");
+        }
+        finally
+        {
+            IsDetailedHardwareDetectionRunning = false;
+            OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+            OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+        }
+    }
+
+    [RelayCommand]
     private void StartCreatingProfile()
     {
         if (IsAnyOperationRunning)
@@ -790,9 +818,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 FeatureSettingSnapshot? current = _allFeatureGroups
                     .SelectMany(group => group.Settings)
                     .FirstOrDefault(candidate => string.Equals(candidate.TechnicalKey, setting.Key, StringComparison.OrdinalIgnoreCase));
+                TryGetEditorByTechnicalKey(setting.Key, out SettingEditorViewModel? editor);
                 return new ProfileComparisonRowViewModel(
                     current?.Name ?? setting.Key,
-                    current?.Value ?? "Not available for this game setup",
+                    editor?.GetProfileComparisonValue() ?? "Not available for this game setup",
                     setting.Value);
             }).ToArray();
             OnPropertyChanged(nameof(HasProfileComparison));
@@ -1336,6 +1365,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanSaveProfile));
         OnPropertyChanged(nameof(CanConfirmProfileRename));
         OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+        OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
     }
 
     partial void OnIsReviewingChangesChanged(bool value)
@@ -1371,7 +1401,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         try
         {
             Task<GameInspectionSnapshot> inspectionTask = Task.Run(_inspector.Inspect);
-            Task<HardwareSnapshot> hardwareTask = Task.Run(_hardwareProbe.Inspect);
+            Task<HardwareSnapshot> hardwareTask = Task.Run(() => _hardwareProbe.Inspect());
             GameInspectionSnapshot snapshot = await inspectionTask;
             HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(await hardwareTask);
             OnPropertyChanged(nameof(CanStageHardwareRecommendation));
@@ -1642,8 +1672,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     private bool MatchesGraphicsFilter(SettingEditorViewModel? editor) => GraphicsFilter switch
     {
-        "Modified" => editor?.HasCurrentOverride == true || editor?.HasChanges == true,
-        "Game defaults" => editor?.HasCurrentOverride != true && editor?.HasChanges != true,
+        "Modified" => editor?.HasActiveOverride == true || editor?.HasChanges == true,
+        "Game defaults" => editor?.HasActiveOverride != true && editor?.HasChanges != true,
         _ => true,
     };
 
@@ -1673,6 +1703,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 file.Classification switch
                 {
                     PakClassification.BaseGame => "Known base-game package",
+                    PakClassification.AecOwned => "AEC-managed package",
                     PakClassification.PatchStyle => "Patch-style package; origin not assumed",
                     _ => "Unclassified package",
                 }))
@@ -1855,6 +1886,45 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             ShowMessage($"{profile.Name} already matches your current setup. No changes are needed.", "#B4D941");
         }
+    }
+
+    private void LoadBuiltInTweakForReview(UserProfile tweak)
+    {
+        if (_snapshot is null || IsAnyOperationRunning)
+        {
+            ShowMessage("Reload the game settings before loading a graphics tweak.", "#D6BC84");
+            return;
+        }
+        if (HasPendingChanges || IsReviewingChanges)
+        {
+            ShowMessage("Apply or discard the pending changes before loading a graphics tweak.", "#D6BC84");
+            return;
+        }
+
+        var candidates = new List<(SettingEditorViewModel Editor, ProfileSetting Setting)>();
+        foreach (ProfileSetting setting in tweak.Graphics)
+        {
+            if (!TryGetEditorByTechnicalKey(setting.Key, out SettingEditorViewModel? editor) || editor is null ||
+                !editor.CanApplyProfileValue(setting.Value))
+            {
+                ShowMessage($"{tweak.Name} contains a setting that is not supported by this game setup. No settings were loaded.", "#E04D42");
+                return;
+            }
+            candidates.Add((editor, setting));
+        }
+
+        foreach ((SettingEditorViewModel editor, ProfileSetting setting) in candidates)
+        {
+            _ = editor.TryApplyProfileValue(setting.Value);
+        }
+
+        ShowGraphics();
+        UpdatePendingChanges();
+        ShowMessage(
+            HasPendingChanges
+                ? $"Loaded {tweak.Name}. Only its listed settings were staged for review."
+                : $"{tweak.Name} already matches your current setup. No changes are needed.",
+            HasPendingChanges ? "#FF5A00" : "#B4D941");
     }
 
     private void CloseReview()

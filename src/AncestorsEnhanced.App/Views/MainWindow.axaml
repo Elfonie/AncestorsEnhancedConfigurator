@@ -1044,6 +1044,7 @@
               <StackPanel Grid.Row="7" Grid.Column="1" Spacing="4">
                 <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.PresetName}" FontWeight="SemiBold" Foreground="#B4D941" />
                 <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.Description}" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                <Button Content="Run detailed hardware detection" Command="{Binding RunDetailedHardwareDetectionCommand}" IsEnabled="{Binding CanRunDetailedHardwareDetection}" HorizontalAlignment="Left" />
                 <Button Content="Stage recommended preset" Command="{Binding LoadHardwareRecommendationCommand}" IsEnabled="{Binding CanStageHardwareRecommendation}" HorizontalAlignment="Left" />
               </StackPanel>
               <TextBlock Grid.Row="8" Text="Hardware status" Foreground="#71828D" />

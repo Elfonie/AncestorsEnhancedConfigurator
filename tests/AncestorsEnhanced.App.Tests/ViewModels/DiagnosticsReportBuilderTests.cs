@@ -8,14 +8,16 @@ public sealed class DiagnosticsReportBuilderTests
     [Fact]
     public void BuildRedactsWindowsUserPathsIncludingInspectionNotes()
     {
+        string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string userName = Path.GetFileName(profile.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         string report = DiagnosticsReportBuilder.Build(
             "AEC",
             "1.0.0",
             "Ready",
             "Steam build 5495393",
-            @"C:\Users\Firefly\Games\Ancestors",
-            @"C:\Users\Firefly\AppData\Local\Ancestors",
-            @"C:\Users\Firefly\AppData\Local\Ancestors\System.sav",
+            Path.Combine(profile, "Games", "Ancestors"),
+            Path.Combine(profile, "AppData", "Local", "Ancestors"),
+            Path.Combine(profile, "AppData", "Local", "Ancestors", "System.sav"),
             "Read successfully",
             "Windows · X64 · 8 logical processors",
             HardwareDiagnosticsViewModel.FromSnapshot(new HardwareSnapshot(
@@ -24,15 +26,15 @@ public sealed class DiagnosticsReportBuilderTests
                 8,
                 4,
                 16UL * 1024 * 1024 * 1024,
-                [new GraphicsAdapterSnapshot("Test GPU", 8UL * 1024 * 1024 * 1024)])),
+                [new GraphicsAdapterSnapshot("Test GPU", 8UL * 1024 * 1024 * 1024, true)])),
             [new ConfigurationFileRowViewModel("Engine.ini", "1 KB", "Read successfully")],
             [new PakFileRowViewModel("mod.pak", "2 KB", "Unclassified package")],
-            [new NoticeRowViewModel("Warning", @"Read C:\Users\Firefly\AppData\Local\Ancestors")]);
+            [new NoticeRowViewModel("Warning", $"Read {Path.Combine(profile, "AppData", "Local", "Ancestors")}")]);
 
-        Assert.DoesNotContain("Firefly", report, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(userName, report, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(@"%USERPROFILE%\Games\Ancestors", report, StringComparison.Ordinal);
         Assert.Contains("GPU and VRAM: Test GPU", report, StringComparison.Ordinal);
-        Assert.Contains("Hardware recommendation: Balanced", report, StringComparison.Ordinal);
+        Assert.Contains("Hardware recommendation: Balanced Tweak", report, StringComparison.Ordinal);
         Assert.Contains("mod.pak", report, StringComparison.Ordinal);
     }
 
@@ -42,5 +44,13 @@ public sealed class DiagnosticsReportBuilderTests
         Assert.Equal(
             @"D:\Users\<user>\Ancestors",
             DiagnosticsReportBuilder.RedactPath(@"D:\Users\AnotherUser\Ancestors"));
+    }
+
+    [Fact]
+    public void RedactPathRedactsLinuxHomeDirectory()
+    {
+        Assert.Equal(
+            "/home/<user>/.steam/steamapps/common/Ancestors",
+            DiagnosticsReportBuilder.RedactPath("/home/another-user/.steam/steamapps/common/Ancestors"));
     }
 }

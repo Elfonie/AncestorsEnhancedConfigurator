@@ -20,14 +20,21 @@ public sealed record HardwareDiagnosticsViewModel(
             : string.Join(
                 Environment.NewLine,
                 snapshot.GraphicsAdapters.Select(adapter =>
-                    adapter.ReportedMemoryBytes is ulong memory
+                {
+                    if (adapter.ReportedMemoryBytes is not ulong memory)
+                    {
+                        return $"{adapter.Name} · VRAM not reported";
+                    }
+
+                    return adapter.IsMemoryAuthoritative
                         ? $"{adapter.Name} · {FormatBytes(memory)} reported VRAM"
-                        : $"{adapter.Name} · VRAM not reported"));
+                        : $"{adapter.Name} · {FormatBytes(memory)} legacy inventory value (not used for recommendations)";
+                }));
         return new(
             $"{snapshot.CpuName} · {cores}",
             snapshot.InstalledMemoryBytes is ulong memory ? FormatBytes(memory) : "Not reported",
             graphics,
-            snapshot.UnavailableReason ?? "Read locally from the operating system. GPU memory is inventory data, not a benchmark.",
+            snapshot.UnavailableReason ?? "Read locally from the operating system. Only detailed GPU memory sources are used for recommendations.",
             HardwareRecommendationEngine.Recommend(snapshot));
     }
 
@@ -53,19 +60,19 @@ public static class HardwareRecommendationEngine
         ulong? ram = snapshot.InstalledMemoryBytes;
         if (vram <= 4 * GiB)
         {
-            return new("Low VRAM", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM. This is a conservative starting point, not a performance measurement.", true);
+            return new("Low VRAM Tweak", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM. This is a conservative starting point, not a performance measurement.", true);
         }
 
         if (vram <= 6 * GiB || snapshot.LogicalProcessorCount <= 4)
         {
-            return new("Performance", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM and {snapshot.LogicalProcessorCount} logical processors. Test in-game before keeping it.", true);
+            return new("Performance Tweak", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM and {snapshot.LogicalProcessorCount} logical processors. Test in-game before keeping it.", true);
         }
 
         if (vram >= 12 * GiB && ram >= 24 * GiB)
         {
-            return new("High Quality", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM and {HardwareDiagnosticsViewModel.FormatBytes(ram.Value)} system memory. This is not an FPS guarantee.", true);
+            return new("High Quality Tweak", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM and {HardwareDiagnosticsViewModel.FormatBytes(ram.Value)} system memory. This is not an FPS guarantee.", true);
         }
 
-        return new("Balanced", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM. Balanced is a cautious baseline; use the normal review flow to stage it.", true);
+        return new("Balanced Tweak", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM. This stages only the listed adjustments, not a complete game quality state.", true);
     }
 }

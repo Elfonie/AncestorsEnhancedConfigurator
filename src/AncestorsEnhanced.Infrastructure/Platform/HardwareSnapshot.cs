@@ -13,20 +13,24 @@ public sealed record HardwareSnapshot(
     IReadOnlyList<GraphicsAdapterSnapshot> GraphicsAdapters,
     string? UnavailableReason = null)
 {
-    public bool HasGraphicsMemory => GraphicsAdapters.Any(adapter => adapter.ReportedMemoryBytes is not null);
+    public bool HasGraphicsMemory => GraphicsAdapters.Any(adapter =>
+        adapter.ReportedMemoryBytes is not null && adapter.IsMemoryAuthoritative);
 
     public ulong? MaximumReportedGraphicsMemoryBytes => GraphicsAdapters
-        .Where(adapter => adapter.ReportedMemoryBytes is not null)
+        .Where(adapter => adapter.ReportedMemoryBytes is not null && adapter.IsMemoryAuthoritative)
         .Select(adapter => adapter.ReportedMemoryBytes!.Value)
         .DefaultIfEmpty()
         .Max() is ulong value && value > 0 ? value : null;
 }
 
-public sealed record GraphicsAdapterSnapshot(string Name, ulong? ReportedMemoryBytes);
+public sealed record GraphicsAdapterSnapshot(
+    string Name,
+    ulong? ReportedMemoryBytes,
+    bool IsMemoryAuthoritative = false);
 
 public interface IHardwareProbe
 {
-    HardwareSnapshot Inspect();
+    HardwareSnapshot Inspect(bool includeDetailedGraphics = false);
 }
 
 public sealed class EmptyHardwareProbe : IHardwareProbe
@@ -37,7 +41,7 @@ public sealed class EmptyHardwareProbe : IHardwareProbe
     {
     }
 
-    public HardwareSnapshot Inspect() => new(
+    public HardwareSnapshot Inspect(bool includeDetailedGraphics = false) => new(
         global::System.Environment.OSVersion.VersionString,
         "Not queried",
         global::System.Environment.ProcessorCount,

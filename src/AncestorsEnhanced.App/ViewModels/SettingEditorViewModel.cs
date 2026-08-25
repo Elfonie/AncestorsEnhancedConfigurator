@@ -137,6 +137,14 @@ public partial class SettingEditorViewModel : ViewModelBase
         return value is not null;
     }
 
+    /// <summary>
+    /// Returns the unformatted value that a profile would compare against. UI labels
+    /// deliberately use localized/display formatting, which must not be compared to
+    /// the serialized profile representation.
+    /// </summary>
+    public string? GetProfileComparisonValue() =>
+        _snapshot.IsDirect || UseCustomValue ? DesiredValue : _snapshot.DefaultValue;
+
     public bool TryApplyProfileValue(string? value)
     {
         if (!CanApplyProfileValue(value))
