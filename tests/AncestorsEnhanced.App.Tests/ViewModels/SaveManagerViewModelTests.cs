@@ -381,6 +381,29 @@ public sealed class SaveManagerViewModelTests
         Assert.All(viewModel.Slots[0].Checkpoints, checkpoint => Assert.False(checkpoint.CanRestore));
     }
 
+    [Fact]
+    public void RefreshReusesUnchangedCheckpointViewModelsAndKeepsMetadataEditingState()
+    {
+        var checkpoint = new SaveGameCheckpoint("cp-1", DateTimeOffset.UnixEpoch, "0", 1, "checkpoint", "Manual");
+        var snapshot = new SaveGamesSnapshot(
+            DateTimeOffset.UnixEpoch,
+            "user-data",
+            [new SaveGameSlotSnapshot("0", "Savegame0.sav", "path-0", true, 42, DateTimeOffset.UnixEpoch, [checkpoint])]);
+        var viewModel = new SaveManagerViewModel(new FakeSaveGameManager(snapshot), "user-data", watchdog: null);
+
+        viewModel.Refresh(snapshot);
+        SaveGameCheckpointViewModel original = Assert.Single(viewModel.Slots[0].Checkpoints);
+        original.ToggleMetadataEditorCommand.Execute(null);
+        original.Title = "Keep me";
+
+        viewModel.Refresh(snapshot);
+
+        SaveGameCheckpointViewModel refreshed = Assert.Single(viewModel.Slots[0].Checkpoints);
+        Assert.Same(original, refreshed);
+        Assert.True(refreshed.IsMetadataEditorVisible);
+        Assert.Equal("Keep me", refreshed.Title);
+    }
+
     private static string TempUserData() =>
         Path.Combine(Path.GetTempPath(), "aec-sm-" + Guid.NewGuid().ToString("N"));
 
@@ -516,7 +539,7 @@ public sealed class SaveManagerViewModelTests
 
         viewModel.IsWatchdogEnabled = false;
         Assert.Equal(1, watchdog.StartCount);
-        Assert.Equal(1, watchdog.StopCount);
+        Assert.True(SpinWait.SpinUntil(() => watchdog.StopCount == 1, TimeSpan.FromSeconds(2)));
     }
 
     [Fact]

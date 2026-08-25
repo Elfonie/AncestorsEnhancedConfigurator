@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AncestorsEnhanced.Infrastructure.Platform;
 
 namespace AncestorsEnhanced.App.Accessibility;
 
@@ -7,7 +8,8 @@ public sealed record AccessibilityPreferences(
     bool DiscordRichPresenceEnabled = false,
     bool HasCompletedOnboarding = false,
     bool ExperimentalGraphicsSettingsEnabled = false,
-    bool HasAcknowledgedDetailedHardwareScan = false);
+    bool HasAcknowledgedDetailedHardwareScan = false,
+    HardwareSnapshot? DetailedHardwareSnapshot = null);
 
 public sealed class AccessibilityPreferencesStore
 {

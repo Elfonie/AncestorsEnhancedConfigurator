@@ -53,7 +53,7 @@ public sealed class MainViewModelTests
             new RecordingEditor());
 
         Assert.False(viewModel.IsGraphicsPresetsExpanded);
-        Assert.Equal("Show presets", viewModel.GraphicsPresetsToggleLabel);
+        Assert.Equal("Show tweaks", viewModel.GraphicsPresetsToggleLabel);
         Assert.False(viewModel.IsGameplayPresetsExpanded);
         Assert.Equal("Show presets", viewModel.GameplayPresetsToggleLabel);
 
@@ -61,7 +61,7 @@ public sealed class MainViewModelTests
         viewModel.ToggleGameplayPresetsCommand.Execute(null);
 
         Assert.True(viewModel.IsGraphicsPresetsExpanded);
-        Assert.Equal("Hide presets", viewModel.GraphicsPresetsToggleLabel);
+        Assert.Equal("Hide tweaks", viewModel.GraphicsPresetsToggleLabel);
         Assert.True(viewModel.IsGameplayPresetsExpanded);
         Assert.Equal("Hide presets", viewModel.GameplayPresetsToggleLabel);
     }

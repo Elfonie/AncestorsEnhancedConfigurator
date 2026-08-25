@@ -9,8 +9,8 @@
         x:Class="AncestorsEnhanced.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         x:CompileBindings="True"
-        MinWidth="760"
-        MinHeight="640"
+        MinWidth="640"
+        MinHeight="480"
         Icon="/Assets/aec-icon.ico"
         Title="Ancestors Enhanced Configurator">
 
@@ -25,8 +25,8 @@
                  IsVisible="{Binding IsAnyOperationRunning}" />
     <!-- Sidebar navigation -->
     <Border Grid.Column="0"
-            Width="200"
-            Padding="16,18"
+            Width="176"
+            Padding="14,14"
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,0,1,0">
@@ -223,24 +223,25 @@
           </StackPanel>
         </Border>
 
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <Button Content="Save as profile" Command="{Binding CreateProfileFromGraphicsCommand}" />
+          <Button Content="Manage profiles" Command="{Binding ShowProfilesCommand}" />
+        </StackPanel>
+
         <Border Classes="SettingCard InteractiveCard" Padding="14,11">
           <StackPanel Spacing="10">
             <Button Classes="CardHeader" Command="{Binding ToggleGraphicsPresetsCommand}" Padding="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsHitTestVisible="False">
                 <StackPanel Spacing="2">
-                  <TextBlock Text="Graphics presets" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                  <TextBlock Text="Choose a complete visual starting point when you need one." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                  <TextBlock Text="Graphics tweaks" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                  <TextBlock Text="Optional changes for specific visual goals. Each affects only its listed settings." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{Binding GraphicsPresetsToggleLabel}" FontWeight="SemiBold" Foreground="#B4D941" VerticalAlignment="Center" />
               </Grid>
             </Button>
             <StackPanel IsVisible="{Binding IsGraphicsPresetsExpanded}" Spacing="8">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                <TextBlock Text="Each preset is a complete starting point. Pick one; do not combine presets. Nothing is written until you review it." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                  <Button Content="Save as profile" Command="{Binding CreateProfileFromGraphicsCommand}" />
-                  <Button Content="Manage profiles" Command="{Binding ShowProfilesCommand}" />
-                </StackPanel>
+              <Grid>
+                <TextBlock Text="Tweaks can be combined, but review the resulting changes together. Nothing is written until you review it." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" VerticalAlignment="Center" />
               </Grid>
               <ItemsControl ItemsSource="{Binding BuiltInGraphicsPresets}">
                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -346,6 +347,12 @@
                                          HorizontalAlignment="Right"
                                          FontSize="11"
                                          Foreground="#657680" />
+                              <TextBlock Text="Experimental"
+                                         IsVisible="{Binding IsExperimental}"
+                                         HorizontalAlignment="Right"
+                                         FontSize="10"
+                                         FontWeight="SemiBold"
+                                         Foreground="#D6BC84" />
                               <TextBlock Text="{Binding Value}"
                                          HorizontalAlignment="Right"
                                          TextAlignment="Right"
@@ -994,7 +1001,15 @@
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1"
                   IsVisible="{Binding HasProfileComparison}">
             <StackPanel Spacing="6">
-              <TextBlock Text="{Binding ProfileComparisonName, StringFormat=Compare: {0}}" FontWeight="SemiBold" Foreground="{DynamicResource InfoTextBrush}" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Text="{Binding ProfileComparisonName, StringFormat=Compare: {0}}" FontWeight="SemiBold" Foreground="{DynamicResource InfoTextBrush}" />
+                <Button Grid.Column="1" Content="Close" Command="{Binding ClearProfileComparisonCommand}" />
+              </Grid>
+              <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                <TextBlock Text="Setting" FontSize="11" FontWeight="SemiBold" Foreground="#71828D" />
+                <TextBlock Grid.Column="1" Text="Current" FontSize="11" FontWeight="SemiBold" Foreground="#71828D" />
+                <TextBlock Grid.Column="2" Text="Profile" FontSize="11" FontWeight="SemiBold" Foreground="#71828D" />
+              </Grid>
               <ItemsControl ItemsSource="{Binding ProfileComparisonRows}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ProfileComparisonRowViewModel">
@@ -1260,10 +1275,13 @@
               Command="{Binding CancelReviewCommand}"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Stretch"
+              Focusable="False"
+              IsTabStop="False"
               BorderThickness="0"
               CornerRadius="0"
               Padding="0" />
-      <Border MaxWidth="900"
+      <Border x:Name="ReviewDialog"
+              MaxWidth="900"
               MaxHeight="580"
               Padding="20"
               HorizontalAlignment="Center"
@@ -1308,26 +1326,28 @@
           </ScrollViewer>
           <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,14,0,0">
             <Button x:Name="ReviewCancelButton" Command="{Binding CancelReviewCommand}" Content="Cancel" />
-            <Button Command="{Binding ConfirmApplyCommand}" Classes="PrimaryAction" Content="{Binding ConfirmReviewLabel}" />
+            <Button x:Name="ReviewConfirmButton" Command="{Binding ConfirmApplyCommand}" Classes="PrimaryAction" Content="{Binding ConfirmReviewLabel}" />
           </StackPanel>
         </Grid>
         </Border>
     </Grid>
     <Grid Grid.ColumnSpan="2"
+          x:Name="OnboardingOverlay"
           ZIndex="110"
           IsVisible="{Binding IsOnboardingVisible}"
           Focusable="True"
           AutomationProperties.Name="Welcome to Ancestors Enhanced">
       <Border Background="#E60C1115" />
-      <Border MaxWidth="650" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+      <Border x:Name="OnboardingDialog"
+              MaxWidth="650" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
               CornerRadius="9" Background="#15232C" BorderBrush="#3B7598" BorderThickness="1">
         <StackPanel Spacing="12">
           <TextBlock Text="{Binding OnboardingTitle}" FontSize="21" FontWeight="SemiBold" Foreground="#DCEEFF" />
           <TextBlock Text="{Binding OnboardingDescription}" TextWrapping="Wrap" Foreground="#B8D7E5" />
           <TextBlock Text="You can open this Configurator safely: no game files change until you explicitly review and confirm a supported edit." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="Skip" Command="{Binding SkipOnboardingCommand}" />
-            <Button Classes="PrimaryAction" Content="{Binding OnboardingActionLabel}" Command="{Binding AdvanceOnboardingCommand}" />
+            <Button x:Name="OnboardingSkipButton" Content="Skip" Command="{Binding SkipOnboardingCommand}" />
+            <Button x:Name="OnboardingPrimaryButton" Classes="PrimaryAction" Content="{Binding OnboardingActionLabel}" Command="{Binding AdvanceOnboardingCommand}" />
           </StackPanel>
         </StackPanel>
       </Border>

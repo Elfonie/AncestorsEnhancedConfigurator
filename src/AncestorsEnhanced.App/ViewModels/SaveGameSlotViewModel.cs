@@ -22,7 +22,8 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         Func<bool>? canMutate = null,
         bool showAllCheckpoints = false,
         Func<SaveGameCheckpoint, CheckpointMetadata?>? metadataProvider = null,
-        Action<SaveGameCheckpoint, CheckpointMetadata>? metadataChanged = null)
+        Action<SaveGameCheckpoint, CheckpointMetadata>? metadataChanged = null,
+        IReadOnlyDictionary<string, SaveGameCheckpointViewModel>? existingCheckpoints = null)
     {
         _exists = slot.Exists;
         SlotNumber = slot.SlotNumber;
@@ -43,14 +44,15 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         _showAllCheckpoints = showAllCheckpoints;
 
         Checkpoints = slot.Checkpoints
-            .Select(checkpoint => new SaveGameCheckpointViewModel(
-                checkpoint,
-                loadCheckpoint(checkpoint),
-                deleteCheckpoint(checkpoint),
-                canRestore ?? (() => true),
-                _canMutate,
-                metadataProvider?.Invoke(checkpoint),
-                metadata => metadataChanged?.Invoke(checkpoint, metadata)))
+            .Select(checkpoint => existingCheckpoints?.GetValueOrDefault(checkpoint.Id)
+                ?? new SaveGameCheckpointViewModel(
+                    checkpoint,
+                    loadCheckpoint(checkpoint),
+                    deleteCheckpoint(checkpoint),
+                    canRestore ?? (() => true),
+                    _canMutate,
+                    metadataProvider?.Invoke(checkpoint),
+                    metadata => metadataChanged?.Invoke(checkpoint, metadata)))
             .ToArray();
         UpdateVisibleCheckpoints();
     }
@@ -111,7 +113,7 @@ public partial class SaveGameSlotViewModel : ViewModelBase
     {
         _filteredCheckpoints = Checkpoints.Where(checkpoint => checkpoint.Matches(searchText, originFilter)).ToArray();
         FilteredCheckpointCount = _filteredCheckpoints.Length;
-        UpdateVisibleCheckpoints();
+        UpdateVisibleCheckpoints(showAll: string.IsNullOrWhiteSpace(searchText) ? null : true);
         OnPropertyChanged(nameof(FilteredCheckpointCount));
     }
 

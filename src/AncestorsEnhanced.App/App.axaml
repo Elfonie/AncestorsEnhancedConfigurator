@@ -1,7 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="AncestorsEnhanced.App.App"
-             RequestedThemeVariant="Default">
+             RequestedThemeVariant="Dark">
   <Application.Resources>
     <!-- Application surfaces -->
     <SolidColorBrush x:Key="AppBackgroundBrush" Color="#070907" />
@@ -222,7 +222,7 @@
       <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
     </Style>
-    <Style Selector="Button:focus-visible, ToggleButton:focus-visible, TextBox:focus-visible, ComboBox:focus-visible, ToggleSwitch:focus-visible">
+    <Style Selector="Button:focus-visible, ToggleButton:focus-visible, TextBox:focus-visible, ComboBox:focus-visible, ToggleSwitch:focus-visible, NumericUpDown:focus-visible, CheckBox:focus-visible, Expander:focus-visible">
       <Setter Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
       <Setter Property="BorderThickness" Value="2" />
     </Style>

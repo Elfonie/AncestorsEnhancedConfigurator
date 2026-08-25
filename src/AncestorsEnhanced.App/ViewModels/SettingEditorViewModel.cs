@@ -108,12 +108,36 @@ public partial class SettingEditorViewModel : ViewModelBase
         : IsPresence
         ? UseCustomValue ? "Skip videos" : "Use game default"
         : UseCustomValue
-        ? IsChoice
-            ? SelectedChoice?.Label ?? "Choose a value"
-            : IsToggle
-                ? ToggleValue ? "On" : "Off"
-                : $"{DesiredValue ?? "Invalid value"}{Unit}"
+        ? FormatValue(DesiredValue)
         : "Use game default";
+
+    /// <summary>Formats a stored config value in the same terms shown by the editor.</summary>
+    public string FormatValue(string? rawValue)
+    {
+        if (rawValue is null)
+        {
+            return "Game default";
+        }
+
+        if (IsToggle)
+        {
+            return rawValue == "1" ? "On" : rawValue == "0" ? "Off" : rawValue;
+        }
+
+        if (IsChoice)
+        {
+            return Choices.FirstOrDefault(choice => string.Equals(choice.Value, rawValue, StringComparison.Ordinal))?.Label
+                ?? rawValue;
+        }
+
+        if (IsNumber && decimal.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal number))
+        {
+            decimal displayValue = number * _snapshot.DisplayMultiplier;
+            return $"{displayValue.ToString(CultureInfo.CurrentCulture)}{Unit}";
+        }
+
+        return rawValue;
+    }
 
     public SettingChangeRequest CreateRequest(string displayName) =>
         new(

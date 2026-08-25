@@ -91,9 +91,14 @@ public partial class App : Application
                     accessibilityPreferences.TrySave(preferences);
                 },
                 hasAcknowledgedDetailedHardwareScan: preferences.HasAcknowledgedDetailedHardwareScan,
-                detailedHardwareScanAcknowledged: () =>
+                detailedHardwareSnapshot: preferences.DetailedHardwareSnapshot,
+                detailedHardwareScanCompleted: snapshot =>
                 {
-                    preferences = preferences with { HasAcknowledgedDetailedHardwareScan = true };
+                    preferences = preferences with
+                    {
+                        HasAcknowledgedDetailedHardwareScan = true,
+                        DetailedHardwareSnapshot = snapshot,
+                    };
                     accessibilityPreferences.TrySave(preferences);
                 },
                 hardwareProbe: new SystemHardwareProbe());
@@ -118,6 +123,11 @@ public partial class App : Application
                 window.WindowState = WindowState.Normal;
                 window.Activate();
             }
+
+            var activationListener = new SingleInstanceActivationListener(
+                "AncestorsEnhancedConfigurator",
+                () => Dispatcher.UIThread.Post(ShowWindow));
+            activationListener.Start();
 
             trayIcon.Clicked += (_, _) => ShowWindow();
             var openMenuItem = new NativeMenuItem { Header = "Open Ancestors Enhanced" };
@@ -156,6 +166,7 @@ public partial class App : Application
                 retryTimer?.Stop();
                 discordTimer.Stop();
                 discordPresence?.Dispose();
+                activationListener.Dispose();
                 trayIcon.Dispose();
                 viewModel.Dispose();
             };
@@ -167,7 +178,7 @@ public partial class App : Application
                     return;
                 }
 
-                if (!viewModel.IsSaveManagerUnavailable)
+                if (!viewModel.CanRetrySaveManagerInitialization)
                 {
                     retryTimer.Stop();
                     return;

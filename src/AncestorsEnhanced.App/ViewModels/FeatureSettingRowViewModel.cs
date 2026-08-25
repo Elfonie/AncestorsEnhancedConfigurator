@@ -11,7 +11,8 @@ public sealed record FeatureSettingRowViewModel(
     bool ShowTechnicalDetails,
     IReadOnlyList<SettingPresetValueRowViewModel> PresetValues,
     string? ActivePresetName,
-    SettingEditorViewModel? Editor)
+    SettingEditorViewModel? Editor,
+    bool IsExperimental = false)
 {
     public bool IsEditable => Editor is not null;
 
@@ -21,7 +22,9 @@ public sealed record FeatureSettingRowViewModel(
 
     public bool HasInspectionFailure => string.Equals(Value, "Not verified", StringComparison.Ordinal);
 
-    public string ValueLabel => Editor?.HasCurrentOverride == true
+    public string ValueLabel => Editor is { ShowOverrideToggle: false }
+        ? "Current game value"
+        : Editor?.HasCurrentOverride == true
         ? "Custom override"
         : Editor?.ShowUnknownGameValue == true && !HasPresetValues
             ? "Game controlled"

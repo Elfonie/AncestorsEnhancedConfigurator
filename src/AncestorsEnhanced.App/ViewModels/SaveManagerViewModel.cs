@@ -1,4 +1,5 @@
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.Platform;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,10 +14,13 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private readonly Action<Action> _dispatchToUi;
     private readonly UiMutationGate? _mutationGate;
     private readonly string _storeName;
+    private readonly Func<bool> _isGameRunningProbe;
+    private readonly DispatcherTimer _gameProcessTimer;
     private bool _loadingSettings;
     private readonly object _settingsWriteGate = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private Task _settingsWriteTail = Task.CompletedTask;
+    private CancellationTokenSource? _metadataWriteDebounce;
     private Task? _watchdogRefreshTask;
     private int _watchdogRefreshVersion;
     private int _settingsVersion;
@@ -92,7 +96,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         ISaveGameManager manager,
         string userDataDirectory,
         ISaveGameWatchdog? watchdog = null)
-        : this(manager, userDataDirectory, watchdog, dispatchToUi: null, mutationGate: null)
+        : this(manager, userDataDirectory, watchdog, dispatchToUi: null, mutationGate: null, gameRunningProbe: null)
     {
     }
 
@@ -101,7 +105,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         string userDataDirectory,
         ISaveGameWatchdog? watchdog,
         Action<Action>? dispatchToUi)
-        : this(manager, userDataDirectory, watchdog, dispatchToUi, mutationGate: null)
+        : this(manager, userDataDirectory, watchdog, dispatchToUi, mutationGate: null, gameRunningProbe: null)
     {
     }
 
@@ -111,7 +115,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         ISaveGameWatchdog? watchdog,
         Action<Action>? dispatchToUi,
         UiMutationGate? mutationGate,
-        string storeName = "Steam")
+        string storeName = "Steam",
+        Func<bool>? gameRunningProbe = null)
     {
         ArgumentNullException.ThrowIfNull(manager);
         _manager = manager;
@@ -119,7 +124,10 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         _watchdog = watchdog;
         _mutationGate = mutationGate;
         _storeName = string.IsNullOrWhiteSpace(storeName) ? "Game" : storeName;
+        _isGameRunningProbe = gameRunningProbe ?? GameProcessProbe.IsAncestorsRunning;
         _dispatchToUi = dispatchToUi ?? (action => Dispatcher.UIThread.Post(action));
+        _gameProcessTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _gameProcessTimer.Tick += OnGameProcessTimerTick;
         if (_mutationGate is not null)
         {
             _mutationGate.Changed += OnMutationGateChanged;
@@ -176,6 +184,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     /// <summary>Starts persisted watchdog settings only after the owner has loaded slots.</summary>
     public void Activate()
     {
+        RefreshGameRunningState();
+        _gameProcessTimer.Start();
         if (IsWatchdogEnabled)
         {
             _watchdog?.Start();
@@ -189,6 +199,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             .Where(slot => slot.IsShowingAllCheckpoints)
             .Select(slot => slot.SlotNumber)
             .ToHashSet(StringComparer.Ordinal);
+        var existingCheckpointsBySlot = Slots.ToDictionary(
+            slot => slot.SlotNumber,
+            slot => (IReadOnlyDictionary<string, SaveGameCheckpointViewModel>)slot.Checkpoints
+                .ToDictionary(checkpoint => checkpoint.Id, StringComparer.Ordinal),
+            StringComparer.Ordinal);
 
         Slots = snapshot.Slots
             .Select(slot => new SaveGameSlotViewModel(
@@ -200,7 +215,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 () => CanMutate,
                 expandedSlots.Contains(slot.SlotNumber),
                 metadataProvider: checkpoint => GetCheckpointMetadata(checkpoint),
-                metadataChanged: SaveCheckpointMetadata))
+                metadataChanged: SaveCheckpointMetadata,
+                existingCheckpoints: existingCheckpointsBySlot.GetValueOrDefault(slot.SlotNumber)))
             .ToArray();
 
         RemoveMetadataForMissingCheckpoints(snapshot);
@@ -395,6 +411,10 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             settingsWrite = _settingsWriteTail;
         }
         GC.SuppressFinalize(this);
+        _metadataWriteDebounce?.Cancel();
+        _metadataWriteDebounce?.Dispose();
+        _gameProcessTimer.Stop();
+        _gameProcessTimer.Tick -= OnGameProcessTimerTick;
         if (_watchdog is not null)
         {
             _watchdog.CheckpointCreated -= OnWatchdogCheckpointCreated;
@@ -437,6 +457,21 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private void OnGameProcessTimerTick(object? sender, EventArgs eventArgs) => RefreshGameRunningState();
+
+    private void RefreshGameRunningState()
+    {
+        try
+        {
+            IsGameRunning = _isGameRunningProbe();
+        }
+        catch (Exception)
+        {
+            // A failed process query must never make Restore look safer than it is.
+            IsGameRunning = true;
+        }
+    }
+
     private void OnWatcherError(object? sender, string message)
     {
         void Update()
@@ -465,7 +500,10 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                _watchdog.StopWatch();
+                // StopWatch can wait for an in-flight backup. Keep that wait off
+                // the UI dispatcher; the watchdog's lifecycle lock serializes a
+                // rapid re-enable safely after the stop finishes.
+                _ = Task.Run(_watchdog.StopWatch);
             }
         }
 
@@ -622,8 +660,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 TaskScheduler.Default);
         }
 
-        // Metadata changes protect retention immediately. Waiting here is only
-        // used for favorite/name updates and closes the disk-vs-memory race.
+        // Favorite changes protect retention immediately. Text metadata is
+        // queued after a short quiet period to keep typing off the UI thread.
         if (waitForCompletion)
         {
             pending.GetAwaiter().GetResult();
@@ -771,6 +809,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         string key = CheckpointMetadataKey(checkpoint);
         CheckpointMetadata normalized = NormalizeMetadata(metadata);
+        bool favoriteChanged = (_checkpointMetadata.GetValueOrDefault(key)?.IsFavorite ?? false) != normalized.IsFavorite;
         if (string.IsNullOrWhiteSpace(normalized.Title) && string.IsNullOrWhiteSpace(normalized.Note) && !normalized.IsFavorite)
         {
             _checkpointMetadata.Remove(key);
@@ -779,7 +818,38 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         {
             _checkpointMetadata[key] = normalized;
         }
-        SaveSettings(waitForCompletion: true);
+        if (favoriteChanged)
+        {
+            _metadataWriteDebounce?.Cancel();
+            SaveSettings(waitForCompletion: true);
+            return;
+        }
+
+        QueueDebouncedMetadataSave();
+    }
+
+    private void QueueDebouncedMetadataSave()
+    {
+        _metadataWriteDebounce?.Cancel();
+        _metadataWriteDebounce?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        _metadataWriteDebounce = cancellation;
+        _ = SaveMetadataAfterQuietPeriodAsync(cancellation.Token);
+    }
+
+    private async Task SaveMetadataAfterQuietPeriodAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(300), token);
+            if (!token.IsCancellationRequested)
+            {
+                SaveSettings();
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
     }
 
     private void RemoveMetadataForMissingCheckpoints(SaveGamesSnapshot snapshot)

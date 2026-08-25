@@ -31,6 +31,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
         new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
+    private readonly Dictionary<string, bool> _groupExpansionStates = new(StringComparer.Ordinal);
     private GameInspectionSnapshot? _snapshot;
     private SettingsChangePlan? _reviewPlan;
     private bool _reviewIsToolChangeRemoval;
@@ -38,7 +39,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly Action<bool>? _discordRichPresenceChanged;
     private readonly Action? _onboardingCompleted;
     private readonly Action<bool>? _experimentalGraphicsSettingsChanged;
-    private readonly Action? _detailedHardwareScanAcknowledged;
+    private readonly Action<HardwareSnapshot>? _detailedHardwareScanCompleted;
+    private HardwareSnapshot? _detailedHardwareSnapshot;
 
     [ObservableProperty]
     public partial string DetectionStatus { get; set; } = "Not checked yet";
@@ -275,7 +277,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         bool experimentalGraphicsSettingsEnabled = false,
         Action<bool>? experimentalGraphicsSettingsChanged = null,
         bool hasAcknowledgedDetailedHardwareScan = false,
-        Action? detailedHardwareScanAcknowledged = null,
+        HardwareSnapshot? detailedHardwareSnapshot = null,
+        Action<HardwareSnapshot>? detailedHardwareScanCompleted = null,
         IHardwareProbe? hardwareProbe = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
@@ -290,7 +293,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _discordRichPresenceChanged = discordRichPresenceChanged;
         _onboardingCompleted = onboardingCompleted;
         _experimentalGraphicsSettingsChanged = experimentalGraphicsSettingsChanged;
-        _detailedHardwareScanAcknowledged = detailedHardwareScanAcknowledged;
+        _detailedHardwareSnapshot = detailedHardwareSnapshot;
+        _detailedHardwareScanCompleted = detailedHardwareScanCompleted;
         IsHighContrastEnabled = highContrastEnabled;
         IsDiscordRichPresenceEnabled = discordRichPresenceEnabled;
         IsOnboardingVisible = showOnboarding;
@@ -341,6 +345,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             "Ancestors is ready" => "Ready to play",
             "Scan failed" => "Attention required",
             "Ancestors installation not detected" => "Game not found",
+            "Multiple Ancestors installations detected" => "Choose an Ancestors installation",
             "Ancestors detected but not supported for editing" => "Unsupported game version",
             "Ancestors detected with problems" => "Attention required",
             _ => "Checking Ancestors…",
@@ -379,7 +384,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public string SystemDiagnostics { get; }
 
     public bool CanStageHardwareRecommendation =>
-        HardwareDiagnostics.Recommendation.CanStagePreset && !IsAnyOperationRunning;
+        HardwareDiagnostics.Recommendation.CanStagePreset &&
+        !HasPendingChanges &&
+        !IsReviewingChanges &&
+        !IsAnyOperationRunning;
 
     public bool CanRunDetailedHardwareDetection => OperatingSystem.IsWindows() && !IsAnyOperationRunning;
 
@@ -428,6 +436,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool IsSaveManagerAvailable => SaveManager is not null;
 
     public bool IsSaveManagerUnavailable => SaveManager is null;
+
+    /// <summary>Retries are useful only after game identity was verified and save-manager creation failed.</summary>
+    public bool CanRetrySaveManagerInitialization => _verifiedGameContext is not null && SaveManager is null;
 
     public bool ShouldKeepRunningInTrayOnClose =>
         SaveManager is { IsWatchdogEnabled: true, KeepRunningInTrayWhenClosing: true };
@@ -481,7 +492,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool IsGameDefaultsGraphicsFilter => GraphicsFilter == "Game defaults";
 
-    public string GraphicsPresetsToggleLabel => IsGraphicsPresetsExpanded ? "Hide presets" : "Show presets";
+    public string GraphicsPresetsToggleLabel => IsGraphicsPresetsExpanded ? "Hide tweaks" : "Show tweaks";
 
     public string GameplayPresetsToggleLabel => IsGameplayPresetsExpanded ? "Hide presets" : "Show presets";
 
@@ -513,7 +524,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ? "The listed files will be restored to their state before you first used this Configurator. Save games and other mods are not changed"
         : "Check the old and new values before anything is written";
 
-    public string ConfirmReviewLabel => _reviewIsToolChangeRemoval ? "Remove from my game" : "Confirm & Apply";
+    public string ConfirmReviewLabel => _reviewIsToolChangeRemoval ? "Remove Configurator changes" : "Confirm & Apply";
 
     public string PendingSummary => PendingChanges.Count switch
     {
@@ -748,12 +759,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
         if (HasPendingChanges || IsReviewingChanges)
         {
-            // The recommendation is already staged. Reopen the ordinary review
-            // dialog instead of restaging it or only changing tabs.
-            if (!IsReviewingChanges)
-            {
-                OpenReview();
-            }
+            ShowMessage("Apply or discard current changes before using a hardware recommendation.", "#D6BC84");
             return;
         }
 
@@ -778,12 +784,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         IsDetailedHardwareDetectionRunning = true;
         try
         {
-            HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(
-                await Task.Run(() => _hardwareProbe.Inspect(includeDetailedGraphics: true)));
+            HardwareSnapshot detailedSnapshot = await Task.Run(() => _hardwareProbe.Inspect(includeDetailedGraphics: true));
+            HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(detailedSnapshot);
+            _detailedHardwareSnapshot = detailedSnapshot;
             if (!HasAcknowledgedDetailedHardwareScan)
             {
                 HasAcknowledgedDetailedHardwareScan = true;
-                _detailedHardwareScanAcknowledged?.Invoke();
+                _detailedHardwareScanCompleted?.Invoke(detailedSnapshot);
             }
             ShowMessage("Detailed hardware detection completed. Review the recommendation before staging it.", "#B4D941");
         }
@@ -964,9 +971,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 TryGetEditorByTechnicalKey(key, out SettingEditorViewModel? editor);
                 return new ProfileComparisonRowViewModel(
                     current?.Name ?? key,
-                    editor?.GetProfileComparisonValue() ?? "Not available for this game setup",
+                    editor is null
+                        ? "Not available for this game setup"
+                        : editor.FormatValue(editor.GetProfileComparisonValue()),
                     profileSettings.TryGetValue(key, out ProfileSetting? setting)
-                        ? setting.Value
+                        ? editor?.FormatValue(setting.Value) ?? setting.Value
                         : "→ Game default");
             }).ToArray();
             OnPropertyChanged(nameof(HasProfileComparison));
@@ -975,6 +984,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             ShowMessage($"The saved profile could not be compared: {exception.Message}", "#E04D42");
         }
+    }
+
+    [RelayCommand]
+    private void ClearProfileComparison()
+    {
+        ProfileComparisonName = null;
+        ProfileComparisonRows = [];
+        OnPropertyChanged(nameof(HasProfileComparison));
     }
 
     public UserProfile? GetProfileForExport(string id)
@@ -992,6 +1009,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public void ReportProfileFileError(string action) =>
         ShowMessage($"The profile {action} could not be completed.", "#E04D42");
+
+    public void ReportDiagnosticsCopyError() =>
+        ShowMessage("Diagnostics could not be copied to the clipboard.", "#E04D42");
 
     [RelayCommand]
     private void RequestProfileDeletion(UserProfileRowViewModel? profile)
@@ -1299,8 +1319,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
                     $"{change.FileName} · {change.Key}",
-                    change.Before ?? "Game default",
-                    change.After ?? "Game default"))
+                    FormatReviewValue(change.Key, change.Before),
+                    FormatReviewValue(change.Key, change.After)))
                 .ToArray();
             IsReviewingChanges = true;
             ShowMessage("Check every value, then confirm the write.", "#FF5A00");
@@ -1327,8 +1347,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
                     $"{change.FileName} | {change.Key}",
-                    change.Before ?? "Game default",
-                    change.After ?? "Game default"))
+                    FormatReviewValue(change.Key, change.Before),
+                    FormatReviewValue(change.Key, change.After)))
                 .ToArray();
             OnPropertyChanged(nameof(ReviewSummary));
             OnPropertyChanged(nameof(ReviewDescription));
@@ -1591,7 +1611,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             Task<GameInspectionSnapshot> inspectionTask = Task.Run(_inspector.Inspect);
             Task<HardwareSnapshot> hardwareTask = Task.Run(() => _hardwareProbe.Inspect());
             GameInspectionSnapshot snapshot = await inspectionTask;
-            HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(await hardwareTask);
+            HardwareSnapshot ordinaryHardware = await hardwareTask;
+            HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(_detailedHardwareSnapshot ?? ordinaryHardware);
             OnPropertyChanged(nameof(CanStageHardwareRecommendation));
             if (await Task.Run(() => _settingsEditor.RecoverInterruptedChanges(snapshot)))
             {
@@ -1616,13 +1637,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             {
                 SetDetection("Ancestors detected but not supported for editing", "#D6BC84", "#D6BC84");
             }
+            else if (snapshot.Notices.Any(notice => string.Equals(notice.Code, "game.multiple-installations", StringComparison.Ordinal)))
+            {
+                SetDetection("Multiple Ancestors installations detected", "#D6BC84", "#D6BC84");
+            }
             else
             {
                 SetDetection("Ancestors installation not detected", "#7A877A", "#7A877A");
             }
             InstallationPath = snapshot.Installation?.InstallDirectory ?? "Not detected";
             InstallationDetails = snapshot.Installation is null
-                ? "Store and build unknown"
+                ? snapshot.Notices.Any(notice => string.Equals(notice.Code, "game.multiple-installations", StringComparison.Ordinal))
+                    ? "More than one installation was found. AEC will not choose one automatically."
+                    : "Store and build unknown"
                 : FormatInstallation(snapshot.Installation);
             UserDataPath = snapshot.UserDataDirectory ?? "Not detected";
             BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
@@ -1814,6 +1841,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             : "The settings that make the clearest visual difference";
 
         string query = SearchText.Trim();
+        if (query.Length == 0)
+        {
+            foreach (FeatureGroupRowViewModel existingGroup in FeatureGroups)
+            {
+                _groupExpansionStates[existingGroup.Id] = existingGroup.IsExpanded;
+            }
+        }
+
         foreach (FeatureGroupRowViewModel oldGroup in FeatureGroups)
         {
             oldGroup.Dispose();
@@ -1851,7 +1886,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                     .Select(value => new SettingPresetValueRowViewModel(value.Name, value.Value))
                     .ToArray() ?? [],
                 setting.ActivePresetName,
-                _editors.GetValueOrDefault(setting.Id)))];
+                _editors.GetValueOrDefault(setting.Id),
+                SettingDefinitionCatalog.IsExperimental(setting.Id)))];
 
         return new FeatureGroupRowViewModel(
             group.Id,
@@ -1863,7 +1899,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             settings.Length == 1 ? "1 setting" : $"{settings.Length} settings",
             settings,
             IsAdvancedMode,
-            query.Length > 0);
+            query.Length > 0 || _groupExpansionStates.GetValueOrDefault(group.Id));
     }
 
     private static bool MatchesSearch(
@@ -1929,6 +1965,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         CloseReview();
         UpdatePendingChanges();
+        ApplyViewMode();
         if (HasPendingChanges)
         {
             ShowMessage("Review the pending values, then apply or discard them.", "#FF5A00");
@@ -1952,6 +1989,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
         OnPropertyChanged(nameof(HasCustomProfileSettings));
         OnPropertyChanged(nameof(CanSaveProfile));
+    }
+
+    private string FormatReviewValue(string key, string? rawValue)
+    {
+        SettingEditorViewModel? editor = _editors.Values.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, key, StringComparison.Ordinal));
+        return editor?.FormatValue(rawValue) ?? rawValue ?? "Game default";
     }
 
     private void RefreshProfileLibrary()
