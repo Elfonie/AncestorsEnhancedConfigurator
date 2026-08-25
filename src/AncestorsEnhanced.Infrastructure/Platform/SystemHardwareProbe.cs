@@ -220,7 +220,18 @@ public sealed class SystemHardwareProbe : IHardwareProbe
                 WindowStyle = ProcessWindowStyle.Hidden,
             };
             using Process? process = Process.Start(startInfo);
-            if (process is null || !process.WaitForExit(15_000) || process.ExitCode != 0 || !File.Exists(reportPath))
+            if (process is null)
+            {
+                return [];
+            }
+
+            if (!process.WaitForExit(15_000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                try { process.WaitForExit(1_000); } catch (InvalidOperationException) { }
+                return [];
+            }
+            if (process.ExitCode != 0 || !File.Exists(reportPath))
             {
                 return [];
             }
@@ -252,10 +263,14 @@ public sealed class SystemHardwareProbe : IHardwareProbe
         document.LoadXml(xml);
         return document.SelectNodes("/DxDiag/DisplayDevices/DisplayDevice")?
             .Cast<XmlElement>()
-            .Select(device => new GraphicsAdapterSnapshot(
-                device["CardName"]?.InnerText.Trim() is { Length: > 0 } name ? name : "Unnamed graphics adapter",
-                ParseDxDiagMemory(device["DedicatedMemory"]?.InnerText) ?? ParseDxDiagMemory(device["DisplayMemory"]?.InnerText),
-                IsMemoryAuthoritative: true))
+            .Select(device =>
+            {
+                ulong? dedicated = ParseDxDiagMemory(device["DedicatedMemory"]?.InnerText);
+                return new GraphicsAdapterSnapshot(
+                    device["CardName"]?.InnerText.Trim() is { Length: > 0 } name ? name : "Unnamed graphics adapter",
+                    dedicated ?? ParseDxDiagMemory(device["DisplayMemory"]?.InnerText),
+                    IsMemoryAuthoritative: dedicated.HasValue);
+            })
             .OrderBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray()
             ?? [];
@@ -264,7 +279,7 @@ public sealed class SystemHardwareProbe : IHardwareProbe
     private static ulong? ParseDxDiagMemory(string? value)
     {
         Match match = MemoryMegabytes.Match(value ?? string.Empty);
-        if (!match.Success || !double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out double megabytes) || megabytes <= 0)
+        if (!match.Success || !double.TryParse(match.Groups[1].Value.Replace(',', '.'), System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out double megabytes) || megabytes <= 0)
         {
             return null;
         }

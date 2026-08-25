@@ -589,7 +589,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void SaveSettings()
+    private void SaveSettings(bool waitForCompletion = false)
     {
         var settings = new ToolSettings
         {
@@ -607,6 +607,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
         string path = ToolSettingsPath();
         int version = Interlocked.Increment(ref _settingsVersion);
+        Task pending;
         lock (_settingsWriteGate)
         {
             if (_disposed)
@@ -614,11 +615,18 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            _settingsWriteTail = _settingsWriteTail.ContinueWith(
+            pending = _settingsWriteTail = _settingsWriteTail.ContinueWith(
                 _ => WriteSettings(path, settings, version),
                 CancellationToken.None,
                 TaskContinuationOptions.None,
                 TaskScheduler.Default);
+        }
+
+        // Metadata changes protect retention immediately. Waiting here is only
+        // used for favorite/name updates and closes the disk-vs-memory race.
+        if (waitForCompletion)
+        {
+            pending.GetAwaiter().GetResult();
         }
     }
 
@@ -771,7 +779,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         {
             _checkpointMetadata[key] = normalized;
         }
-        SaveSettings();
+        SaveSettings(waitForCompletion: true);
     }
 
     private void RemoveMetadataForMissingCheckpoints(SaveGamesSnapshot snapshot)

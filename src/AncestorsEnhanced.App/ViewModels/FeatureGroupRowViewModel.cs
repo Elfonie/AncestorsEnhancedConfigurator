@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace AncestorsEnhanced.App.ViewModels;
 
-public partial class FeatureGroupRowViewModel : ViewModelBase
+public partial class FeatureGroupRowViewModel : ViewModelBase, IDisposable
 {
     private bool _hasResettableChanges;
     [ObservableProperty]
@@ -77,5 +77,17 @@ public partial class FeatureGroupRowViewModel : ViewModelBase
             _hasResettableChanges = value;
             OnPropertyChanged(nameof(HasResettableChanges));
         }
+    }
+
+    public void Dispose()
+    {
+        foreach (FeatureSettingRowViewModel setting in Settings)
+        {
+            if (setting.Editor is { } editor)
+            {
+                editor.Changed -= OnEditorChanged;
+            }
+        }
+        GC.SuppressFinalize(this);
     }
 }

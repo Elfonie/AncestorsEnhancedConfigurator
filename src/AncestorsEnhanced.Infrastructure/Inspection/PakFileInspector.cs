@@ -1,5 +1,7 @@
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.FileSystem;
+using System.Security.Cryptography;
+
 
 namespace AncestorsEnhanced.Infrastructure.Inspection;
 
@@ -36,7 +38,7 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
                     file.FullPath,
                     file.SizeBytes,
                     file.LastWriteTimeUtc,
-                    Classify(file.Name)))];
+                    Classify(file, fileSystem)))];
         }
         catch (Exception exception) when (InspectionErrors.IsExpected(exception))
         {
@@ -48,18 +50,34 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
         }
     }
 
-    private static PakClassification Classify(string name)
+    private static PakClassification Classify(ReadOnlyFileMetadata file, IReadOnlyFileSystem fileSystem)
     {
+        string name = file.Name;
         if (string.Equals(name, "Ancestors-WindowsNoEditor.pak", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(name, "VL01E01.pak", StringComparison.OrdinalIgnoreCase))
         {
             return PakClassification.BaseGame;
         }
 
-        if (string.Equals(name, "AncestorsEnhanced-Vignette_P.pak", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(name, "AncestorsEnhanced-Gameplay_P.pak", StringComparison.OrdinalIgnoreCase))
+        // AEC ownership is proven by a sidecar hash written when AEC creates the
+        // package. A matching filename alone is never enough, since users and
+        // other mods can place identically named files in the Paks directory.
+        string marker = file.FullPath + ".aec-owned.sha256";
+        if (fileSystem.FileExists(marker))
         {
-            return PakClassification.AecOwned;
+            try
+            {
+                string expected = fileSystem.ReadAllText(marker).Trim();
+                string actual = Convert.ToHexString(SHA256.HashData(fileSystem.ReadAllBytes(file.FullPath)));
+                if (string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                {
+                    return PakClassification.AecOwned;
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or CryptographicException)
+            {
+                // Unverifiable ownership remains PatchStyle below.
+            }
         }
 
         return name.EndsWith("_P.pak", StringComparison.OrdinalIgnoreCase)

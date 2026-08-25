@@ -26,6 +26,21 @@ public sealed class SystemHardwareProbeTests
 
         Assert.Equal("Example GPU", adapter.Name);
         Assert.Equal(12012UL * 1024 * 1024, adapter.ReportedMemoryBytes);
+        Assert.True(adapter.IsMemoryAuthoritative);
+    }
+
+    [Fact]
+    public void ParseDxDiagDisplayMemoryIsInformationalAndAcceptsDecimalComma()
+    {
+        GraphicsAdapterSnapshot adapter = Assert.Single(SystemHardwareProbe.ParseDxDiagXml("""
+            <DxDiag><DisplayDevices><DisplayDevice>
+              <CardName>Integrated GPU</CardName>
+              <DisplayMemory>8191,5 MB</DisplayMemory>
+            </DisplayDevice></DisplayDevices></DxDiag>
+            """));
+
+        Assert.Equal((ulong)(8191.5 * 1024 * 1024), adapter.ReportedMemoryBytes);
+        Assert.False(adapter.IsMemoryAuthoritative);
     }
 
     [Fact]

@@ -53,8 +53,12 @@ public sealed class ReadOnlyAncestorsInspectorTests
         CreateValidInstallation(steamRoot);
         string paks = Path.Combine(
             steamRoot, "steamapps", "common", "Ancestors The Humankind Odyssey", "Ancestors", "Content", "Paks");
-        File.WriteAllBytes(Path.Combine(paks, "AncestorsEnhanced-Vignette_P.pak"), [1]);
-        File.WriteAllBytes(Path.Combine(paks, "AncestorsEnhanced-Gameplay_P.pak"), [1]);
+        foreach (string name in new[] { "AncestorsEnhanced-Vignette_P.pak", "AncestorsEnhanced-Gameplay_P.pak" })
+        {
+            string path = Path.Combine(paks, name);
+            File.WriteAllBytes(path, [1]);
+            File.WriteAllText(path + ".aec-owned.sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData([1])));
+        }
 
         GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
             new PhysicalReadOnlyFileSystem(),

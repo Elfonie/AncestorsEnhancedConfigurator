@@ -81,7 +81,7 @@
             BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="20">
         <StackPanel Spacing="1">
-          <TextBlock Text="{Binding ProductName}"
+          <TextBlock Text="{Binding PageContextLabel}"
                      FontSize="23"
                      FontWeight="SemiBold"
                      Foreground="{DynamicResource PrimaryTextBrush}" />
@@ -234,12 +234,13 @@
                 <Button Content="Manage profiles" Command="{Binding ShowProfilesCommand}" />
               </StackPanel>
             </Grid>
+            <TextBlock Text="Quality &amp; image style" FontSize="12" Foreground="#B8D7E5" Margin="0,4,0,0" />
             <ItemsControl ItemsSource="{Binding PrimaryGraphicsPresets}">
               <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
                   <Button Margin="0,0,8,6" MinHeight="54" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}">
-                    <StackPanel Spacing="1"><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" /><TextBlock Text="{Binding Summary}" FontSize="11" /></StackPanel>
+                    <StackPanel Spacing="1"><TextBlock Text="{Binding Category}" FontSize="10" Foreground="#78909C" /><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" /><TextBlock Text="{Binding Summary}" FontSize="11" /></StackPanel>
                   </Button>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -250,7 +251,7 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
                     <Button Margin="0,0,8,6" MinHeight="48" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}">
-                      <StackPanel Spacing="1"><TextBlock Text="{Binding DisplayName}" /><TextBlock Text="{Binding Summary}" FontSize="11" /></StackPanel>
+                      <StackPanel Spacing="1"><TextBlock Text="{Binding Category}" FontSize="10" Foreground="#78909C" /><TextBlock Text="{Binding DisplayName}" /><TextBlock Text="{Binding Summary}" FontSize="11" /></StackPanel>
                     </Button>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -931,8 +932,6 @@
               <TextBox PlaceholderText="Short description optional" Text="{Binding NewProfileDescription}" MaxLength="400" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" />
               <StackPanel Spacing="3">
                 <CheckBox IsChecked="True" IsEnabled="False" Content="Graphics settings" />
-                <CheckBox IsChecked="False" IsEnabled="False" Content="Gameplay settings  Coming soon" />
-                <CheckBox IsChecked="False" IsEnabled="False" Content="Display settings  Coming soon" />
               </StackPanel>
               <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                 <Button Content="Cancel" Command="{Binding CancelCreatingProfileCommand}" />

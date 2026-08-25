@@ -1683,7 +1683,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 watchdog,
                 dispatchToUi: null,
                 mutationGate: _mutationGate,
-                storeName: context.Store.ToString());
+                storeName: context.Store switch
+                {
+                    StoreKind.Gog => "GOG",
+                    StoreKind.EpicGames => "Epic Games",
+                    StoreKind.Heroic => "Heroic",
+                    StoreKind.Steam => "Steam",
+                    _ => context.Store.ToString()
+                });
             viewModel.Refresh(snapshot);
             return viewModel;
         }
@@ -1723,6 +1730,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             : "The settings that make the clearest visual difference";
 
         string query = SearchText.Trim();
+        foreach (FeatureGroupRowViewModel oldGroup in FeatureGroups)
+        {
+            oldGroup.Dispose();
+        }
+
         FeatureGroups = _allFeatureGroups
             .Where(group => IsAdvancedMode || group.IsEssential)
             .Select(group => CreateGroupRow(group, query))
