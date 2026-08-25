@@ -35,6 +35,30 @@ public partial class App : Application
             AccessibilityPreferences preferences = accessibilityPreferences.Load();
             AccessibilityTheme.Apply(this, preferences.HighContrastEnabled);
 
+            DiscordRichPresenceService? discordPresence = null;
+            var discordTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            discordTimer.Tick += (_, _) => discordPresence?.RunCallbacks();
+            bool windowOpened = false;
+            void SetDiscordRichPresence(bool enabled)
+            {
+                if (!enabled)
+                {
+                    discordTimer.Stop();
+                    discordPresence?.Dispose();
+                    discordPresence = null;
+                    return;
+                }
+
+                if (!windowOpened)
+                {
+                    return;
+                }
+
+                discordPresence ??= new DiscordRichPresenceService();
+                discordPresence.Start();
+                discordTimer.Start();
+            }
+
             var viewModel = new MainViewModel(
                 ReadOnlyAncestorsInspector.CreateDefault(),
                 new SafeGameSettingsEditor(),
@@ -43,9 +67,16 @@ public partial class App : Application
                 highContrastChanged: enabled =>
                 {
                     AccessibilityTheme.Apply(this, enabled);
-                    accessibilityPreferences.TrySave(new AccessibilityPreferences(enabled));
+                    preferences = preferences with { HighContrastEnabled = enabled };
+                    accessibilityPreferences.TrySave(preferences);
+                },
+                discordRichPresenceEnabled: preferences.DiscordRichPresenceEnabled,
+                discordRichPresenceChanged: enabled =>
+                {
+                    preferences = preferences with { DiscordRichPresenceEnabled = enabled };
+                    accessibilityPreferences.TrySave(preferences);
+                    SetDiscordRichPresence(enabled);
                 });
-            var discordPresence = new DiscordRichPresenceService();
             var window = new MainWindow
             {
                 DataContext = viewModel,
@@ -93,20 +124,18 @@ public partial class App : Application
             };
             window.Opened += async (_, _) =>
             {
-                discordPresence.Start();
+                windowOpened = true;
+                SetDiscordRichPresence(preferences.DiscordRichPresenceEnabled);
                 await viewModel.InitializeAsync();
             };
             int retryCount = 0;
             const int MaxAutomaticRetries = 3;
             DispatcherTimer? retryTimer = null;
-            var discordTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            discordTimer.Tick += (_, _) => discordPresence.RunCallbacks();
-            discordTimer.Start();
             window.Closed += (_, _) =>
             {
                 retryTimer?.Stop();
                 discordTimer.Stop();
-                discordPresence.Dispose();
+                discordPresence?.Dispose();
                 trayIcon.Dispose();
                 viewModel.Dispose();
             };

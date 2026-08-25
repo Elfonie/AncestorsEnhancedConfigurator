@@ -2,7 +2,9 @@ using System.Text.Json;
 
 namespace AncestorsEnhanced.App.Accessibility;
 
-public sealed record AccessibilityPreferences(bool HighContrastEnabled = false);
+public sealed record AccessibilityPreferences(
+    bool HighContrastEnabled = false,
+    bool DiscordRichPresenceEnabled = false);
 
 public sealed class AccessibilityPreferencesStore
 {

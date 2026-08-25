@@ -126,7 +126,9 @@ public partial class SettingEditorViewModel : ViewModelBase
     public bool TryGetCustomProfileValue(out string? value)
     {
         value = null;
-        if (!ShowOverrideToggle || !UseCustomValue || HasUnsupportedCurrentValue)
+        if ((!ShowOverrideToggle && !_snapshot.IsDirect) ||
+            (!UseCustomValue && !_snapshot.IsDirect) ||
+            HasUnsupportedCurrentValue)
         {
             return false;
         }

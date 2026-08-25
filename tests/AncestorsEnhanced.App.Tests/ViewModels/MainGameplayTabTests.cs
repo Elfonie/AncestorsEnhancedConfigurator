@@ -117,6 +117,12 @@ public sealed class MainGameplayTabTests
         Assert.False(viewModel.IsGameplaySimpleMode);
         Assert.Equal(7, viewModel.GameplayResearchValues.Count);
 
+        GameplayDifficultyPresetViewModel survival = Assert.Single(viewModel.GameplayDifficultyPresets, preset => preset.Name == "Survival (planned)");
+        viewModel.SelectGameplayPresetCommand.Execute(survival);
+
+        Assert.All(viewModel.GameplaySimpleControls, control => Assert.Equal(130, control.MultiplierPercent));
+        Assert.Contains("Survival", viewModel.GameplayDraftStatus, StringComparison.Ordinal);
+
         viewModel.ShowGameplaySimpleCommand.Execute(null);
 
         Assert.True(viewModel.IsGameplaySimpleMode);

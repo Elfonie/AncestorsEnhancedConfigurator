@@ -31,6 +31,19 @@ public sealed class UserProfileLibraryTests : IDisposable
         var library = new UserProfileLibrary(_temporaryDirectory);
 
         Assert.Empty(library.List());
+        Assert.Equal(1, library.UnreadableProfileCount);
+    }
+
+    [Fact]
+    public void DeleteRemovesOnlyTheOwnedProfile()
+    {
+        var library = new UserProfileLibrary(_temporaryDirectory);
+        StoredUserProfile saved = library.Save(Profile("Delete me"));
+
+        library.Delete(saved.Id);
+
+        Assert.Empty(library.List());
+        Assert.False(File.Exists(Path.Combine(_temporaryDirectory, saved.Id + ".aecprofile")));
     }
 
     [Fact]

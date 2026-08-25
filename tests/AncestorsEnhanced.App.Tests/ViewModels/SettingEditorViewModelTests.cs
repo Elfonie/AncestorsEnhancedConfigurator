@@ -79,6 +79,8 @@ public sealed class SettingEditorViewModelTests
 
         Assert.False(viewModel.ShowOverrideToggle);
         Assert.Equal("120", viewModel.CreateRequest("Frame-rate limit").Value);
+        Assert.True(viewModel.TryGetCustomProfileValue(out string? profileValue));
+        Assert.Equal("120", profileValue);
     }
 
     [Fact]

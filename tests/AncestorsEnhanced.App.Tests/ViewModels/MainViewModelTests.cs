@@ -698,6 +698,8 @@ public sealed class MainViewModelTests
     {
         private readonly Dictionary<string, UserProfile> _profiles = profiles.ToDictionary(profile => profile.Id, profile => profile.Profile);
 
+        public int UnreadableProfileCount { get; init; }
+
         public IReadOnlyList<StoredUserProfile> List() =>
             _profiles.Select(pair => new StoredUserProfile(pair.Key, pair.Value)).ToArray();
 
@@ -711,17 +713,23 @@ public sealed class MainViewModelTests
             return new StoredUserProfile(id, validated);
         }
 
+        public void Delete(string id) => _profiles.Remove(id);
+
         public UserProfile ReadExternal(string path) => throw new NotSupportedException();
     }
 
     private sealed class FailingProfileLibrary : IUserProfileLibrary
     {
+        public int UnreadableProfileCount => 0;
+
         public IReadOnlyList<StoredUserProfile> List() => [];
 
         public UserProfile Read(string id) => throw new FileNotFoundException();
 
         public StoredUserProfile Save(UserProfile profile) =>
             throw new InvalidDataException("unsupported test value");
+
+        public void Delete(string id) => throw new FileNotFoundException();
 
         public UserProfile ReadExternal(string path) => throw new NotSupportedException();
     }

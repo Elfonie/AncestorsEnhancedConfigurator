@@ -66,6 +66,19 @@ public sealed class UserProfileCodecTests
         Assert.Throws<InvalidDataException>(() => UserProfileCodec.Serialize(profile));
     }
 
+    [Fact]
+    public void SerializeAndDeserializeAllowsMultilineDescriptions()
+    {
+        UserProfile profile = Profile(graphics: [new ProfileSetting("r.MotionBlurQuality", "0")]) with
+        {
+            Description = "First line\nSecond line",
+        };
+
+        UserProfile restored = UserProfileCodec.Deserialize(UserProfileCodec.Serialize(profile));
+
+        Assert.Equal(profile.Description, restored.Description);
+    }
+
     private static UserProfile Profile(IReadOnlyList<ProfileSetting> graphics) =>
         new(
             UserProfile.CurrentSchemaVersion,

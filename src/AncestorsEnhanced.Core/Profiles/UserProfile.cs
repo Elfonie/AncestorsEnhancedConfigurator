@@ -154,7 +154,8 @@ public static class UserProfileCodec
             }
             return;
         }
-        if (value.Length > maximumLength || value.Any(char.IsControl))
+        if (value.Length > maximumLength || value.Any(character =>
+                char.IsControl(character) && character is not '\r' and not '\n'))
         {
             throw new InvalidDataException($"The {label} is invalid.");
         }

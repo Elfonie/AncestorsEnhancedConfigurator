@@ -30,7 +30,7 @@ Creating normal save checkpoints and automatic checkpoints is allowed while the 
 | Epic Games on Windows | Supported | Supported with a verified content signature | Supported with a verified installation | Available, experimental |
 | GOG on Windows | Supported | Supported with a verified content signature | Supported with a verified installation | Available, experimental |
 | Steam through Proton on Linux | Supported | Supported for a verified installation | Supported | Available, experimental |
-| Heroic | Detection only | Read-only in 0.9.0 | Read-only in 0.9.0 | Unavailable in 0.9.0 |
+| Heroic | Detection only | Read-only | Read-only | Unavailable |
 
 Detection alone never authorises a write. Before changing a file, the Configurator verifies the game identity, installation context, and target. Missing or contradictory evidence disables editing instead of guessing.
 
@@ -55,17 +55,11 @@ The Configurator can create and restore checkpoints for each of the five Ancesto
 
 Restoring a checkpoint first creates a safety checkpoint of the current live save. A restore still changes live game progress, so verify the result in-game before continuing a long play session.
 
-## Experimental save modifications
+## Gameplay difficulty
 
-The following modifications create a separate checkpoint instead of overwriting the live save:
+Gameplay contains Simple and Advanced views. It currently documents build-bound, statically verified difficulty candidates and planned presets; it does not create or load a gameplay PAK yet. Save games are never modified by gameplay difficulty.
 
-- Max Neuronal Energy
-- Max Stamina and Energy
-- Heal Current Ape
-
-The injector uses explicit structural paths, rejects ambiguous matches, and verifies its own output. Real-save and in-game validation is not yet complete for every modification, so this part of 0.9.0 remains experimental. Keep your own save backup and verify the result in-game.
-
-Developer validation details are tracked in [the save fixture documentation](tests/AncestorsEnhanced.Infrastructure.Tests/SaveGames/Fixtures/README.md).
+Before any difficulty control becomes active, AEC requires deterministic PAK creation, exact asset verification, conflict handling, and an in-game loading check.
 
 ## Removing tool changes
 
@@ -93,8 +87,8 @@ Download the matching archive from [GitHub Releases](https://github.com/Elfonie/
 
 | Platform | Archive | Start |
 | --- | --- | --- |
-| Windows x64 | `AncestorsEnhanced-0.9.0-win-x64.zip` | Extract and run `AncestorsEnhanced.App.exe` |
-| Linux x64 | `AncestorsEnhanced-0.9.0-linux-x64.zip` | Extract and run `./AncestorsEnhanced.App` |
+| Windows x64 | `AncestorsEnhanced-1.0.0-win-x64.zip` | Extract and run `AncestorsEnhanced.App.exe` |
+| Linux x64 | `AncestorsEnhanced-1.0.0-linux-x64.zip` | Extract and run `./AncestorsEnhanced.App` |
 
 On Linux, run `chmod +x AncestorsEnhanced.App` if the archive tool did not preserve the executable bit.
 

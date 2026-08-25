@@ -32,6 +32,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private SettingsChangePlan? _reviewPlan;
     private bool _reviewIsToolChangeRemoval;
     private readonly Action<bool>? _highContrastChanged;
+    private readonly Action<bool>? _discordRichPresenceChanged;
 
     [ObservableProperty]
     public partial string DetectionStatus { get; set; } = "Not checked yet";
@@ -122,82 +123,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial IReadOnlyList<GameplayDifficultyPresetViewModel> GameplayDifficultyPresets { get; set; } =
-    [
-        new(
-            "Game default",
-            "100% across every available control",
-            "No gameplay patch is created. This is the reference point for all future percentage changes."),
-        new(
-            "Explorer (planned)",
-            "Lower survival pressure",
-            "Will reduce the food, water, sleep and fall-damage categories together after the PAK load path is verified."),
-        new(
-            "Survival (planned)",
-            "Higher survival pressure",
-            "Will raise the same simple categories together. It will not silently alter combat, QTEs or animal damage."),
-        new(
-            "Custom (planned)",
-            "Choose each simple category yourself",
-            "Each available category will use 10% steps relative to the game default."),
-    ];
+        GameplayDifficultyCatalog.CreatePresets();
 
     [ObservableProperty]
     public partial IReadOnlyList<GameplayDifficultyControlViewModel> GameplaySimpleControls { get; set; } =
-    [
-        new(
-            "Food need",
-            "24 portions per day · game default",
-            "Higher is harder: the named Food NeededPerDay value defines a larger food requirement."),
-        new(
-            "Water need",
-            "30 portions per day · game default",
-            "Higher is harder: the named Liquid NeededPerDay value defines a larger liquid requirement."),
-        new(
-            "Sleep need",
-            "16 portions per day · game default",
-            "Higher is harder: the named Sleep NeededPerDay value defines a larger sleep requirement."),
-        new(
-            "Energy recovery",
-            "1.0 energy per second · game default",
-            "Higher is easier while energy regeneration is active. Normal stamina and health limits still apply."),
-        new(
-            "Fall damage",
-            "Minor 2.5% · Major 5% · game default",
-            "Higher is harder: minor and major falls use separate, named damage values and will remain a paired Simple control."),
-    ];
+        GameplayDifficultyCatalog.CreateSimpleControls();
 
     [ObservableProperty]
     public partial IReadOnlyList<GameplayResearchValueViewModel> GameplayResearchValues { get; set; } =
-    [
-        new(
-            "Energy recovery delay",
-            "1.5 seconds",
-            "The delay before resting enables energy regeneration. This is not a regeneration rate."),
-        new(
-            "Cumulative energy-loss threshold",
-            "0.50 energy",
-            "Recorded energy loss at or beyond this threshold triggers one stamina penalty, then the accumulator resets."),
-        new(
-            "Cumulative energy-loss stamina penalty",
-            "0.15 stamina",
-            "The penalty is one absolute stamina subtraction per threshold crossing; excess loss is not carried over."),
-        new(
-            "Major wound base recovery time",
-            "480 minutes",
-            "The game multiplies this by one minus the applicable wound-duration ability modifiers, clamped to 0–1."),
-        new(
-            "Minor wound stamina penalty",
-            "0.15 maximum stamina",
-            "While wounded, this is a maximum-stamina modifier, not an immediate current-stamina drain."),
-        new(
-            "Major wound stamina penalty",
-            "0.30 maximum stamina",
-            "While wounded, this is a maximum-stamina modifier, not an immediate current-stamina drain."),
-        new(
-            "Major poison stamina penalty",
-            "0.25 maximum stamina",
-            "While majorly poisoned, this is a maximum-stamina modifier. The minor-poison override is not known."),
-    ];
+        GameplayDifficultyCatalog.CreateAdvancedValues();
 
     [ObservableProperty]
     public partial bool IsProfilesView { get; set; }
@@ -209,10 +143,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial bool IsHighContrastEnabled { get; set; }
 
     [ObservableProperty]
+    public partial bool IsDiscordRichPresenceEnabled { get; set; }
+
+    [ObservableProperty]
     public partial IReadOnlyList<UserProfileRowViewModel> UserProfiles { get; set; } = [];
 
     [ObservableProperty]
     public partial ImportedProfileViewModel? ImportedProfile { get; set; }
+
+    [ObservableProperty]
+    public partial UserProfileRowViewModel? ProfilePendingDeletion { get; set; }
 
     [ObservableProperty]
     public partial bool IsCreatingProfile { get; set; }
@@ -229,7 +169,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         Func<VerifiedGameContext, ISaveGameManager>? saveManagerFactory = null,
         IUserProfileLibrary? profileLibrary = null,
         bool highContrastEnabled = false,
-        Action<bool>? highContrastChanged = null)
+        Action<bool>? highContrastChanged = null,
+        bool discordRichPresenceEnabled = false,
+        Action<bool>? discordRichPresenceChanged = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(settingsEditor);
@@ -239,7 +181,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _saveManagerFactory = saveManagerFactory ?? (context => new SafeSaveGameManager(context, _gameContextVerifier));
         _profileLibrary = profileLibrary ?? EmptyUserProfileLibrary.Instance;
         _highContrastChanged = highContrastChanged;
+        _discordRichPresenceChanged = discordRichPresenceChanged;
         IsHighContrastEnabled = highContrastEnabled;
+        IsDiscordRichPresenceEnabled = discordRichPresenceEnabled;
         _mutationGate.Changed += OnMutationGateChanged;
 
         ProductName = "Ancestors Enhanced Configurator";
@@ -265,6 +209,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool HasGameplaySimpleControls => GameplaySimpleControls.Count > 0;
 
+    public string GameplayDraftStatus { get; private set; } = "Game default draft · no PAK created";
+
     public bool ShowProfilesView => IsProfilesView;
 
     public bool ShowSettingsView => IsSettingsView;
@@ -272,6 +218,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool HasUserProfiles => UserProfiles.Count > 0;
 
     public bool HasImportedProfile => ImportedProfile is not null;
+
+    public bool HasProfilePendingDeletion => ProfilePendingDeletion is not null;
 
     public bool HasCustomProfileSettings => _editors.Values.Any(editor =>
         editor.TryGetCustomProfileValue(out _));
@@ -426,6 +374,23 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void ShowGameplayAdvanced() => IsGameplayAdvancedMode = true;
+
+    [RelayCommand]
+    private void SelectGameplayPreset(GameplayDifficultyPresetViewModel? preset)
+    {
+        if (preset is null)
+        {
+            return;
+        }
+
+        foreach (GameplayDifficultyControlViewModel control in GameplaySimpleControls)
+        {
+            control.MultiplierPercent = preset.MultiplierPercent;
+        }
+
+        GameplayDraftStatus = $"{preset.Name} draft · no PAK created";
+        OnPropertyChanged(nameof(GameplayDraftStatus));
+    }
 
     [RelayCommand]
     private void ShowProfiles()
@@ -597,6 +562,42 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public void ReportProfileFileError(string action) =>
         ShowMessage($"The profile {action} could not be completed.", "#E04D42");
 
+    [RelayCommand]
+    private void RequestProfileDeletion(UserProfileRowViewModel? profile)
+    {
+        if (profile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        ProfilePendingDeletion = profile;
+    }
+
+    [RelayCommand]
+    private void CancelProfileDeletion() => ProfilePendingDeletion = null;
+
+    [RelayCommand]
+    private void ConfirmProfileDeletion()
+    {
+        UserProfileRowViewModel? profile = ProfilePendingDeletion;
+        if (profile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            _profileLibrary.Delete(profile.Id);
+            ProfilePendingDeletion = null;
+            RefreshProfileLibrary();
+            ShowMessage($"Deleted profile: {profile.Name}", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The saved profile could not be deleted: {exception.Message}", "#E04D42");
+        }
+    }
+
     private void OnChildPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SaveManagerViewModel.IsBusy))
@@ -655,11 +656,17 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _highContrastChanged?.Invoke(value);
     }
 
+    partial void OnIsDiscordRichPresenceEnabledChanged(bool value) =>
+        _discordRichPresenceChanged?.Invoke(value);
+
     partial void OnUserProfilesChanged(IReadOnlyList<UserProfileRowViewModel> value) =>
         OnPropertyChanged(nameof(HasUserProfiles));
 
     partial void OnImportedProfileChanged(ImportedProfileViewModel? value) =>
         OnPropertyChanged(nameof(HasImportedProfile));
+
+    partial void OnProfilePendingDeletionChanged(UserProfileRowViewModel? value) =>
+        OnPropertyChanged(nameof(HasProfilePendingDeletion));
 
     partial void OnNewProfileNameChanged(string value) =>
         OnPropertyChanged(nameof(CanSaveProfile));
@@ -1339,6 +1346,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                     ProfileContents(profile.Profile),
                     profile.Profile))
                 .ToArray();
+            if (_profileLibrary.UnreadableProfileCount > 0)
+            {
+                string count = _profileLibrary.UnreadableProfileCount.ToString(CultureInfo.CurrentCulture);
+                ShowMessage($"{count} local profile(s) could not be read and were left untouched.", "#D6BC84");
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -1389,6 +1401,17 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 return;
             }
             candidates.Add((editor, setting));
+        }
+
+        var profileKeys = new HashSet<string>(
+            profile.Graphics.Select(setting => setting.Key),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (SettingEditorViewModel editor in _editors.Values)
+        {
+            if (editor.ShowOverrideToggle && editor.HasCurrentOverride && !profileKeys.Contains(editor.Key))
+            {
+                editor.UseGameDefault();
+            }
         }
 
         foreach ((SettingEditorViewModel editor, ProfileSetting setting) in candidates)
@@ -1459,12 +1482,17 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         public static readonly EmptyUserProfileLibrary Instance = new();
 
+        public int UnreadableProfileCount => 0;
+
         public IReadOnlyList<StoredUserProfile> List() => [];
 
         public UserProfile Read(string id) =>
             throw new NotSupportedException("The profile library is not available.");
 
         public StoredUserProfile Save(UserProfile profile) =>
+            throw new NotSupportedException("The profile library is not available.");
+
+        public void Delete(string id) =>
             throw new NotSupportedException("The profile library is not available.");
 
         public UserProfile ReadExternal(string path) =>

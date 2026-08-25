@@ -17,8 +17,11 @@ public sealed class UserProfileLibrary : IUserProfileLibrary
         _rootDirectory = Path.GetFullPath(rootDirectory ?? throw new ArgumentNullException(nameof(rootDirectory)));
     }
 
+    public int UnreadableProfileCount { get; private set; }
+
     public IReadOnlyList<StoredUserProfile> List()
     {
+        UnreadableProfileCount = 0;
         if (!Directory.Exists(_rootDirectory) || IsReparsePoint(_rootDirectory))
         {
             return [];
@@ -37,6 +40,7 @@ public sealed class UserProfileLibrary : IUserProfileLibrary
             }
             catch (Exception exception) when (IsProfileReadException(exception))
             {
+                UnreadableProfileCount++;
             }
         }
 
@@ -82,6 +86,17 @@ public sealed class UserProfileLibrary : IUserProfileLibrary
             throw new FileNotFoundException("The saved profile could not be found.", path);
         }
         return ReadFile(path);
+    }
+
+    public void Delete(string id)
+    {
+        string path = GetOwnedPath(id);
+        if (!File.Exists(path) || IsReparsePoint(path))
+        {
+            throw new FileNotFoundException("The saved profile could not be found.", path);
+        }
+
+        File.Delete(path);
     }
 
     public UserProfile ReadExternal(string path)
