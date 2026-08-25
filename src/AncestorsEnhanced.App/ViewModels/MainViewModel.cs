@@ -169,6 +169,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial bool IsSaveGamesView { get; set; }
 
     [ObservableProperty]
+    public partial bool IsHomeView { get; set; } = true;
+
+    [ObservableProperty]
     public partial SaveManagerViewModel? SaveManager { get; set; }
 
     [ObservableProperty]
@@ -283,7 +286,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public string Phase { get; }
 
-    public bool ShowGraphicsView => !IsSaveGamesView && !IsGameplayView && !IsProfilesView && !IsSettingsView && !IsDiagnosticsView;
+    public bool ShowHomeView => IsHomeView;
+
+    public bool ShowGraphicsView => !IsHomeView && !IsSaveGamesView && !IsGameplayView && !IsProfilesView && !IsSettingsView && !IsDiagnosticsView;
 
     public bool ShowSaveGamesView => IsSaveGamesView;
 
@@ -298,6 +303,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool HasGameplaySimpleControls => GameplaySimpleControls.Count > 0;
 
     public string GameplayDraftStatus { get; private set; } = "Game default draft · no PAK created";
+
+    public string HomeGraphicsSummary => HasGamePreset
+        ? $"{GamePresetName} · {CustomOverrideCount} custom change(s)"
+        : "Graphics settings will appear after game detection.";
+
+    public string HomeGameplaySummary => GameplayReadiness.IsBlocked
+        ? "No gameplay mod active"
+        : GameplayDraftStatus;
+
+    public string HomeSavesSummary => SaveManager is null
+        ? "Save games will appear after detection."
+        : SaveManager.HasSlots
+            ? $"{SaveManager.Slots.Count(slot => slot.HasSave)} save slot(s) · {SaveManager.BackupHealthSummary}"
+            : "No save slots found yet.";
 
     public bool ShowProfilesView => IsProfilesView;
 
@@ -386,6 +405,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool IsAllGraphicsFilter => GraphicsFilter == "All";
 
     public bool IsModifiedGraphicsFilter => GraphicsFilter == "Modified";
+
+    public IReadOnlyList<BuiltInGraphicsPresetViewModel> PrimaryGraphicsPresets =>
+        BuiltInGraphicsPresets.Where(preset => preset.Name is not "Ultra Tweak" and not "Low VRAM Tweak").ToArray();
+
+    public IReadOnlyList<BuiltInGraphicsPresetViewModel> AdditionalGraphicsTweaks =>
+        BuiltInGraphicsPresets.Where(preset => preset.Name is "Ultra Tweak" or "Low VRAM Tweak").ToArray();
 
     public bool IsGameDefaultsGraphicsFilter => GraphicsFilter == "Game defaults";
 
@@ -514,6 +539,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ShowSaveGames()
     {
+        IsHomeView = false;
         IsGameplayView = false;
         IsProfilesView = false;
         IsSettingsView = false;
@@ -525,6 +551,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ShowGameplay()
     {
+        IsHomeView = false;
         IsSaveGamesView = false;
         IsProfilesView = false;
         IsSettingsView = false;
@@ -560,6 +587,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ShowProfiles()
     {
+        IsHomeView = false;
         IsSaveGamesView = false;
         IsGameplayView = false;
         IsSettingsView = false;
@@ -572,6 +600,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ShowSettings()
     {
+        IsHomeView = false;
         IsSaveGamesView = false;
         IsGameplayView = false;
         IsProfilesView = false;
@@ -583,6 +612,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ShowDiagnostics()
     {
+        IsHomeView = false;
         IsSaveGamesView = false;
         IsGameplayView = false;
         IsProfilesView = false;
@@ -679,6 +709,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         IsCreatingProfile = true;
         NewProfileName = "";
         NewProfileDescription = "";
+    }
+
+    [RelayCommand]
+    private void CreateProfileFromGraphics()
+    {
+        ShowProfiles();
+        StartCreatingProfile();
     }
 
     [RelayCommand]
@@ -970,9 +1007,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             NotifyMutationAvailability();
         }
+
+        if (e.PropertyName is nameof(SaveManagerViewModel.Slots) or nameof(SaveManagerViewModel.BackupHealthSummary))
+        {
+            OnPropertyChanged(nameof(HomeSavesSummary));
+        }
     }
     private void UpdateViewVisibility()
     {
+        OnPropertyChanged(nameof(ShowHomeView));
         OnPropertyChanged(nameof(ShowGraphicsView));
         OnPropertyChanged(nameof(ShowSaveGamesView));
         OnPropertyChanged(nameof(ShowGameplayView));
@@ -984,11 +1027,24 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void ShowGraphics()
     {
+        IsHomeView = false;
         IsSaveGamesView = false;
         IsGameplayView = false;
         IsProfilesView = false;
         IsSettingsView = false;
         IsDiagnosticsView = false;
+        UpdateViewVisibility();
+    }
+
+    [RelayCommand]
+    private void ShowHome()
+    {
+        IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsSettingsView = false;
+        IsDiagnosticsView = false;
+        IsHomeView = true;
         UpdateViewVisibility();
     }
 
@@ -1451,6 +1507,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
             OnPropertyChanged(nameof(CustomOverrideCount));
             OnPropertyChanged(nameof(GamePresetName));
+            OnPropertyChanged(nameof(HomeGraphicsSummary));
+            OnPropertyChanged(nameof(HomeGameplaySummary));
             RebuildEditors();
             UpdatePendingChanges();
             ApplyViewMode();
@@ -1470,6 +1528,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 SaveManager?.Dispose();
                 SaveManager = await CreateSaveManagerAsync();
                 SaveManager?.Activate();
+                OnPropertyChanged(nameof(HomeSavesSummary));
                 _saveGamesRefreshFailed = _verifiedGameContext is not null && SaveManager is null;
                 _lastSaveRecoveryMessage = SaveManager?.LastRecoveryMessage;
             }
@@ -1503,6 +1562,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             PendingChanges = [];
             SaveManager?.Dispose();
             SaveManager = null;
+            OnPropertyChanged(nameof(HomeSavesSummary));
             ShowMessage($"Scan failed: {exception.Message}", "#E04D42");
             LogDetection("failed: " + exception.Message);
             return false;

@@ -174,7 +174,8 @@ public sealed class SaveManagerViewModelTests
                 new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())));
 
         Assert.False(viewModel.IsSaveGamesView);
-        Assert.True(viewModel.ShowGraphicsView);
+        Assert.True(viewModel.ShowHomeView);
+        Assert.False(viewModel.ShowGraphicsView);
         Assert.False(viewModel.ShowSaveGamesView);
 
         viewModel.ShowSaveGamesCommand.Execute(null);
@@ -186,6 +187,12 @@ public sealed class SaveManagerViewModelTests
         viewModel.ShowGraphicsCommand.Execute(null);
 
         Assert.False(viewModel.IsSaveGamesView);
+        Assert.True(viewModel.ShowGraphicsView);
+
+        viewModel.ShowHomeCommand.Execute(null);
+
+        Assert.True(viewModel.ShowHomeView);
+        Assert.False(viewModel.ShowGraphicsView);
     }
 
     [Fact]
