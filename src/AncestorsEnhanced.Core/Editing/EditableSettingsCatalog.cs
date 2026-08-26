@@ -72,6 +72,7 @@ public static class EditableSettingsCatalog
                 ("3", "3 levels"),
                 ("4", "4 levels")),
             ["r.BloomQuality"] = Quality(defaultValue: 5, maximum: 5),
+            ["r.ScreenPercentage"] = Number(100m, 50m, 150m, 5m, unit: "%"),
             ["r.EyeAdaptationQuality"] = Quality(defaultValue: 2, maximum: 2),
             ["r.SceneColorFringeQuality"] = Quality(defaultValue: 0, maximum: 1),
             ["r.LensFlareQuality"] = Quality(defaultValue: 2, maximum: 3),

@@ -57,15 +57,17 @@ Restoring a checkpoint first creates a safety checkpoint of the current live sav
 
 ## Gameplay difficulty
 
-Gameplay contains Simple and Advanced views. It currently documents build-bound, statically verified difficulty candidates and planned presets; it does not create or load a gameplay PAK yet. Save games are never modified by gameplay difficulty.
+Gameplay contains Simple and Advanced views. On the exact researched Steam build, Simple can scale Food need, Water need, Sleep need, and the paired minor/major Fall damage, Bleeding and Poison health-loss values from 10% through 200% in 10% steps. Advanced adds energy recovery speed, wound healing from sleep, wound maximum-stamina penalty, poison recovery from portions, rest delay after energy use, the exhaustion threshold and penalty pair, major wound recovery time, and poison maximum-stamina penalty. An explicit experimental setting extends percentage ranges to 1000%. Explorer, Survival, Hardcore, Custom, and Game default are working starting points; presets leave Advanced controls at game default. Save games are never modified by gameplay difficulty.
 
-Before any difficulty control becomes active, AEC requires deterministic PAK creation, exact asset verification, conflict handling, and an in-game loading check.
+Gameplay changes use the normal review flow. AEC verifies the stock asset hashes and expected bytes, creates and reads back a deterministic PAK v5, installs the PAK and its ownership record through the backed-up transaction system, and detects the active percentages after restart. Updates are compare-and-swap operations; Game default removes only an exactly verified AEC package. Any unverified same-name file or external PAK conflict blocks the write.
+
+The remaining release gate is explicitly runtime-only: the supported game build still needs an in-game verification pass for PAK priority, observed gameplay behavior for every enabled control, stock restoration, restart behavior, and save-game safety. The UI reports that limitation instead of presenting it as completed evidence.
 
 ## Removing tool changes
 
 From the first settings write, the Configurator records a private baseline for every file it owns. **Remove tool changes** is available only when that baseline exists and the current installation and files still match a state the tool can prove.
 
-It restores settings, `System.sav`, vignette, and startup-video changes made through the settings editor. It does not remove:
+It restores settings, `System.sav`, vignette, gameplay PAK, ownership record, and startup-video changes made through the Configurator. It does not remove:
 
 - the Configurator itself
 - save checkpoints or game-progress saves
@@ -93,6 +95,16 @@ Download the matching archive from [GitHub Releases](https://github.com/Elfonie/
 On Linux, run `chmod +x AncestorsEnhanced.App` if the archive tool did not preserve the executable bit.
 
 Each archive contains the application, this README, the MIT license, and `SHA256SUMS.txt`. A separate `.zip.sha256` file is supplied for verifying the complete download.
+
+## Antivirus false positives
+
+Single antivirus engines occasionally flag the Windows executable with generic heuristic signatures (for example ClamAV `Win.Malware.Aotera-*`). The Configurator contains no packed, obfuscated, or self-modifying code and writes only inside the game installation and its own data folders, but some inherent properties raise heuristic scores:
+
+- It modifies game files by design, including byte-level patches inside stock assets.
+- The release archives ship a large third-party native SDK (`discord_partner_sdk.dll`) used for Discord Rich Presence.
+- Release binaries are currently not Authenticode-signed.
+
+To verify a download, compare the archive against the published `.zip.sha256` file and the per-file hashes in `SHA256SUMS.txt`. If your antivirus reports a detection, submit it to the vendor as a false positive (for example [ClamAV](https://www.clamav.net/reports/fp) or [Microsoft](https://www.microsoft.com/en-us/wdsi/filesubmission)), and open a project issue with the product name, engine version, and exact signature so the release can be re-checked.
 
 ## Logs and bug reports
 

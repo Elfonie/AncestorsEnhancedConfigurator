@@ -8,6 +8,7 @@ public sealed record AccessibilityPreferences(
     bool DiscordRichPresenceEnabled = false,
     bool HasCompletedOnboarding = false,
     bool ExperimentalGraphicsSettingsEnabled = false,
+    bool ExperimentalGameplaySettingsEnabled = false,
     bool HasAcknowledgedDetailedHardwareScan = false,
     HardwareSnapshot? DetailedHardwareSnapshot = null);
 

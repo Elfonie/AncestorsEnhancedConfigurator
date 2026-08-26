@@ -13,6 +13,7 @@ internal static class ConfigurationFileOperations
         {
             "AncestorsEnhanced-Vignette_P.pak",
             "AncestorsEnhanced-Gameplay_P.pak",
+            "AncestorsEnhanced-Gameplay_P.pak.aec-owned.sha256",
             "pakchunk99-WindowsNoEditor_P.pak",
         };
 
@@ -477,6 +478,16 @@ internal static class ConfigurationFileOperations
                 installDirectory,
                 "pakchunk99-WindowsNoEditor_P.pak",
                 SettingFileTarget.Pak));
+            targets.Add(GetTargetPath(
+                userDataDirectory,
+                installDirectory,
+                "AncestorsEnhanced-Gameplay_P.pak",
+                SettingFileTarget.Pak));
+            targets.Add(GetTargetPath(
+                userDataDirectory,
+                installDirectory,
+                "AncestorsEnhanced-Gameplay_P.pak.aec-owned.sha256",
+                SettingFileTarget.Pak));
         }
 
         bool recovered = false;
@@ -553,8 +564,7 @@ internal static class ConfigurationFileOperations
 
         string targetHash = Sha256(ReadStableBounded(path, 64L * 1024 * 1024));
         if (!expectedExistingHashes.Contains(targetHash, StringComparer.Ordinal) ||
-            !expectedExistingHashes.Contains(capturedHash, StringComparer.Ordinal) ||
-            string.Equals(targetHash, capturedHash, StringComparison.Ordinal))
+            !expectedExistingHashes.Contains(capturedHash, StringComparer.Ordinal))
         {
             throw new IOException(
                 $"The current {targetName} and its write sidecar do not prove a completed tool operation. Neither file was changed.");

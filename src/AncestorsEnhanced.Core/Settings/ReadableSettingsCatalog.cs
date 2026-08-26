@@ -297,16 +297,25 @@ public static class ReadableSettingsCatalog
             "Adds sharpening after temporal anti-aliasing.",
             missingValue: "Game controlled",
             missingSource: "No custom override; runtime value is not stored in the config");
+        FeatureSettingSnapshot renderScale = Decimal(
+            snapshot,
+            "render-scale",
+            "Render scale",
+            "r.ScreenPercentage",
+            value => $"{value:0.#}%",
+            "Renders internally at a lower or higher resolution before scaling to the screen. Lower values gain performance at some sharpness cost.",
+            missingValue: "Game controlled",
+            missingSource: "No custom override; device profiles use 66–100%");
 
         return new FeatureGroupSnapshot(
             "image-clarity",
             "Image quality",
             "Image clarity and anti-aliasing",
-            CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen), ("TAA weight", taa)),
-            "Controls edge smoothing, temporal response and final image sharpening.",
+            CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen), ("TAA weight", taa), ("Render scale", renderScale)),
+            "Controls edge smoothing, temporal response, final image sharpening and internal render resolution.",
             IsEssential: true,
-            CombineStates(antiAliasing, taa, sharpen),
-            [antiAliasing, taa, sharpen],
+            CombineStates(antiAliasing, taa, sharpen, renderScale),
+            [antiAliasing, taa, sharpen, renderScale],
             SimpleSummary: CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen)));
     }
 

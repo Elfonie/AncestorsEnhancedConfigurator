@@ -11,6 +11,9 @@ internal static class ToolChangeBaselineStore
     private const string FilesDirectoryName = "files";
     private const int ManifestVersion = 2;
     private const int MaximumManifestSize = 1024 * 1024;
+    // Keep the reader and writer bound identical.  The old reader-only limit could
+    // silently discard a valid baseline after a larger apply operation.
+    private const int MaximumTrackedFiles = 64;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public static bool CanCreateRemovalPlan(GameInspectionSnapshot snapshot)
@@ -126,6 +129,15 @@ internal static class ToolChangeBaselineStore
         }
 
         List<BaselineFile> tracked = [.. manifest.Files];
+        int newFiles = plan.Files.Count(file => !tracked.Any(candidate =>
+            candidate.Target == file.Target &&
+            string.Equals(candidate.FileName, file.FileName, StringComparison.OrdinalIgnoreCase)));
+        if (tracked.Count + newFiles > MaximumTrackedFiles)
+        {
+            throw new InvalidOperationException(
+                $"A tool-change baseline may track at most {MaximumTrackedFiles} files.");
+        }
+
         foreach (ConfigurationFileChangePlan file in plan.Files)
         {
             BaselineFile? existing = tracked.SingleOrDefault(candidate =>
@@ -429,7 +441,7 @@ internal static class ToolChangeBaselineStore
         if (manifest.Version is not (1 or ManifestVersion) ||
             string.IsNullOrWhiteSpace(manifest.ContextFingerprint) ||
             manifest.ContextFingerprint.Length > 256 ||
-            manifest.Files.Count is < 1 or > 16)
+            manifest.Files.Count is < 1 or > MaximumTrackedFiles)
         {
             return false;
         }

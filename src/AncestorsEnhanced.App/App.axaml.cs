@@ -23,6 +23,16 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Avalonia dispatches async-void UI failures here.  Logging them at the
+        // boundary prevents a silent process termination and keeps diagnostics
+        // available for the next launch; individual commands still report their
+        // expected errors in the normal UI.
+        Dispatcher.UIThread.UnhandledException += (_, eventArgs) =>
+        {
+            AppDiagnostics.Logger?.Write($"Unhandled UI exception: {eventArgs.Exception}");
+            eventArgs.Handled = true;
+        };
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             if (desktop.Args?.Contains("--already-running", StringComparer.Ordinal) == true)
@@ -88,6 +98,12 @@ public partial class App : Application
                 experimentalGraphicsSettingsChanged: enabled =>
                 {
                     preferences = preferences with { ExperimentalGraphicsSettingsEnabled = enabled };
+                    accessibilityPreferences.TrySave(preferences);
+                },
+                experimentalGameplaySettingsEnabled: preferences.ExperimentalGameplaySettingsEnabled,
+                experimentalGameplaySettingsChanged: enabled =>
+                {
+                    preferences = preferences with { ExperimentalGameplaySettingsEnabled = enabled };
                     accessibilityPreferences.TrySave(preferences);
                 },
                 hasAcknowledgedDetailedHardwareScan: preferences.HasAcknowledgedDetailedHardwareScan,

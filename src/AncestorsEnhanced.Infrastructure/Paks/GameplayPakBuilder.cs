@@ -18,16 +18,18 @@ internal static class GameplayPakBuilder
             throw new InvalidOperationException("At least one verified gameplay patch is required.");
         }
 
-        if (patches.Select(patch => patch.AssetPath).Distinct(StringComparer.Ordinal).Count() != patches.Count)
-        {
-            throw new InvalidOperationException("A gameplay PAK cannot contain the same asset twice.");
-        }
-
         string pakDirectory = ConfigurationFileOperations.GetPakDirectory(installDirectory);
-        var files = new List<(string FileName, byte[] Content)>(patches.Count);
-        foreach (GameplayAssetPatch patch in patches.OrderBy(patch => patch.AssetPath, StringComparer.Ordinal))
+        var files = new List<(string FileName, byte[] Content)>();
+        foreach (IGrouping<string, GameplayAssetPatch> assetPatches in patches.GroupBy(patch => patch.AssetPath, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal))
         {
-            ValidatePatch(patch);
+            GameplayAssetPatch[] grouped = [.. assetPatches];
+            foreach (GameplayAssetPatch candidate in grouped) ValidatePatch(candidate);
+            GameplayAssetPatch patch = grouped[0];
+            if (grouped.Any(candidate => !string.Equals(candidate.SourcePakName, patch.SourcePakName, StringComparison.Ordinal) ||
+                                         !string.Equals(candidate.StockAssetSha256, patch.StockAssetSha256, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidDataException("Gameplay definitions for one asset disagree about its verified stock identity.");
+            }
             string sourcePath = Path.Combine(pakDirectory, patch.SourcePakName);
             byte[] original = PakV5Archive.ReadFile(sourcePath, patch.AssetPath, patch.MaximumAssetSize);
             if (!string.Equals(Sha256(original), patch.StockAssetSha256, StringComparison.Ordinal))
@@ -35,7 +37,8 @@ internal static class GameplayPakBuilder
                 throw new InvalidDataException($"The stock asset for {patch.SettingId} is not supported.");
             }
 
-            byte[] updated = ApplyMutations(original, patch);
+            var combined = patch with { Mutations = grouped.SelectMany(candidate => candidate.Mutations).ToArray() };
+            byte[] updated = ApplyMutations(original, combined);
             files.Add((patch.AssetPath, updated));
         }
 

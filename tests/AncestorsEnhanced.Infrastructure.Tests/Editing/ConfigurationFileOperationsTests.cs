@@ -143,4 +143,29 @@ public sealed class ConfigurationFileOperationsTests
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    [Fact]
+    public void RecoveryAcceptsAnIdenticalJournalledTargetAndSidecar()
+    {
+        string directory = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), $"aec-cas-identical-{Guid.NewGuid():N}")).FullName;
+        try
+        {
+            string target = Path.Combine(directory, "Engine.ini");
+            string captured = Path.Combine(directory, $".Engine.ini.{Guid.NewGuid():N}.cas");
+            byte[] content = [1, 2, 3];
+            File.WriteAllBytes(target, content);
+            File.WriteAllBytes(captured, content);
+
+            bool hasSidecar = ConfigurationFileOperations.ValidateInterruptedTargetRecovery(
+                target,
+                [ConfigurationFileOperations.Sha256(content)]);
+
+            Assert.True(hasSidecar);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }

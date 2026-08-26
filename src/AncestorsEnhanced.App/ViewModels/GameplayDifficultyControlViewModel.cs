@@ -7,13 +7,16 @@ public sealed partial class GameplayDifficultyControlViewModel : ViewModelBase
     [ObservableProperty]
     public partial int MultiplierPercent { get; set; } = 100;
 
-    public GameplayDifficultyControlViewModel(string name, string stockValue, string description, bool higherIsHarder)
+    public GameplayDifficultyControlViewModel(string id, string name, string stockValue, string description, bool higherIsHarder)
     {
+        Id = id;
         Name = name;
         StockValue = stockValue;
         Description = description;
         HigherIsHarder = higherIsHarder;
     }
+
+    public string Id { get; }
 
     public string Name { get; }
 

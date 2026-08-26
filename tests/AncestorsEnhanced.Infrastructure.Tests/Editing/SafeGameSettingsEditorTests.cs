@@ -204,6 +204,42 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     }
 
     [Fact]
+    public void RecoverySkipsAnIncompleteLegacyPreparationAndRecoversANewerOperation()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        const string engineOriginal = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        const string gameOriginal = "[/Script/MoviePlayer.MoviePlayerSettings]\nbWaitForMoviesToComplete=True\n";
+        File.WriteAllText(engineIni, engineOriginal);
+        File.WriteAllText(gameIni, gameOriginal);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        SettingsChangePlan incomplete = editor.CreatePlan(snapshot,
+            [Change("distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+        string incompleteDirectory = SettingsBackupStore.Prepare(incomplete);
+        // Simulate a journal written by the older manifest-first implementation.
+        File.Delete(Path.Combine(incompleteDirectory, "Engine.ini.before"));
+
+        SettingsChangePlan healthy = editor.CreatePlan(snapshot,
+        [
+            new SettingChangeRequest(
+                "Skip intro", "Game.ini", "/Script/MoviePlayer.MoviePlayerSettings",
+                "bWaitForMoviesToComplete", "False"),
+        ]);
+        string healthyDirectory = SettingsBackupStore.Prepare(healthy);
+        File.WriteAllBytes(healthy.Files[0].FullPath, healthy.Files[0].UpdatedContent);
+
+        bool recovered = editor.RecoverInterruptedChanges(snapshot);
+
+        Assert.True(recovered);
+        Assert.Equal(gameOriginal, File.ReadAllText(gameIni));
+        Assert.True(File.Exists(Path.Combine(healthyDirectory, "aborted")));
+        Assert.False(File.Exists(Path.Combine(incompleteDirectory, "aborted")));
+    }
+
+    [Fact]
     public void StartupCompletesInterruptedMultiFileUndo()
     {
         string userData = CreateUserData();

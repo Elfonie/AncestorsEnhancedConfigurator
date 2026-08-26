@@ -230,6 +230,33 @@ public sealed class SaveGameWatchdogTests : IDisposable
     }
 
     [Fact]
+    public void StopFlushesADirtySlotThatIsWaitingForCooldown()
+    {
+        string userData = CreateUserData();
+        int calls = 0;
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ =>
+            {
+                Interlocked.Increment(ref calls);
+                return new SaveGameOperationResult(true, "Checkpoint saved.", "final");
+            })
+        {
+            Cooldown = TimeSpan.FromMinutes(5),
+        };
+
+        watchdog.Start();
+        using (watchdog.BeginSlotMutation(0))
+        {
+        }
+        Thread.Sleep(100);
+
+        watchdog.StopWatch();
+
+        Assert.Equal(1, Volatile.Read(ref calls));
+    }
+
+    [Fact]
     public void DisposeIsIdempotent()
     {
         string userData = CreateUserData();

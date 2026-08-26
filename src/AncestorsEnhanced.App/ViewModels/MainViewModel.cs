@@ -19,6 +19,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
+    private readonly IGameplayDifficultyEditor _gameplayEditor;
     private readonly Func<VerifiedGameContext, ISaveGameManager> _saveManagerFactory;
     private readonly IUserProfileLibrary _profileLibrary;
     private readonly GameContextVerifier _gameContextVerifier;
@@ -35,10 +36,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private GameInspectionSnapshot? _snapshot;
     private SettingsChangePlan? _reviewPlan;
     private bool _reviewIsToolChangeRemoval;
+    private bool _reviewIsGameplay;
+    private bool _reviewRemovesGameplayPak;
     private readonly Action<bool>? _highContrastChanged;
     private readonly Action<bool>? _discordRichPresenceChanged;
     private readonly Action? _onboardingCompleted;
     private readonly Action<bool>? _experimentalGraphicsSettingsChanged;
+    private readonly Action<bool>? _experimentalGameplaySettingsChanged;
+    private readonly int _gameplayMinimumPercent = 10;
     private readonly Action<HardwareSnapshot>? _detailedHardwareScanCompleted;
     private HardwareSnapshot? _detailedHardwareSnapshot;
 
@@ -197,6 +202,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial IReadOnlyList<GameplayDifficultyControlViewModel> GameplaySimpleControls { get; set; } = [];
 
     [ObservableProperty]
+    public partial IReadOnlyList<GameplayDifficultyControlViewModel> GameplayAdvancedControls { get; set; } = [];
+
+    [ObservableProperty]
     public partial IReadOnlyList<GameplayResearchValueViewModel> GameplayResearchValues { get; set; } = [];
 
     [ObservableProperty]
@@ -205,6 +213,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         "Reload to verify the exact game identity before viewing gameplay research.",
         "#D6BC84",
         true);
+
+    [ObservableProperty]
+    public partial GameplayDifficultyState GameplayState { get; set; } = GameplayDifficultyState.GameDefault;
 
     [ObservableProperty]
     public partial bool IsProfilesView { get; set; }
@@ -229,6 +240,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial bool IsExperimentalGraphicsSettingsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsExperimentalGameplaySettingsEnabled { get; set; }
 
     [ObservableProperty]
     public partial bool HasAcknowledgedDetailedHardwareScan { get; set; }
@@ -276,15 +290,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         Action? onboardingCompleted = null,
         bool experimentalGraphicsSettingsEnabled = false,
         Action<bool>? experimentalGraphicsSettingsChanged = null,
+        bool experimentalGameplaySettingsEnabled = false,
+        Action<bool>? experimentalGameplaySettingsChanged = null,
         bool hasAcknowledgedDetailedHardwareScan = false,
         HardwareSnapshot? detailedHardwareSnapshot = null,
         Action<HardwareSnapshot>? detailedHardwareScanCompleted = null,
-        IHardwareProbe? hardwareProbe = null)
+        IHardwareProbe? hardwareProbe = null,
+        IGameplayDifficultyEditor? gameplayDifficultyEditor = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(settingsEditor);
         _inspector = inspector;
         _gameContextVerifier = new GameContextVerifier(inspector);
+        _gameplayEditor = gameplayDifficultyEditor ?? new SafeGameplayDifficultyEditor(_gameContextVerifier);
         _hardwareProbe = hardwareProbe ?? EmptyHardwareProbe.Instance;
         _settingsEditor = settingsEditor;
         _saveManagerFactory = saveManagerFactory ?? (context => new SafeSaveGameManager(context, _gameContextVerifier));
@@ -293,12 +311,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _discordRichPresenceChanged = discordRichPresenceChanged;
         _onboardingCompleted = onboardingCompleted;
         _experimentalGraphicsSettingsChanged = experimentalGraphicsSettingsChanged;
+        _experimentalGameplaySettingsChanged = experimentalGameplaySettingsChanged;
         _detailedHardwareSnapshot = detailedHardwareSnapshot;
         _detailedHardwareScanCompleted = detailedHardwareScanCompleted;
         IsHighContrastEnabled = highContrastEnabled;
         IsDiscordRichPresenceEnabled = discordRichPresenceEnabled;
         IsOnboardingVisible = showOnboarding;
         IsExperimentalGraphicsSettingsEnabled = experimentalGraphicsSettingsEnabled;
+        IsExperimentalGameplaySettingsEnabled = experimentalGameplaySettingsEnabled;
         HasAcknowledgedDetailedHardwareScan = hasAcknowledgedDetailedHardwareScan;
         _mutationGate.Changed += OnMutationGateChanged;
 
@@ -328,15 +348,54 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool HasGameplaySimpleControls => GameplaySimpleControls.Count > 0;
 
-    public string GameplayDraftStatus { get; private set; } = "Game default draft · no PAK created";
+    public bool HasGameplayAdvancedControls => GameplayAdvancedControls.Count > 0;
+
+    public int GameplayMinimumPercent => _gameplayMinimumPercent;
+
+    public int GameplayMaximumPercent => IsExperimentalGameplaySettingsEnabled ? 1000 : 200;
+
+    public string GameplayControlRangeLabel => IsExperimentalGameplaySettingsEnabled
+        ? "Extended range: 10% to 1000% · 10% steps"
+        : "Standard range: 10% to 200% · 10% steps";
+
+    public string GameplayDraftStatus { get; private set; } = "Game default · no AEC gameplay PAK installed";
+
+    public bool HasGameplayPendingChanges =>
+        GameplaySimpleControls.Count > 0 &&
+        GameplayAdvancedControls.Count > 0 &&
+        CurrentGameplaySettings != GameplayState.Settings;
+
+    public bool CanReviewGameplay =>
+        HasGameplayPendingChanges &&
+        !GameplayReadiness.IsBlocked &&
+        GameplayState.Kind is not GameplayDifficultyStateKind.Unverified &&
+        !IsReviewingChanges &&
+        !IsAnyOperationRunning;
+
+    public bool CanResetGameplay =>
+        GameplayState.Kind == GameplayDifficultyStateKind.Active &&
+        !IsReviewingChanges &&
+        !IsAnyOperationRunning;
+
+    public bool CanEditGameplay =>
+        !GameplayReadiness.IsBlocked &&
+        GameplayState.Kind is not GameplayDifficultyStateKind.Unverified &&
+        !IsReviewingChanges &&
+        !IsAnyOperationRunning;
+
+    public string GameplayReviewButtonLabel => CurrentGameplaySettings.IsGameDefault
+        ? "Review removal"
+        : GameplayState.Kind == GameplayDifficultyStateKind.Active
+            ? "Review gameplay update"
+            : "Review gameplay mod";
 
     public string HomeGraphicsSummary => HasGamePreset
         ? $"{GamePresetName} · {CustomOverrideCount} custom change(s)"
         : "Graphics settings will appear after game detection.";
 
-    public string HomeGameplaySummary => GameplayReadiness.IsBlocked
-        ? "No gameplay mod active"
-        : GameplayDraftStatus;
+    public string HomeGameplaySummary => HasGameplayPendingChanges
+        ? GameplayDraftStatus
+        : GameplayState.Description;
 
     public string HomeTitle => IsBusy
         ? "Checking Ancestors…"
@@ -467,6 +526,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsAnyOperationRunning));
         OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
         OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        OnPropertyChanged(nameof(CanReviewGameplay));
+        OnPropertyChanged(nameof(CanResetGameplay));
+        OnPropertyChanged(nameof(CanEditGameplay));
         OnPropertyChanged(nameof(CanStageHardwareRecommendation));
         OnPropertyChanged(nameof(HomeTitle));
     }
@@ -514,17 +576,25 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public string ReviewSummary => _reviewIsToolChangeRemoval
+    public string ReviewSummary => _reviewIsGameplay
+        ? _reviewRemovesGameplayPak
+            ? "Restore game-default difficulty"
+            : "Review gameplay difficulty"
+        : _reviewIsToolChangeRemoval
         ? "Remove Configurator changes"
         : ReviewChanges.Count == 1
         ? "Review 1 change before writing"
         : $"Review {ReviewChanges.Count} changes before writing";
 
-    public string ReviewDescription => _reviewIsToolChangeRemoval
+    public string ReviewDescription => _reviewIsGameplay
+        ? "AEC will change only its verified gameplay PAK and ownership record. Save games are not edited. Runtime behavior is still marked as awaiting in-game verification."
+        : _reviewIsToolChangeRemoval
         ? "The listed files will be restored to their state before you first used this Configurator. Save games and other mods are not changed"
         : "Check the old and new values before anything is written";
 
-    public string ConfirmReviewLabel => _reviewIsToolChangeRemoval ? "Remove Configurator changes" : "Confirm & Apply";
+    public string ConfirmReviewLabel => _reviewIsGameplay
+        ? _reviewRemovesGameplayPak ? "Remove gameplay PAK" : "Confirm & Install"
+        : _reviewIsToolChangeRemoval ? "Remove Configurator changes" : "Confirm & Apply";
 
     public string PendingSummary => PendingChanges.Count switch
     {
@@ -669,7 +739,62 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 : 200 - preset.MultiplierPercent;
         }
 
-        SetGameplayDraftStatus($"{preset.Name} draft");
+        foreach (GameplayDifficultyControlViewModel control in GameplayAdvancedControls)
+        {
+            control.MultiplierPercent = 100;
+        }
+
+        SetGameplayDraftStatus(preset.Name);
+    }
+
+    [RelayCommand]
+    private void ResetGameplay()
+    {
+        if (!CanResetGameplay)
+        {
+            return;
+        }
+
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.MultiplierPercent = 100;
+        }
+
+        SetGameplayDraftStatus("Game default");
+        OpenGameplayReview();
+    }
+
+    [RelayCommand]
+    private void OpenGameplayReview()
+    {
+        if (_snapshot is null || !CanReviewGameplay)
+        {
+            return;
+        }
+
+        try
+        {
+            _reviewPlan = _gameplayEditor.CreatePlan(_snapshot, CurrentGameplaySettings);
+            _reviewIsGameplay = true;
+            _reviewIsToolChangeRemoval = false;
+            _reviewRemovesGameplayPak = CurrentGameplaySettings.IsGameDefault;
+            ReviewChanges = _reviewPlan.Changes
+                .Select(change => new ChangeReviewRowViewModel(
+                    change.DisplayName,
+                    $"{change.FileName} · {change.Key}",
+                    change.Before ?? "Game default",
+                    change.After ?? "Game default"))
+                .ToArray();
+            OnPropertyChanged(nameof(ReviewSummary));
+            OnPropertyChanged(nameof(ReviewDescription));
+            OnPropertyChanged(nameof(ConfirmReviewLabel));
+            IsReviewingChanges = true;
+            ShowMessage("Check every gameplay value, then confirm the PAK operation.", "#FF5A00");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage(exception.Message, "#E04D42");
+        }
     }
 
     [RelayCommand]
@@ -1186,8 +1311,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowBottomBar));
     }
 
-    partial void OnIsGameplayAdvancedModeChanged(bool value) =>
+    partial void OnIsGameplayAdvancedModeChanged(bool value)
+    {
         OnPropertyChanged(nameof(IsGameplaySimpleMode));
+    }
 
     partial void OnIsProfilesViewChanged(bool value)
     {
@@ -1225,6 +1352,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         _experimentalGraphicsSettingsChanged?.Invoke(value);
         ApplyViewMode();
+    }
+
+    partial void OnIsExperimentalGameplaySettingsEnabledChanged(bool value)
+    {
+        _experimentalGameplaySettingsChanged?.Invoke(value);
+        NotifyGameplayRangeChanged();
     }
 
     partial void OnIsGraphicsPresetsExpandedChanged(bool value) =>
@@ -1381,8 +1514,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         bool isToolChangeRemoval = plan.IsToolChangeRemoval;
+        bool isGameplay = _reviewIsGameplay;
+        bool removesGameplayPak = _reviewRemovesGameplayPak;
         _reviewPlan = null;
         _reviewIsToolChangeRemoval = false;
+        _reviewIsGameplay = false;
+        _reviewRemovesGameplayPak = false;
         OnPropertyChanged(nameof(ReviewSummary));
         OnPropertyChanged(nameof(ReviewDescription));
         OnPropertyChanged(nameof(ConfirmReviewLabel));
@@ -1390,12 +1527,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ReviewChanges = [];
         IsBusy = true;
         ShowMessage(
-            isToolChangeRemoval ? "Removing verified tool changes..." : "Applying the reviewed changes...",
+            isGameplay
+                ? removesGameplayPak ? "Removing the verified AEC gameplay PAK..." : "Building and installing the reviewed gameplay PAK..."
+                : isToolChangeRemoval ? "Removing verified tool changes..." : "Applying the reviewed changes...",
             "#FF5A00");
         SettingsOperationResult result;
         try
         {
-            result = await Task.Run(() => _settingsEditor.Apply(plan));
+            result = await Task.Run(() => isGameplay
+                ? _gameplayEditor.Apply(plan)
+                : _settingsEditor.Apply(plan));
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
@@ -1563,6 +1704,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(CanReviewGameplay));
+        OnPropertyChanged(nameof(CanResetGameplay));
+        OnPropertyChanged(nameof(CanEditGameplay));
         OnPropertyChanged(nameof(HasCustomProfileSettings));
         OnPropertyChanged(nameof(CanSaveProfile));
         OnPropertyChanged(nameof(CanConfirmProfileRename));
@@ -1580,6 +1724,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowReviewActions));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(CanReviewGameplay));
+        OnPropertyChanged(nameof(CanResetGameplay));
+        OnPropertyChanged(nameof(CanEditGameplay));
     }
 
     partial void OnReviewChangesChanged(IReadOnlyList<ChangeReviewRowViewModel> value) =>
@@ -2025,35 +2172,127 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     private void UpdateGameplayCatalog(GameInspectionSnapshot snapshot)
     {
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.PropertyChanged -= OnGameplayControlChanged;
+        }
+
         bool isSupported = GameplayDifficultyCatalog.Supports(snapshot);
         GameplayDifficultyPresets = isSupported ? GameplayDifficultyCatalog.CreatePresets() : [];
         GameplaySimpleControls = isSupported ? GameplayDifficultyCatalog.CreateSimpleControls() : [];
-        foreach (GameplayDifficultyControlViewModel control in GameplaySimpleControls)
+        GameplayAdvancedControls = isSupported ? GameplayDifficultyCatalog.CreateAdvancedControls() : [];
+        GameplayState = _gameplayEditor.Inspect(snapshot);
+        if (isSupported && GameplayState.Kind != GameplayDifficultyStateKind.Unverified)
+        {
+            ApplyGameplaySettingsToControls(GameplayState.Settings);
+        }
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
         {
             control.PropertyChanged += OnGameplayControlChanged;
         }
         GameplayResearchValues = isSupported ? GameplayDifficultyCatalog.CreateAdvancedValues() : [];
-        GameplayReadiness = GameplayDifficultyCatalog.AssessReadiness(snapshot);
+        GameplayReadiness = GameplayState.Kind == GameplayDifficultyStateKind.Unverified && isSupported
+            ? new GameplayReadinessViewModel(
+                "Installed gameplay PAK needs attention",
+                GameplayState.Description + ". AEC will not overwrite or remove it.",
+                "#E04D42",
+                true)
+            : GameplayDifficultyCatalog.AssessReadiness(snapshot);
         SetGameplayDraftStatus(isSupported
-            ? $"Steam build {GameplayDifficultyCatalog.SupportedSteamBuildId} · game default draft"
-            : "Gameplay difficulty research is available only for verified Steam build 5495393 with matching stock PAK signatures");
+            ? GameplayState.Kind == GameplayDifficultyStateKind.Active
+                ? "Installed gameplay difficulty"
+                : $"Steam build {GameplayDifficultyCatalog.SupportedSteamBuildId} · game default"
+            : "Gameplay difficulty is available only for verified Steam build 5495393 with matching stock PAK signatures");
         OnPropertyChanged(nameof(HasGameplayDifficultyPresets));
         OnPropertyChanged(nameof(HasGameplaySimpleControls));
+        OnPropertyChanged(nameof(HasGameplayAdvancedControls));
         OnPropertyChanged(nameof(HasGameplayResearchValues));
+        NotifyGameplayStateChanged();
     }
 
     private void OnGameplayControlChanged(object? sender, PropertyChangedEventArgs eventArgs)
     {
         if (eventArgs.PropertyName == nameof(GameplayDifficultyControlViewModel.MultiplierPercent))
         {
-            SetGameplayDraftStatus("Custom gameplay draft");
+            CloseReview();
+            SetGameplayDraftStatus("Custom gameplay difficulty");
+            NotifyGameplayStateChanged();
         }
     }
 
-    private void SetGameplayDraftStatus(string draft) 
+    private void SetGameplayDraftStatus(string draft)
     {
-        GameplayDraftStatus = $"{draft} · no PAK created";
+        GameplayDraftStatus = HasGameplayPendingChanges
+            ? $"{draft} · pending review"
+            : GameplayState.Description;
         OnPropertyChanged(nameof(GameplayDraftStatus));
+        OnPropertyChanged(nameof(HomeGameplaySummary));
+    }
+
+    private GameplayDifficultySettings CurrentGameplaySettings => new(
+        GameplayPercent("food"),
+        GameplayPercent("water"),
+        GameplayPercent("sleep"),
+        GameplayPercent("fall-damage"),
+        GameplayPercent("bleeding"),
+        GameplayPercent("poison"),
+        GameplayPercent("energy-recovery"),
+        GameplayPercent("wound-sleep-healing"),
+        GameplayPercent("wound-stamina-penalty"),
+        GameplayPercent("poison-recovery"),
+        GameplayPercent("rest-delay"),
+        GameplayPercent("exhaustion-threshold"),
+        GameplayPercent("exhaustion-penalty"),
+        GameplayPercent("wound-recovery-duration"),
+        GameplayPercent("poison-stamina-penalty"));
+
+    private int GameplayPercent(string id) =>
+        AllGameplayControls.FirstOrDefault(control => string.Equals(control.Id, id, StringComparison.Ordinal))?.MultiplierPercent ?? 100;
+
+    private void ApplyGameplaySettingsToControls(GameplayDifficultySettings settings)
+    {
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.MultiplierPercent = control.Id switch
+            {
+                "food" => settings.FoodPercent,
+                "water" => settings.WaterPercent,
+                "sleep" => settings.SleepPercent,
+                "fall-damage" => settings.FallDamagePercent,
+                "bleeding" => settings.BleedingPercent,
+                "poison" => settings.PoisonPercent,
+                "energy-recovery" => settings.EnergyRecoveryPercent,
+                "wound-sleep-healing" => settings.WoundSleepHealingPercent,
+                "wound-stamina-penalty" => settings.WoundStaminaPenaltyPercent,
+                "poison-recovery" => settings.PoisonRecoveryPercent,
+                "rest-delay" => settings.RestDelayPercent,
+                "exhaustion-threshold" => settings.ExhaustionThresholdPercent,
+                "exhaustion-penalty" => settings.ExhaustionPenaltyPercent,
+                "wound-recovery-duration" => settings.WoundRecoveryDurationPercent,
+                "poison-stamina-penalty" => settings.PoisonStaminaPenaltyPercent,
+                _ => 100,
+            };
+        }
+    }
+
+    private IEnumerable<GameplayDifficultyControlViewModel> AllGameplayControls =>
+        GameplaySimpleControls.Concat(GameplayAdvancedControls);
+
+    private void NotifyGameplayStateChanged()
+    {
+        OnPropertyChanged(nameof(HasGameplayPendingChanges));
+        OnPropertyChanged(nameof(CanReviewGameplay));
+        OnPropertyChanged(nameof(CanResetGameplay));
+        OnPropertyChanged(nameof(CanEditGameplay));
+        OnPropertyChanged(nameof(GameplayReviewButtonLabel));
+        OnPropertyChanged(nameof(HomeGameplaySummary));
+    }
+
+    private void NotifyGameplayRangeChanged()
+    {
+        OnPropertyChanged(nameof(GameplayMinimumPercent));
+        OnPropertyChanged(nameof(GameplayMaximumPercent));
+        OnPropertyChanged(nameof(GameplayControlRangeLabel));
     }
 
     private static string ProfileContents(UserProfile profile)
@@ -2182,11 +2421,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         if (_reviewPlan is not null)
         {
-            _settingsEditor.DiscardPlan(_reviewPlan);
+            if (_reviewIsGameplay)
+            {
+                _gameplayEditor.DiscardPlan(_reviewPlan);
+            }
+            else
+            {
+                _settingsEditor.DiscardPlan(_reviewPlan);
+            }
             _reviewPlan = null;
         }
 
         _reviewIsToolChangeRemoval = false;
+        _reviewIsGameplay = false;
+        _reviewRemovesGameplayPak = false;
         ReviewChanges = [];
         IsReviewingChanges = false;
         OnPropertyChanged(nameof(ReviewSummary));
@@ -2307,6 +2555,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.PropertyChanged -= OnGameplayControlChanged;
+        }
         _searchDebounceSource?.Cancel();
         try
         {

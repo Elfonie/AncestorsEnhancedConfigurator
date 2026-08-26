@@ -721,7 +721,7 @@
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Spacing="3">
               <TextBlock Text="Gameplay difficulty" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
-              <TextBlock Text="Draft difficulty only · no save changes" FontSize="12" Foreground="#9CB0BC" />
+              <TextBlock Text="Verified build-bound PAK · no save changes" FontSize="12" Foreground="#9CB0BC" />
             </StackPanel>
             <Border Grid.Column="1" Padding="4" CornerRadius="7" Background="{DynamicResource RaisedSurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
               <StackPanel Orientation="Horizontal" Spacing="2">
@@ -738,7 +738,7 @@
                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsHitTestVisible="False">
                     <StackPanel Spacing="2">
                       <TextBlock Text="Gameplay presets" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                      <TextBlock Text="Choose a starting point, then fine-tune the four simple controls below." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                      <TextBlock Text="Choose a starting point, then fine-tune the six simple controls below." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                     </StackPanel>
                     <TextBlock Grid.Column="1" Text="{Binding GameplayPresetsToggleLabel}" FontWeight="SemiBold" Foreground="#B4D941" VerticalAlignment="Center" />
                   </Grid>
@@ -754,7 +754,7 @@
                             <TextBlock Text="{Binding Summary}" FontSize="12" FontWeight="SemiBold" Foreground="#B4D941" />
                             <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
                           </StackPanel>
-                          <Button Grid.Row="1" Content="Use as draft" Command="{Binding $parent[Window].DataContext.SelectGameplayPresetCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
+                          <Button Grid.Row="1" Content="Use preset" Command="{Binding $parent[Window].DataContext.SelectGameplayPresetCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
                         </Grid>
                       </Border>
                     </DataTemplate>
@@ -768,7 +768,7 @@
               <StackPanel Spacing="10">
                 <StackPanel Spacing="3">
                   <TextBlock Text="Simple controls" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                  <TextBlock Text="4 supported categories · 10% steps" FontSize="12" Foreground="#9CB0BC" />
+                  <TextBlock Text="{Binding GameplayControlRangeLabel}" FontSize="12" Foreground="#9CB0BC" />
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding GameplaySimpleControls}">
                   <ItemsControl.ItemTemplate>
@@ -781,7 +781,7 @@
                           </StackPanel>
                           <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Right">
                             <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="#B4D941" TextAlignment="Right" />
-                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="50" Maximum="150" Increment="10" FormatString="{}{0}%" Width="118" HorizontalAlignment="Right" />
+                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="118" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
                             <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="#71828D" HorizontalAlignment="Right" />
                           </StackPanel>
                         </Grid>
@@ -791,9 +791,47 @@
                 </ItemsControl>
               </StackPanel>
           </Border>
-          <TextBlock Text="{Binding GameplayDraftStatus}" FontSize="12" Foreground="#D6BC84" TextWrapping="Wrap" />
+          <Border Padding="12,9" CornerRadius="6" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <StackPanel Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding GameplayDraftStatus}" FontSize="12" Foreground="#D6BC84" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding GameplayState.Description}" FontSize="11" Foreground="#71828D" TextWrapping="Wrap" IsVisible="{Binding HasGameplayPendingChanges}" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Content="Restore game default" Command="{Binding ResetGameplayCommand}" IsEnabled="{Binding CanResetGameplay}" />
+                <Button Classes="PrimaryAction" Content="{Binding GameplayReviewButtonLabel}" Command="{Binding OpenGameplayReviewCommand}" IsEnabled="{Binding CanReviewGameplay}" />
+              </StackPanel>
+            </Grid>
+          </Border>
 
           <StackPanel IsVisible="{Binding IsGameplayAdvancedMode}" Spacing="12">
+            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding HasGameplayAdvancedControls}">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="Recovery &amp; wounds" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                  <TextBlock Text="These controls change verified player vitality and wound values. They do not change save data or bypass the normal ability system." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding GameplayAdvancedControls}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GameplayDifficultyControlViewModel">
+                      <Border Padding="12,9" Margin="0,0,0,6" CornerRadius="6" Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#E6ECEF" />
+                            <TextBlock Text="{Binding Description}" FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="#B4D941" TextAlignment="Right" />
+                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="118" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
+                            <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="#71828D" HorizontalAlignment="Right" />
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
             <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding HasGameplayResearchValues}">
               <StackPanel Spacing="10">
                 <StackPanel Spacing="3">
@@ -832,7 +870,6 @@
             <StackPanel Spacing="4">
               <TextBlock Text="{Binding GameplayReadiness.Title}" FontWeight="SemiBold" Foreground="#E8D5B5" />
               <TextBlock Text="{Binding GameplayReadiness.Description}" FontSize="12" Foreground="#E8D5B5" TextWrapping="Wrap" />
-              <TextBlock Text="This page currently writes nothing." FontSize="12" Foreground="#E8D5B5" />
             </StackPanel>
           </Border>
         </StackPanel>
@@ -1018,6 +1055,18 @@
               <StackPanel Grid.Column="1" Spacing="3">
                 <TextBlock Text="Enable experimental graphics settings" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
                 <TextBlock Text="Shows rarely useful renderer controls in Graphics › Advanced. They may have little visible effect, need game-specific testing, or trade image quality for performance." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding IsExperimentalGameplaySettingsEnabled, Mode=TwoWay}"
+                            OffContent="Off" OnContent="On"
+                            AutomationProperties.Name="Enable experimental gameplay tuning"
+                            VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="Enable experimental gameplay tuning" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                <TextBlock Text="Extends every gameplay percentage control above the normal 10% to 200% range, up to 1000% in 10% steps. This is not a balanced preset range: extreme values can make needs drain unrealistically fast or slow. Simple presets remain within their tested 70% to 150% range." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
               </StackPanel>
             </Grid>
           </Border>

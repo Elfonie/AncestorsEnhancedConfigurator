@@ -104,22 +104,22 @@ public sealed class MainGameplayTabTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal(7, viewModel.GameplayResearchValues.Count);
+        Assert.Equal(3, viewModel.GameplayResearchValues.Count);
         Assert.Contains(
             viewModel.GameplayResearchValues,
-            value => value.Name == "Energy recovery delay" && value.StockValue == "1.5 seconds");
+            value => value.Name == "Stamina regained on consumed portion" && value.StockValue == "0.03 stamina");
         Assert.All(viewModel.GameplayResearchValues, value =>
         {
             Assert.False(string.IsNullOrWhiteSpace(value.Name));
             Assert.False(string.IsNullOrWhiteSpace(value.StockValue));
             Assert.False(string.IsNullOrWhiteSpace(value.Description));
             Assert.Contains("deterministic PAK", value.Evidence, StringComparison.Ordinal);
-            Assert.Contains("Not editable", value.Editability, StringComparison.Ordinal);
+            Assert.Contains("Blocked", value.Editability, StringComparison.Ordinal);
         });
     }
 
     [Fact]
-    public async Task GameplayDifficultyModesAreIndependentAndExposeOnlyPlannedControls()
+    public async Task GameplayDifficultyModesAreIndependentAndExposeSupportedControls()
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),
@@ -131,7 +131,7 @@ public sealed class MainGameplayTabTests
         Assert.True(viewModel.IsGameplaySimpleMode);
         Assert.False(viewModel.IsGameplayAdvancedMode);
         Assert.Equal(5, viewModel.GameplayDifficultyPresets.Count);
-        Assert.Equal(4, viewModel.GameplaySimpleControls.Count);
+        Assert.Equal(6, viewModel.GameplaySimpleControls.Count);
         Assert.Contains(viewModel.GameplaySimpleControls, control =>
             control.Name == "Food need" &&
             control.StockValue == "24 portions per day · game default");
@@ -140,18 +140,42 @@ public sealed class MainGameplayTabTests
 
         Assert.True(viewModel.IsGameplayAdvancedMode);
         Assert.False(viewModel.IsGameplaySimpleMode);
-        Assert.Equal(7, viewModel.GameplayResearchValues.Count);
+        Assert.Equal(9, viewModel.GameplayAdvancedControls.Count);
+        Assert.Equal(3, viewModel.GameplayResearchValues.Count);
 
-        GameplayDifficultyPresetViewModel survival = Assert.Single(viewModel.GameplayDifficultyPresets, preset => preset.Name == "Survival (planned)");
+        GameplayDifficultyPresetViewModel survival = Assert.Single(viewModel.GameplayDifficultyPresets, preset => preset.Name == "Survival");
         viewModel.SelectGameplayPresetCommand.Execute(survival);
 
         Assert.All(viewModel.GameplaySimpleControls, control => Assert.Equal(130, control.MultiplierPercent));
+        Assert.All(viewModel.GameplayAdvancedControls, control => Assert.Equal(100, control.MultiplierPercent));
         Assert.Contains("Survival", viewModel.GameplayDraftStatus, StringComparison.Ordinal);
 
         viewModel.ShowGameplaySimpleCommand.Execute(null);
 
         Assert.True(viewModel.IsGameplaySimpleMode);
         Assert.False(viewModel.IsGameplayAdvancedMode);
+    }
+
+    [Fact]
+    public async Task ExperimentalGameplayRangeExtendsTheStandardControlsOnlyAfterExplicitOptIn()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(10, viewModel.GameplayMinimumPercent);
+        Assert.Equal(200, viewModel.GameplayMaximumPercent);
+
+        viewModel.IsExperimentalGameplaySettingsEnabled = true;
+        Assert.Equal(10, viewModel.GameplayMinimumPercent);
+        Assert.Equal(1000, viewModel.GameplayMaximumPercent);
+
+        viewModel.ShowGameplayAdvancedCommand.Execute(null);
+        Assert.Equal(10, viewModel.GameplayMinimumPercent);
+        Assert.Equal(1000, viewModel.GameplayMaximumPercent);
     }
 
     [Fact]
@@ -171,7 +195,7 @@ public sealed class MainGameplayTabTests
         Assert.Empty(viewModel.GameplayDifficultyPresets);
         Assert.Empty(viewModel.GameplaySimpleControls);
         Assert.Empty(viewModel.GameplayResearchValues);
-        Assert.Contains("only for verified Steam build", viewModel.GameplayDraftStatus, StringComparison.Ordinal);
+        Assert.Contains("Exact Steam build", viewModel.GameplayDraftStatus, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -241,11 +265,11 @@ public sealed class MainGameplayTabTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal("Runtime loading check still required", viewModel.GameplayReadiness.Title);
+        Assert.Equal("Ready to build · runtime verification pending", viewModel.GameplayReadiness.Title);
     }
 
     [Fact]
-    public async Task EditingASimpleControlMarksTheCurrentDraftAsCustomWithoutCreatingAPak()
+    public async Task EditingASimpleControlMarksTheCurrentDifficultyPendingReview()
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),
@@ -255,7 +279,32 @@ public sealed class MainGameplayTabTests
         await viewModel.InitializeAsync();
         Assert.Single(viewModel.GameplaySimpleControls, control => control.Name == "Food need").MultiplierPercent = 120;
 
-        Assert.Equal("Custom gameplay draft · no PAK created", viewModel.GameplayDraftStatus);
+        Assert.Equal("Custom gameplay difficulty · pending review", viewModel.GameplayDraftStatus);
+    }
+
+    [Fact]
+    public async Task GameplayUsesTheNormalReviewAndConfirmFlow()
+    {
+        var gameplayEditor = new RecordingGameplayEditor();
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new NoopEditor(),
+            _ => new NoopManager(),
+            gameplayDifficultyEditor: gameplayEditor);
+        await viewModel.InitializeAsync();
+        Assert.Single(viewModel.GameplaySimpleControls, control => control.Id == "food").MultiplierPercent = 120;
+
+        viewModel.OpenGameplayReviewCommand.Execute(null);
+
+        Assert.True(viewModel.IsReviewingChanges);
+        Assert.Equal("Review gameplay difficulty", viewModel.ReviewSummary);
+        Assert.Equal("Food need", Assert.Single(viewModel.ReviewChanges).Name);
+
+        await viewModel.ConfirmApplyCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, gameplayEditor.ApplyCalls);
+        Assert.False(viewModel.IsReviewingChanges);
+        Assert.Equal(120, gameplayEditor.State.Settings.FoodPercent);
     }
 
     [Fact]
@@ -324,6 +373,41 @@ public sealed class MainGameplayTabTests
 
         public SettingsOperationResult RevertLast(GameInspectionSnapshot snapshot) =>
             new(false, "Nothing to revert.");
+    }
+
+    private sealed class RecordingGameplayEditor : IGameplayDifficultyEditor
+    {
+        private GameplayDifficultySettings? _planned;
+
+        public GameplayDifficultyState State { get; private set; } = GameplayDifficultyState.GameDefault;
+
+        public int ApplyCalls { get; private set; }
+
+        public GameplayDifficultyState Inspect(GameInspectionSnapshot snapshot) => State;
+
+        public SettingsChangePlan CreatePlan(
+            GameInspectionSnapshot snapshot,
+            GameplayDifficultySettings settings)
+        {
+            _planned = settings;
+            return new SettingsChangePlan(
+                "gameplay-review",
+                DateTimeOffset.UnixEpoch,
+                "5495393",
+                snapshot.UserDataDirectory!,
+                [new SettingChangePreview("Food need", "AncestorsEnhanced-Gameplay_P.pak", "gameplay.food", "100%", $"{settings.FoodPercent}%")],
+                []);
+        }
+
+        public SettingsOperationResult Apply(SettingsChangePlan plan)
+        {
+            ApplyCalls++;
+            GameplayDifficultySettings settings = _planned ?? throw new InvalidOperationException();
+            State = new GameplayDifficultyState(GameplayDifficultyStateKind.Active, settings, "AEC gameplay PAK active");
+            return SettingsOperationResult.Applied("Gameplay applied.", null);
+        }
+
+        public void DiscardPlan(SettingsChangePlan plan) => _planned = null;
     }
 
     private sealed class NoopManager : ISaveGameManager

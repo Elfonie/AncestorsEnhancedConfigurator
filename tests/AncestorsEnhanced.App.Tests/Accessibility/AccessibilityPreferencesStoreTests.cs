@@ -35,16 +35,18 @@ public sealed class AccessibilityPreferencesStoreTests : IDisposable
     }
 
     [Fact]
-    public void ExperimentalGraphicsAndHardwareScanPreferencesPersist()
+    public void ExperimentalSettingsAndHardwareScanPreferencesPersist()
     {
         var store = new AccessibilityPreferencesStore(_directory);
 
         Assert.True(store.TrySave(new AccessibilityPreferences(
             ExperimentalGraphicsSettingsEnabled: true,
+            ExperimentalGameplaySettingsEnabled: true,
             HasAcknowledgedDetailedHardwareScan: true)));
 
         AccessibilityPreferences loaded = store.Load();
         Assert.True(loaded.ExperimentalGraphicsSettingsEnabled);
+        Assert.True(loaded.ExperimentalGameplaySettingsEnabled);
         Assert.True(loaded.HasAcknowledgedDetailedHardwareScan);
     }
 

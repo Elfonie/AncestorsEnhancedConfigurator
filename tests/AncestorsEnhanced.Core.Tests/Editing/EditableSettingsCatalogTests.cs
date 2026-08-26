@@ -5,6 +5,24 @@ namespace AncestorsEnhanced.Core.Tests.Editing;
 
 public sealed class EditableSettingsCatalogTests
 {
+    [Theory]
+    [InlineData(10)]
+    [InlineData(1000)]
+    public void GameplayDifficultyAcceptsTheExperimentalBounds(int value)
+    {
+        new GameplayDifficultySettings(value, value, value, value).Validate();
+    }
+
+    [Theory]
+    [InlineData(9)]
+    [InlineData(1001)]
+    [InlineData(105)]
+    public void GameplayDifficultyRejectsValuesOutsideTheExperimentalTenPercentSteps(int value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new GameplayDifficultySettings(value, 100, 100, 100).Validate());
+    }
+
     [Fact]
     public void StartupMoviesUsesTheReviewedGameIniTarget()
     {

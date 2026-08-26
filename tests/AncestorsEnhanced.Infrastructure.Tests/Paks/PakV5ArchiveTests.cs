@@ -34,6 +34,15 @@ public sealed class PakV5ArchiveTests
     }
 
     [Fact]
+    public void CompressedArchivePathLookupIsCaseInsensitive()
+    {
+        byte[] pak = BuildCompressedPak("Ancestors/Content/Test.uasset", [1, 2, 3, 4], 4);
+
+        Assert.True(PakV5Archive.ContainsFile(pak, "ancestors/content/test.uasset"));
+        Assert.Equal([1, 2, 3, 4], PakV5Archive.ReadFile(pak, "ANCESTORS/CONTENT/TEST.UASSET"));
+    }
+
+    [Fact]
     public void CompressedBlockCannotEscapeTheDeclaredPayload()
     {
         byte[] pak = BuildCompressedPak("Test.uasset", [.. Enumerable.Range(0, 4096).Select(value => (byte)value)], 4096, 1);
@@ -135,7 +144,7 @@ public sealed class PakV5ArchiveTests
 
         using var output = new MemoryStream();
         using var writer = new BinaryWriter(output, Encoding.UTF8, leaveOpen: true);
-        WriteEntry(writer, 0, compressedPayload.Length, content.Length, compressedPayload, blocks, (uint)blockSize);
+        WriteEntry(writer, 0, compressedPayload.Length, content.Length, content, blocks, (uint)blockSize);
         writer.Write(compressedPayload);
         long indexOffset = output.Position;
 
@@ -145,7 +154,7 @@ public sealed class PakV5ArchiveTests
             WriteString(indexWriter, "../../../");
             indexWriter.Write(1);
             WriteString(indexWriter, path);
-            WriteEntry(indexWriter, 0, compressedPayload.Length, content.Length, compressedPayload, blocks, (uint)blockSize);
+            WriteEntry(indexWriter, 0, compressedPayload.Length, content.Length, content, blocks, (uint)blockSize);
         }
 
         byte[] indexBytes = index.ToArray();

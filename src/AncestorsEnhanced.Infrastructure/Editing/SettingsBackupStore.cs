@@ -29,7 +29,6 @@ internal static class SettingsBackupStore
             throw new IOException("The settings operation identifier already exists.");
         }
         Directory.CreateDirectory(directory);
-        WriteManifest(directory, CreateManifest(plan));
 
         foreach (ConfigurationFileChangePlan file in plan.Files.Where(file => file.Existed))
         {
@@ -45,6 +44,11 @@ internal static class SettingsBackupStore
                 throw new IOException($"Validation failed after backing up {file.FileName}.");
             }
         }
+
+        // The manifest is the recovery commit record.  Do not publish it until every
+        // required before-image has been written and re-read successfully; a crash
+        // during preparation then leaves only an inert, markerless directory.
+        WriteManifest(directory, CreateManifest(plan));
 
         return directory;
     }
@@ -128,7 +132,18 @@ internal static class SettingsBackupStore
                 continue;
             }
 
-            List<RecoveryFile> files = ValidateRecoveryFiles(context, directory, manifest);
+            List<RecoveryFile> files;
+            try
+            {
+                files = ValidateRecoveryFiles(context, directory, manifest);
+            }
+            catch (IOException) when (IsIncompletePreparation(directory, manifest))
+            {
+                // Older versions wrote the manifest before its backups.  Treat that
+                // precise crash residue as uncommitted and continue checking newer
+                // healthy journals.  Other invalid journals still fail closed.
+                continue;
+            }
             if (applied && !reverted && !revertPending)
             {
                 // The applied marker is the commit record. The target may have been
@@ -353,6 +368,19 @@ internal static class SettingsBackupStore
         return files;
     }
 
+    private static bool IsIncompletePreparation(string operationDirectory, OperationManifest manifest)
+    {
+        if (File.Exists(Path.Combine(operationDirectory, AppliedMarkerName)) ||
+            File.Exists(Path.Combine(operationDirectory, RevertedMarkerName)) ||
+            File.Exists(Path.Combine(operationDirectory, AbortedMarkerName)))
+        {
+            return false;
+        }
+
+        return manifest.Files.Where(file => file.Existed).Any(file =>
+            !IsNormalFile(Path.Combine(operationDirectory, $"{file.FileName}.before")));
+    }
+
     private static RecoveryTargetState ReadTargetState(string targetPath, ManifestFile file)
     {
         if (Directory.Exists(targetPath))
@@ -467,6 +495,7 @@ internal static class SettingsBackupStore
 
     private static void EnforceRetention(string backupRoot, string protectedDirectory)
     {
+        DeleteMarkerlessPreparationResidue(backupRoot, protectedDirectory);
         List<OperationDirectory> operations = EnumerateOperations(backupRoot, newestFirst: false);
         int remaining = operations.Count;
         foreach (OperationDirectory operation in operations)
@@ -496,6 +525,30 @@ internal static class SettingsBackupStore
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException)
             {
+            }
+        }
+    }
+
+    private static void DeleteMarkerlessPreparationResidue(string backupRoot, string protectedDirectory)
+    {
+        foreach (string candidate in Directory.EnumerateDirectories(backupRoot))
+        {
+            try
+            {
+                if (PathEquals(candidate, protectedDirectory) ||
+                    File.GetAttributes(candidate).HasFlag(FileAttributes.ReparsePoint) ||
+                    IsNormalFile(Path.Combine(candidate, ManifestFileName)))
+                {
+                    continue;
+                }
+
+                // A directory without a manifest has never become a recovery
+                // operation.  It can only be a preparation crash residue.
+                DeleteDirectorySafely(backupRoot, candidate);
+            }
+            catch (Exception exception) when (IsExpectedStoreException(exception))
+            {
+                // Retention remains best effort and never follows reparse points.
             }
         }
     }

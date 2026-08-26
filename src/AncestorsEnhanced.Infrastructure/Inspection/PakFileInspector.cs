@@ -1,5 +1,6 @@
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.FileSystem;
+using AncestorsEnhanced.Infrastructure.Paks;
 using System.Security.Cryptography;
 
 
@@ -9,7 +10,8 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
 {
     public PakFileSnapshot[] Read(
         GameInstallationSnapshot? installation,
-        List<InspectionNotice> notices)
+        List<InspectionNotice> notices,
+        VignetteModSnapshot? vignette = null)
     {
         if (installation is null)
         {
@@ -38,7 +40,7 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
                     file.FullPath,
                     file.SizeBytes,
                     file.LastWriteTimeUtc,
-                    Classify(file, fileSystem)))];
+                    Classify(file, fileSystem, vignette)))];
         }
         catch (Exception exception) when (InspectionErrors.IsExpected(exception))
         {
@@ -50,7 +52,10 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
         }
     }
 
-    private static PakClassification Classify(ReadOnlyFileMetadata file, IReadOnlyFileSystem fileSystem)
+    private static PakClassification Classify(
+        ReadOnlyFileMetadata file,
+        IReadOnlyFileSystem fileSystem,
+        VignetteModSnapshot? vignette)
     {
         string name = file.Name;
         if (string.Equals(name, "Ancestors-WindowsNoEditor.pak", StringComparison.OrdinalIgnoreCase) ||
@@ -59,15 +64,35 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
             return PakClassification.BaseGame;
         }
 
+        if (vignette is { IsEditable: true, ActivePatchPath: not null } &&
+            string.Equals(
+                Path.GetFullPath(vignette.ActivePatchPath),
+                Path.GetFullPath(file.FullPath),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        {
+            // VignettePakEditor has verified the stock asset and reconstructed the
+            // complete deterministic package. This is content proof, not a name check.
+            return PakClassification.AecOwned;
+        }
+
         // AEC ownership is proven by a sidecar hash written when AEC creates the
         // package. A matching filename alone is never enough, since users and
         // other mods can place identically named files in the Paks directory.
+        bool isKnownAecTarget =
+            string.Equals(name, GameplayPakBuilder.OwnPatchName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, VignettePakEditor.OwnPatchName, StringComparison.OrdinalIgnoreCase);
         string marker = file.FullPath + ".aec-owned.sha256";
-        if (fileSystem.FileExists(marker))
+        if (isKnownAecTarget && fileSystem.FileExists(marker))
         {
             try
             {
-                string expected = fileSystem.ReadAllText(marker).Trim();
+                string markerText = fileSystem.ReadAllText(marker);
+                if (!AecPakOwnershipMarker.TryReadExpectedSha256(markerText, out string expected))
+                {
+                    return name.EndsWith("_P.pak", StringComparison.OrdinalIgnoreCase)
+                        ? PakClassification.PatchStyle
+                        : PakClassification.Unclassified;
+                }
                 using Stream pak = fileSystem.OpenRead(file.FullPath);
                 string actual = Convert.ToHexString(SHA256.HashData(pak));
                 if (string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))

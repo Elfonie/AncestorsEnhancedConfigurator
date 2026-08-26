@@ -68,6 +68,27 @@ public sealed class ReadOnlyAncestorsInspectorTests
     }
 
     [Fact]
+    public void InspectNeverTreatsAnUnknownPakAsOwnedBecauseItHasAHashSidecar()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        string localAppData = temporaryDirectory.CreateDirectory("LocalAppData");
+        CreateValidInstallation(steamRoot);
+        string paks = Path.Combine(
+            steamRoot, "steamapps", "common", "Ancestors The Humankind Odyssey", "Ancestors", "Content", "Paks");
+        string path = Path.Combine(paks, "SomeOtherMod_P.pak");
+        File.WriteAllBytes(path, [1]);
+        File.WriteAllText(path + ".aec-owned.sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData([1])));
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment(steamRoot, localAppData)).Inspect();
+
+        PakFileSnapshot spoofed = Assert.Single(snapshot.PakFiles, pak => pak.Name == "SomeOtherMod_P.pak");
+        Assert.Equal(PakClassification.PatchStyle, spoofed.Classification);
+    }
+
+    [Fact]
     public void InspectRejectsManifestDirectoryTraversal()
     {
         using TemporaryDirectory temporaryDirectory = new();

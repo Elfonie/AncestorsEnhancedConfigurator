@@ -30,6 +30,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     private bool _disposed;
     private long _generation;
     private FileSystemWatcher? _watcher;
+    private bool _watcherRestartScheduled;
 
     /// <summary>Binds to a verified game context and its user-data path.</summary>
     public SaveGameWatchdog(VerifiedGameContext context, GameContextVerifier verifier)
@@ -110,24 +111,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 _stopCancellation = new CancellationTokenSource();
                 _generation++;
                 _stopped = false;
-                string saveDirectory = SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory);
-                if (!Directory.Exists(saveDirectory))
-                {
-                    Directory.CreateDirectory(saveDirectory);
-                }
-
-                var watcher = new FileSystemWatcher(saveDirectory)
-                {
-                    Filter = "Savegame*.sav",
-                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size |
-                                 NotifyFilters.FileName | NotifyFilters.CreationTime,
-                };
-                watcher.Changed += OnChanged;
-                watcher.Created += OnChanged;
-                watcher.Renamed += OnRenamed;
-                watcher.Error += OnWatcherError;
-                watcher.EnableRaisingEvents = true;
-                _watcher = watcher;
+                CreateWatcherLocked();
             }
         }
     }
@@ -154,10 +138,6 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 _stopped = true;
                 stoppingGeneration = _generation;
                 _stopCancellation.Cancel();
-                _pending.Clear();
-                _lastBackupTicks.Clear();
-                _retryAttempts.Clear();
-                _activeMutations.Clear();
                 snapshot = _running.Values
                     .Where(worker => worker.Generation == stoppingGeneration)
                     .ToArray();
@@ -183,6 +163,42 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     {
                         _running.Remove(slot);
                     }
+                }
+            }
+
+            int[] flushSlots;
+            lock (_gate)
+            {
+                // Workers cancelled during debounce/cooldown leave their dirty bit
+                // intact.  Flush those slots once without a cooldown, but never
+                // snapshot while an explicit restore/mutation lease remains active.
+                flushSlots = _pending
+                    .Where(pair => pair.Value && !_activeMutations.ContainsKey(pair.Key))
+                    .Select(pair => pair.Key)
+                    .ToArray();
+                _pending.Clear();
+                _lastBackupTicks.Clear();
+                _retryAttempts.Clear();
+                _activeMutations.Clear();
+            }
+
+            foreach (int slot in flushSlots)
+            {
+                try
+                {
+                    SaveGameOperationResult result = _createCheckpoint(slot);
+                    if (result.Succeeded && result.CreatedCheckpointId is not null)
+                    {
+                        PublishCheckpointCreated(slot.ToString(CultureInfo.InvariantCulture));
+                    }
+                    else if (!result.Succeeded)
+                    {
+                        PublishWatcherError($"Final auto-backup failed for slot {slot + 1}: {result.Message}");
+                    }
+                }
+                catch (Exception exception)
+                {
+                    PublishWatcherError($"Final auto-backup failed for slot {slot + 1}: {exception.Message}");
                 }
             }
         }
@@ -246,6 +262,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     private void RestartWatcher()
     {
+        bool needsRetry = false;
         lock (_gate)
         {
             if (_stopped || _watcher is null)
@@ -264,8 +281,14 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 _watcher.Dispose();
                 _watcher = null;
                 PublishWatcherError($"The save watcher could not be restarted: {exception.Message}");
-                return;
+                needsRetry = true;
             }
+        }
+
+        if (needsRetry)
+        {
+            ScheduleWatcherRestart();
+            return;
         }
 
         // FileSystemWatcher can lose an arbitrary number of notifications during an
@@ -277,6 +300,92 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 MarkDirty(slot);
             }
         }
+    }
+
+    private void CreateWatcherLocked()
+    {
+        string saveDirectory = SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory);
+        if (!Directory.Exists(saveDirectory))
+        {
+            Directory.CreateDirectory(saveDirectory);
+        }
+
+        var watcher = new FileSystemWatcher(saveDirectory)
+        {
+            Filter = "Savegame*.sav",
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size |
+                         NotifyFilters.FileName | NotifyFilters.CreationTime,
+        };
+        watcher.Changed += OnChanged;
+        watcher.Created += OnChanged;
+        watcher.Renamed += OnRenamed;
+        watcher.Error += OnWatcherError;
+        watcher.EnableRaisingEvents = true;
+        _watcher = watcher;
+    }
+
+    private void ScheduleWatcherRestart()
+    {
+        CancellationToken token;
+        lock (_gate)
+        {
+            if (_stopped || _watcher is not null || _watcherRestartScheduled)
+            {
+                return;
+            }
+
+            _watcherRestartScheduled = true;
+            token = _stopCancellation.Token;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            TimeSpan delay = TimeSpan.FromMilliseconds(250);
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    await Task.Delay(delay, token).ConfigureAwait(false);
+                    try
+                    {
+                        lock (_gate)
+                        {
+                            if (_stopped || _watcher is not null)
+                            {
+                                return;
+                            }
+
+                            CreateWatcherLocked();
+                            _watcherRestartScheduled = false;
+                        }
+
+                        for (int slot = 0; slot < SaveGamePaths.SlotCount; slot++)
+                        {
+                            if (File.Exists(SaveGamePaths.GetSlotPath(_userDataDirectory, slot)))
+                            {
+                                MarkDirty(slot);
+                            }
+                        }
+                        return;
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+                    {
+                        PublishWatcherError($"The save watcher retry failed: {exception.Message}");
+                        delay = TimeSpan.FromMilliseconds(Math.Min(delay.TotalMilliseconds * 2, 5_000));
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    _watcherRestartScheduled = false;
+                }
+            }
+        });
     }
 
     public void Dispose()
@@ -322,6 +431,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         try
         {
             await Task.Delay(500, stopToken).ConfigureAwait(false);
+            bool retrying = false;
 
             while (true)
             {
@@ -342,7 +452,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     {
                         wait = TimeSpan.FromMilliseconds(100);
                     }
-                    else if (_lastBackupTicks.TryGetValue(slot, out long last))
+                    else if (!retrying && _lastBackupTicks.TryGetValue(slot, out long last))
                     {
                         TimeSpan elapsed = Stopwatch.GetElapsedTime(last);
                         if (elapsed < _cooldown)
@@ -371,6 +481,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 SaveGameOperationResult result = _createCheckpoint(slot);
                 if (result.Succeeded)
                 {
+                    retrying = false;
                     lock (_gate)
                     {
                         // Retry budget is per contiguous failure episode, not a
@@ -391,6 +502,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     TimeSpan? retryDelay = RegisterFailure(slot, result);
                     if (retryDelay is not null)
                     {
+                        retrying = true;
                         await Task.Delay(retryDelay.Value, stopToken).ConfigureAwait(false);
                         continue;
                     }
