@@ -92,7 +92,7 @@ Download the matching archive from [GitHub Releases](https://github.com/Elfonie/
 | Windows x64 | `AncestorsEnhanced-1.0.0-win-x64.zip` | Extract and run `AncestorsEnhanced.App.exe` |
 | Linux x64 | `AncestorsEnhanced-1.0.0-linux-x64.zip` | Extract and run `./AncestorsEnhanced.App` |
 
-On Linux, run `chmod +x AncestorsEnhanced.App` if the archive tool did not preserve the executable bit.
+On Linux, run `chmod +x AncestorsEnhanced.App` if the archive tool did not preserve the executable bit. Keep all extracted files together in one folder; the executable loads the libraries beside it.
 
 Each archive contains the application, this README, the MIT license, and `SHA256SUMS.txt`. A separate `.zip.sha256` file is supplied for verifying the complete download.
 
@@ -103,6 +103,8 @@ Single antivirus engines occasionally flag the Windows executable with generic h
 - It modifies game files by design, including byte-level patches inside stock assets.
 - The release archives ship a large third-party native SDK (`discord_partner_sdk.dll`) used for Discord Rich Presence.
 - Release binaries are currently not Authenticode-signed.
+
+Releases are distributed as plain application folders inside the archive: no single-file bundling, no embedded compression layer, and no runtime extraction, so antivirus scanners can inspect every file individually.
 
 To verify a download, compare the archive against the published `.zip.sha256` file and the per-file hashes in `SHA256SUMS.txt`. If your antivirus reports a detection, submit it to the vendor as a false positive (for example [ClamAV](https://www.clamav.net/reports/fp) or [Microsoft](https://www.microsoft.com/en-us/wdsi/filesubmission)), and open a project issue with the product name, engine version, and exact signature so the release can be re-checked.
 
@@ -127,7 +129,7 @@ dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -p:Publish
 dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -p:PublishProfile=linux-x64
 ```
 
-The publish profiles create self-contained single-file builds. GitHub Actions builds Windows and Linux on their native runners, checks dependencies for known vulnerabilities, smoke-tests both executables, verifies the packaged archives, and produces SHA-256 checksums.
+The publish profiles create self-contained folder builds. GitHub Actions builds Windows and Linux on their native runners, checks dependencies for known vulnerabilities, smoke-tests both executables, verifies the packaged archives, and produces SHA-256 checksums.
 
 ## Project status
 

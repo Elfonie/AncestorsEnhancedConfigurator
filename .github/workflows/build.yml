@@ -61,10 +61,11 @@ jobs:
           }
 
       - name: Publish
-        # Native libraries stay as separate files instead of being bundled into the
-        # executable and extracted to %TEMP% at runtime. Bundled-and-extracted
-        # natives are a classic antivirus heuristic trigger (packer/dropper pattern).
-        run: dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -c Release -r ${{ matrix.rid }} --no-restore -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeNativeLibrariesForSelfExtract=false -p:DebugType=None -p:DebugSymbols=false -o artifacts/${{ matrix.rid }}
+        # Folder publish (no single-file bundle): the release zip provides the
+        # compression, and antivirus scanners can inspect every managed and
+        # native file individually instead of treating one compressed,
+        # self-extracting executable as a packed payload.
+        run: dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -c Release -r ${{ matrix.rid }} --no-restore -p:PublishSingleFile=false -p:SelfContained=true -p:DebugType=None -p:DebugSymbols=false -o artifacts/${{ matrix.rid }}
 
       - name: Prepare portable package
         shell: pwsh
