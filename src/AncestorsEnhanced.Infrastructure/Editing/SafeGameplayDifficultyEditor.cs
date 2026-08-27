@@ -102,15 +102,20 @@ public sealed class SafeGameplayDifficultyEditor : IGameplayDifficultyEditor
                 2 => _buildVersion2Pak(snapshot.Installation.InstallDirectory, settings),
                 _ => _buildPak(snapshot.Installation.InstallDirectory, settings),
             };
-            if (!pak.AsSpan().SequenceEqual(reconstructed))
+            bool byteExact = pak.AsSpan().SequenceEqual(reconstructed);
+            if (!byteExact && markerVersion >= AecPakOwnershipMarker.CurrentVersion)
             {
                 return Unverified("The installed gameplay PAK is not the exact package AEC would generate");
             }
 
-            return new(
-                GameplayDifficultyStateKind.Active,
-                settings,
-                $"AEC gameplay PAK active · Food {settings.FoodPercent}% · Water {settings.WaterPercent}% · Sleep {settings.SleepPercent}% · Fall damage {settings.FallDamagePercent}% · Bleeding {settings.BleedingPercent}% · Poison {settings.PoisonPercent}% · Energy recovery {settings.EnergyRecoveryPercent}% · Wound sleep healing {settings.WoundSleepHealingPercent}% · Wound stamina penalty {settings.WoundStaminaPenaltyPercent}% · Poison recovery {settings.PoisonRecoveryPercent}% · Rest delay {settings.RestDelayPercent}% · Exhaustion threshold {settings.ExhaustionThresholdPercent}% · Exhaustion penalty {settings.ExhaustionPenaltyPercent}% · Wound recovery time {settings.WoundRecoveryDurationPercent}% · Poison stamina penalty {settings.PoisonStaminaPenaltyPercent}%");
+            // Packages recorded by an older marker format were built by retired PAK builders whose
+            // exact bytes can no longer be reproduced (the builder groups asset mutations since the
+            // current format). Their integrity is still proven by the ownership record's SHA-256,
+            // so they remain active and editable and are rebuilt in the current format on next change.
+            string formatNote = byteExact
+                ? string.Empty
+                : $" (legacy format v{markerVersion} · rebuilt on next change)";
+            return ActiveState(settings, formatNote);
         }
         catch (Exception exception) when (IsExpected(exception))
         {
@@ -298,6 +303,11 @@ public sealed class SafeGameplayDifficultyEditor : IGameplayDifficultyEditor
                 settings.WaterPercent,
                 settings.SleepPercent,
                 settings.FallDamagePercent));
+
+    private static GameplayDifficultyState ActiveState(GameplayDifficultySettings settings, string formatNote = "") => new(
+        GameplayDifficultyStateKind.Active,
+        settings,
+        $"AEC gameplay PAK active{formatNote} · Food {settings.FoodPercent}% · Water {settings.WaterPercent}% · Sleep {settings.SleepPercent}% · Fall damage {settings.FallDamagePercent}% · Bleeding {settings.BleedingPercent}% · Poison {settings.PoisonPercent}% · Energy recovery {settings.EnergyRecoveryPercent}% · Wound sleep healing {settings.WoundSleepHealingPercent}% · Wound stamina penalty {settings.WoundStaminaPenaltyPercent}% · Poison recovery {settings.PoisonRecoveryPercent}% · Rest delay {settings.RestDelayPercent}% · Exhaustion threshold {settings.ExhaustionThresholdPercent}% · Exhaustion penalty {settings.ExhaustionPenaltyPercent}% · Wound recovery time {settings.WoundRecoveryDurationPercent}% · Poison stamina penalty {settings.PoisonStaminaPenaltyPercent}%");
 
     private static GameplayDifficultyState Unverified(string description) => new(
         GameplayDifficultyStateKind.Unverified,

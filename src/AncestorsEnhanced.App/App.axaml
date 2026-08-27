@@ -38,6 +38,28 @@
     <SolidColorBrush x:Key="ReviewSurfaceBrush" Color="#10191F" />
     <SolidColorBrush x:Key="ReviewBorderBrush" Color="#3B7598" />
     <SolidColorBrush x:Key="ReviewTextBrush" Color="#DCEEFF" />
+    <!-- Page-level tokens. Every window must reference these via DynamicResource so a
+         high-contrast switch re-colors the whole UI; do not hardcode hex values in views.
+         Runtime overrides live in AccessibilityTheme.Apply(...). -->
+    <SolidColorBrush x:Key="HeadingTextBrush" Color="#EBF0F3" />
+    <SolidColorBrush x:Key="BodyTextBrush" Color="#E6ECEF" />
+    <SolidColorBrush x:Key="LabelTextBrush" Color="#82939D" />
+    <SolidColorBrush x:Key="MidTextBrush" Color="#8B9AA4" />
+    <SolidColorBrush x:Key="OrangeAccentBrush" Color="#FF5A00" />
+    <SolidColorBrush x:Key="GoldTextBrush" Color="#D6BC84" />
+    <SolidColorBrush x:Key="PrimaryActionTextBrush" Color="#FFF3EA" />
+    <SolidColorBrush x:Key="DangerTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="EditorSurfaceBrush" Color="#182127" />
+    <SolidColorBrush x:Key="EditorBorderBrush" Color="#2A363E" />
+    <SolidColorBrush x:Key="OliveBorderBrush" Color="#4A5A23" />
+    <SolidColorBrush x:Key="CloudWarningBorderBrush" Color="#3B3120" />
+    <SolidColorBrush x:Key="OnboardingPanelBrush" Color="#15232C" />
+    <SolidColorBrush x:Key="ModalOverlayBrush" Color="#E60C1115" />
+    <SolidColorBrush x:Key="DialogScrimBrush" Color="#1A000000" />
+    <LinearGradientBrush x:Key="NavActiveBackgroundBrush" StartPoint="0%,0%" EndPoint="100%,0%">
+      <GradientStop Offset="0" Color="#4A5A23" />
+      <GradientStop Offset="1" Color="#1E2720" />
+    </LinearGradientBrush>
     <!-- Active ToggleSwitch colors -->
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOn" Color="#B4D941" />
     <SolidColorBrush x:Key="ToggleSwitchCurtainFillOnPointerOver" Color="#9ABF31" />
@@ -74,7 +96,7 @@
 
     <!-- Primary action -->
     <Style Selector="Button.PrimaryAction">
-      <Setter Property="Foreground" Value="#FFF3EA" />
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryActionTextBrush}" />
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="CornerRadius" Value="7" />
       <Setter Property="Padding" Value="16,8" />
@@ -96,7 +118,7 @@
 
     <!-- Destructive / danger -->
     <Style Selector="Button.DangerAction">
-      <Setter Property="Foreground" Value="#FFF" />
+      <Setter Property="Foreground" Value="{DynamicResource DangerTextBrush}" />
       <Setter Property="FontWeight" Value="Bold" />
       <Setter Property="CornerRadius" Value="7" />
       <Setter Property="Padding" Value="14,8" />
@@ -119,14 +141,7 @@
     </Style>
     <!-- Active sidebar navigation -->
     <Style Selector="ToggleButton.nav:checked /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background">
-        <Setter.Value>
-          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-            <GradientStop Offset="0" Color="#4A5A23" />
-            <GradientStop Offset="1" Color="#1E2720" />
-          </LinearGradientBrush>
-        </Setter.Value>
-      </Setter>
+      <Setter Property="Background" Value="{DynamicResource NavActiveBackgroundBrush}" />
       <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
       <Setter Property="BorderThickness" Value="0" />
     </Style>
@@ -171,14 +186,7 @@
     </Style>
     <!-- Active Simple/Advanced mode -->
     <Style Selector="ToggleButton.mode:checked /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background">
-        <Setter.Value>
-          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-            <GradientStop Offset="0" Color="#4A5A23" />
-            <GradientStop Offset="1" Color="#1E2720" />
-          </LinearGradientBrush>
-        </Setter.Value>
-      </Setter>
+      <Setter Property="Background" Value="{DynamicResource NavActiveBackgroundBrush}" />
       <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
     </Style>
 

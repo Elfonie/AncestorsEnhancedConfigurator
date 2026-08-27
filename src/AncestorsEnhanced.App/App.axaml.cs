@@ -23,17 +23,19 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // Avalonia dispatches async-void UI failures here.  Logging them at the
-        // boundary prevents a silent process termination and keeps diagnostics
-        // available for the next launch; individual commands still report their
-        // expected errors in the normal UI.
-        Dispatcher.UIThread.UnhandledException += (_, eventArgs) =>
-        {
-            AppDiagnostics.Logger?.Write($"Unhandled UI exception: {eventArgs.Exception}");
-            eventArgs.Handled = true;
-        };
+        var desktopLifetime = ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
 
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        // AEC writes game files, so an unknown UI exception must never leave the app running
+        // in a half-broken state. Only genuinely transient failures (cancellations, network
+        // chatter) are swallowed; everything else logs, informs the user and shuts down in a
+        // controlled way instead of continuing with unknown state.
+        MainViewModel? mainViewModel = null;
+        Dispatcher.UIThread.UnhandledException += (_, eventArgs) => HandleUnhandledUiException(
+            eventArgs,
+            desktopLifetime,
+            () => mainViewModel);
+
+        if (desktopLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             if (desktop.Args?.Contains("--already-running", StringComparer.Ordinal) == true)
             {
@@ -42,9 +44,22 @@ public partial class App : Application
                 return;
             }
 
-            var accessibilityPreferences = new AccessibilityPreferencesStore();
-            AccessibilityPreferences preferences = accessibilityPreferences.Load();
+            var accessibilityPreferencesStore = new AccessibilityPreferencesStore();
+            AccessibilityPreferences preferences = accessibilityPreferencesStore.Load();
             AccessibilityTheme.Apply(this, preferences.HighContrastEnabled);
+
+            // Persists preference changes and never loses them silently: a failed write is
+            // logged and reported so the user knows the setting will not survive a restart.
+            void SavePreferences(AccessibilityPreferences value)
+            {
+                if (accessibilityPreferencesStore.TrySave(value))
+                {
+                    return;
+                }
+
+                AppDiagnostics.Logger?.Write("Could not save application preferences.");
+                AppDialogs.ShowPreferenceSaveWarning();
+            }
 
             DiscordRichPresenceService? discordPresence = null;
             var discordTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -79,32 +94,32 @@ public partial class App : Application
                 {
                     AccessibilityTheme.Apply(this, enabled);
                     preferences = preferences with { HighContrastEnabled = enabled };
-                    accessibilityPreferences.TrySave(preferences);
+                    SavePreferences(preferences);
                 },
                 discordRichPresenceEnabled: preferences.DiscordRichPresenceEnabled,
                 discordRichPresenceChanged: enabled =>
                 {
                     preferences = preferences with { DiscordRichPresenceEnabled = enabled };
-                    accessibilityPreferences.TrySave(preferences);
+                    SavePreferences(preferences);
                     SetDiscordRichPresence(enabled);
                 },
                 showOnboarding: !preferences.HasCompletedOnboarding,
                 onboardingCompleted: () =>
                 {
                     preferences = preferences with { HasCompletedOnboarding = true };
-                    accessibilityPreferences.TrySave(preferences);
+                    SavePreferences(preferences);
                 },
                 experimentalGraphicsSettingsEnabled: preferences.ExperimentalGraphicsSettingsEnabled,
                 experimentalGraphicsSettingsChanged: enabled =>
                 {
                     preferences = preferences with { ExperimentalGraphicsSettingsEnabled = enabled };
-                    accessibilityPreferences.TrySave(preferences);
+                    SavePreferences(preferences);
                 },
                 experimentalGameplaySettingsEnabled: preferences.ExperimentalGameplaySettingsEnabled,
                 experimentalGameplaySettingsChanged: enabled =>
                 {
                     preferences = preferences with { ExperimentalGameplaySettingsEnabled = enabled };
-                    accessibilityPreferences.TrySave(preferences);
+                    SavePreferences(preferences);
                 },
                 hasAcknowledgedDetailedHardwareScan: preferences.HasAcknowledgedDetailedHardwareScan,
                 detailedHardwareSnapshot: preferences.DetailedHardwareSnapshot,
@@ -115,9 +130,10 @@ public partial class App : Application
                         HasAcknowledgedDetailedHardwareScan = true,
                         DetailedHardwareSnapshot = snapshot,
                     };
-                    accessibilityPreferences.TrySave(preferences);
+                    SavePreferences(preferences);
                 },
                 hardwareProbe: new SystemHardwareProbe());
+            mainViewModel = viewModel;
             var window = new MainWindow
             {
                 DataContext = viewModel,
@@ -216,5 +232,79 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void HandleUnhandledUiException(
+        DispatcherUnhandledExceptionEventArgs eventArgs,
+        IClassicDesktopStyleApplicationLifetime? desktopLifetime,
+        Func<MainViewModel?> currentViewModel)
+    {
+        Exception exception = eventArgs.Exception;
+        if (FatalErrorPolicy.IsRecoverable(exception))
+        {
+            AppDiagnostics.Logger?.Write($"Recovered from transient UI exception: {exception}");
+            eventArgs.Handled = true;
+            return;
+        }
+
+        // Handled=true here does NOT mean the app continues. It only hands control of the
+        // exit path to this handler so we can inform the user and shut down cleanly instead
+        // of crashing with no feedback.
+        eventArgs.Handled = true;
+        AppDiagnostics.Logger?.Write($"Fatal UI exception: {exception}");
+        TryDiscardPendingChanges(currentViewModel);
+        AppDialogs.ShowFatalError(
+            exception,
+            () =>
+            {
+                if (desktopLifetime is not null)
+                {
+                    desktopLifetime.Shutdown();
+                }
+                else
+                {
+                    Environment.Exit(1);
+                }
+            });
+    }
+
+    /// <summary>
+    /// Best-effort rollback before a fatal shutdown: unconfirmed changes only ever live in
+    /// memory, so discarding them returns the user to the last confirmed on-disk state.
+    /// Confirmed writes are already atomic (temp file + move + journal) and are left alone.
+    /// </summary>
+    private static void TryDiscardPendingChanges(Func<MainViewModel?> currentViewModel)
+    {
+        try
+        {
+            if (currentViewModel() is not { } viewModel)
+            {
+                return;
+            }
+
+            if (viewModel.IsAnyOperationRunning)
+            {
+                AppDiagnostics.Logger?.Write(
+                    "A file operation was still running during the fatal error; its transaction "
+                    + "journal keeps the write atomic, so nothing further is attempted.");
+                return;
+            }
+
+            if (!viewModel.HasPendingChanges && !viewModel.IsReviewingChanges)
+            {
+                return;
+            }
+
+            if (viewModel.DiscardChangesCommand.CanExecute(null))
+            {
+                viewModel.DiscardChangesCommand.Execute(null);
+                AppDiagnostics.Logger?.Write(
+                    "Discarded pending unconfirmed changes before the fatal-error shutdown.");
+            }
+        }
+        catch (Exception rollbackFailure)
+        {
+            AppDiagnostics.Logger?.Write($"Rollback attempt failed: {rollbackFailure}");
+        }
     }
 }

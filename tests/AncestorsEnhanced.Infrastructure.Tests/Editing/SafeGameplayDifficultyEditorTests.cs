@@ -214,6 +214,78 @@ public sealed class SafeGameplayDifficultyEditorTests
         Assert.Equal(previousSettings, state.Settings);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void LegacyPackagesBuiltByRetiredBuildersStayActiveThroughTheirRecordedSettings(int markerVersion)
+    {
+        using var fixture = new GameplayFixture();
+        SafeGameplayDifficultyEditor editor = fixture.CreateEditor();
+        byte[] retiredLayoutPak = Encoding.UTF8.GetBytes($"retired builder layout|v{markerVersion}");
+        File.WriteAllBytes(fixture.PakPath, retiredLayoutPak);
+        string hash = Convert.ToHexString(SHA256.HashData(retiredLayoutPak));
+        File.WriteAllText(fixture.MarkerPath, JsonSerializer.Serialize(new
+        {
+            Version = markerVersion,
+            Component = "gameplay",
+            PakSha256 = hash,
+            Settings = new { FoodPercent = 140, WaterPercent = 120, SleepPercent = 130, FallDamagePercent = 110 },
+        }));
+
+        GameplayDifficultyState state = editor.Inspect(fixture.Snapshot);
+
+        Assert.Equal(GameplayDifficultyStateKind.Active, state.Kind);
+        Assert.Equal(new GameplayDifficultySettings(140, 120, 130, 110), state.Settings);
+        Assert.Contains("legacy format", state.Description);
+    }
+
+    [Fact]
+    public void ACurrentFormatPackageThatDeviatesFromItsRecordedSettingsStaysUnverified()
+    {
+        using var fixture = new GameplayFixture();
+        SafeGameplayDifficultyEditor editor = fixture.CreateEditor();
+        byte[] tamperedPak = Encoding.UTF8.GetBytes("hand-tampered package bytes");
+        File.WriteAllBytes(fixture.PakPath, tamperedPak);
+        string hash = Convert.ToHexString(SHA256.HashData(tamperedPak));
+        File.WriteAllText(fixture.MarkerPath, JsonSerializer.Serialize(new
+        {
+            Version = AecPakOwnershipMarker.CurrentVersion,
+            Component = "gameplay",
+            PakSha256 = hash,
+            Settings = new { FoodPercent = 200, WaterPercent = 100, SleepPercent = 100, FallDamagePercent = 100 },
+        }));
+
+        GameplayDifficultyState state = editor.Inspect(fixture.Snapshot);
+
+        Assert.Equal(GameplayDifficultyStateKind.Unverified, state.Kind);
+    }
+
+    [Fact]
+    public void ApplyingAChangeToALegacyPackageRebuildsItInTheCurrentFormat()
+    {
+        using var fixture = new GameplayFixture();
+        SafeGameplayDifficultyEditor editor = fixture.CreateEditor();
+        byte[] retiredLayoutPak = Encoding.UTF8.GetBytes("retired builder layout|v2");
+        File.WriteAllBytes(fixture.PakPath, retiredLayoutPak);
+        string hash = Convert.ToHexString(SHA256.HashData(retiredLayoutPak));
+        File.WriteAllText(fixture.MarkerPath, JsonSerializer.Serialize(new
+        {
+            Version = 2,
+            Component = "gameplay",
+            PakSha256 = hash,
+            Settings = new { FoodPercent = 130, WaterPercent = 100, SleepPercent = 100, FallDamagePercent = 100 },
+        }));
+        Assert.Contains("legacy format", editor.Inspect(fixture.Snapshot).Description);
+
+        SettingsChangePlan upgrade = editor.CreatePlan(fixture.Snapshot, new GameplayDifficultySettings(140, 100, 100, 100));
+        Assert.True(editor.Apply(upgrade).Succeeded);
+
+        GameplayDifficultyState upgraded = editor.Inspect(fixture.Snapshot);
+        Assert.Equal(GameplayDifficultyStateKind.Active, upgraded.Kind);
+        Assert.Equal(new GameplayDifficultySettings(140, 100, 100, 100), upgraded.Settings);
+        Assert.DoesNotContain("legacy format", upgraded.Description);
+    }
+
     private static void AssertFloatPatch(
         GameplayAssetPatch patch,
         string id,

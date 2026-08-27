@@ -5,7 +5,7 @@ namespace AncestorsEnhanced.Infrastructure.Paks;
 
 internal static class AecPakOwnershipMarker
 {
-    private const int CurrentVersion = 3;
+    internal const int CurrentVersion = 3;
     private const int LegacyGameplayVersion = 1;
     private const int PreviousGameplayVersion = 2;
     private static readonly JsonSerializerOptions JsonOptions = new()

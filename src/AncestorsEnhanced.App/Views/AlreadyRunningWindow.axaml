@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="AncestorsEnhanced.App.Views.AlreadyRunningWindow"
         Width="440"
@@ -17,7 +17,7 @@
                    Foreground="{DynamicResource PrimaryTextBrush}"
                    TextWrapping="Wrap" />
         <TextBlock Text="Return to the existing window to continue."
-                   Foreground="#9CB0BC"
+                   Foreground="{DynamicResource SecondaryTextBrush}"
                    TextWrapping="Wrap" />
       </StackPanel>
       <Button Grid.Row="1"
