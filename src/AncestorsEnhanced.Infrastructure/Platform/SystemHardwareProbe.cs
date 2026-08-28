@@ -1,8 +1,8 @@
-using System.Management;
-using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 using System.Xml;
+using Microsoft.Win32;
 
 namespace AncestorsEnhanced.Infrastructure.Platform;
 
@@ -13,6 +13,7 @@ namespace AncestorsEnhanced.Infrastructure.Platform;
 public sealed class SystemHardwareProbe : IHardwareProbe
 {
     private static readonly Regex MemoryMegabytes = new(@"(?<!\d)(\d+(?:[.,]\d+)?)\s*(?:MB|MiB)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Guid DxgiFactory1InterfaceId = new("770aae78-f26f-4dba-a829-253c83d1b387");
 
     public HardwareSnapshot Inspect(bool includeDetailedGraphics = false) => OperatingSystem.IsWindows()
         ? InspectWindows(includeDetailedGraphics)
@@ -132,26 +133,22 @@ public sealed class SystemHardwareProbe : IHardwareProbe
     {
         try
         {
+            _ = includeDetailedGraphics;
             ProcessorInventory processor = ReadProcessor();
             ulong? installedMemory = ReadInstalledMemory();
             GraphicsAdapterSnapshot[] adapters = ReadGraphicsAdapters();
-            if (includeDetailedGraphics)
-            {
-                GraphicsAdapterSnapshot[] dxDiagAdapters = TryReadDxDiagAdapters();
-                if (dxDiagAdapters.Any(adapter => adapter.ReportedMemoryBytes is not null))
-                {
-                    adapters = dxDiagAdapters;
-                }
-            }
             return new(
                 global::System.Environment.OSVersion.VersionString,
                 processor.Name,
                 processor.LogicalProcessorCount,
                 processor.PhysicalCoreCount,
                 installedMemory,
-                adapters);
+                adapters,
+                adapters.Any(adapter => adapter.IsMemoryAuthoritative)
+                    ? null
+                    : "Windows did not report dedicated GPU memory through DXGI. No automatic graphics recommendation was made.");
         }
-        catch (Exception exception) when (exception is ManagementException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception exception) when (exception is UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
             return new(
                 global::System.Environment.OSVersion.VersionString,
@@ -167,92 +164,119 @@ public sealed class SystemHardwareProbe : IHardwareProbe
     [SupportedOSPlatform("windows")]
     private static ProcessorInventory ReadProcessor()
     {
-        using var searcher = new ManagementObjectSearcher(
-            "SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor");
-        using ManagementObjectCollection objects = searcher.Get();
-        ManagementObject? processor = objects.Cast<ManagementObject>().FirstOrDefault();
-        if (processor is null)
+        string name = "Unavailable";
+        try
         {
-            return new("Unavailable", global::System.Environment.ProcessorCount, null);
+            using RegistryKey? processor = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0");
+            if (processor?.GetValue("ProcessorNameString") is string processorName && !string.IsNullOrWhiteSpace(processorName))
+            {
+                name = processorName.Trim();
+            }
+        }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // The processor name is supplementary; the native processor count remains useful.
         }
 
-        string name = ReadString(processor["Name"]) ?? "Unavailable";
-        int logical = ReadPositiveInt(processor["NumberOfLogicalProcessors"]) ?? global::System.Environment.ProcessorCount;
-        return new(name, logical, ReadPositiveInt(processor["NumberOfCores"]));
+        return new(name, global::System.Environment.ProcessorCount, null);
     }
 
     [SupportedOSPlatform("windows")]
     private static ulong? ReadInstalledMemory()
     {
-        using var searcher = new ManagementObjectSearcher("SELECT TotalPhysicalMemory FROM Win32_ComputerSystem");
-        using ManagementObjectCollection objects = searcher.Get();
-        return objects.Cast<ManagementObject>()
-            .Select(item => ReadPositiveUInt64(item["TotalPhysicalMemory"]))
-            .FirstOrDefault(value => value is not null);
+        var status = new MemoryStatusEx { Length = (uint)Marshal.SizeOf<MemoryStatusEx>() };
+        return GlobalMemoryStatusEx(ref status) && status.TotalPhysical > 0 ? status.TotalPhysical : null;
     }
 
     [SupportedOSPlatform("windows")]
     private static GraphicsAdapterSnapshot[] ReadGraphicsAdapters()
     {
-        using var searcher = new ManagementObjectSearcher("SELECT Name, AdapterRAM FROM Win32_VideoController");
-        using ManagementObjectCollection objects = searcher.Get();
-        return objects.Cast<ManagementObject>()
-            .Select(item => new GraphicsAdapterSnapshot(
-                ReadString(item["Name"]) ?? "Unnamed graphics adapter",
-                ReadPositiveUInt64(item["AdapterRAM"]),
-                IsMemoryAuthoritative: false))
+        GraphicsAdapterSnapshot[] dxgiAdapters = ReadDxgiGraphicsAdapters();
+        return dxgiAdapters.Length > 0 ? dxgiAdapters : ReadDisplayDeviceNames();
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static GraphicsAdapterSnapshot[] ReadDisplayDeviceNames()
+    {
+        var adapters = new List<GraphicsAdapterSnapshot>();
+        for (uint index = 0; ; index++)
+        {
+            var displayDevice = new DisplayDevice { Size = Marshal.SizeOf<DisplayDevice>() };
+            if (!EnumDisplayDevices(null, index, ref displayDevice, 0))
+            {
+                break;
+            }
+
+            string name = displayDevice.DeviceString?.Trim() ?? string.Empty;
+            if (name.Length > 0)
+            {
+                adapters.Add(new GraphicsAdapterSnapshot(name, null, IsMemoryAuthoritative: false));
+            }
+        }
+
+        return adapters
+            .DistinctBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .OrderBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
     [SupportedOSPlatform("windows")]
-    private static GraphicsAdapterSnapshot[] TryReadDxDiagAdapters()
+    private static GraphicsAdapterSnapshot[] ReadDxgiGraphicsAdapters()
     {
-        string reportPath = Path.Combine(Path.GetTempPath(), $"aec-dxdiag-{Guid.NewGuid():N}.xml");
+        IntPtr factory = IntPtr.Zero;
         try
         {
-            var startInfo = new ProcessStartInfo(
-                Path.Combine(global::System.Environment.SystemDirectory, "dxdiag.exe"),
-                $"/x \"{reportPath}\"")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-            };
-            using Process? process = Process.Start(startInfo);
-            if (process is null)
+            Guid factoryInterfaceId = DxgiFactory1InterfaceId;
+            if (CreateDXGIFactory1(ref factoryInterfaceId, out factory) < 0 || factory == IntPtr.Zero)
             {
                 return [];
             }
 
-            if (!process.WaitForExit(15_000))
+            var adapters = new List<GraphicsAdapterSnapshot>();
+            EnumAdapters1Delegate enumerate = GetComDelegate<EnumAdapters1Delegate>(factory, 12);
+            for (uint index = 0; ; index++)
             {
-                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-                try { process.WaitForExit(1_000); } catch (InvalidOperationException) { }
-                return [];
-            }
-            if (process.ExitCode != 0 || !File.Exists(reportPath))
-            {
-                return [];
+                IntPtr adapter = IntPtr.Zero;
+                int result = enumerate(factory, index, out adapter);
+                if (unchecked((uint)result) == 0x887A0002 || result < 0 || adapter == IntPtr.Zero)
+                {
+                    break;
+                }
+
+                try
+                {
+                    GetDesc1Delegate getDescription = GetComDelegate<GetDesc1Delegate>(adapter, 10);
+                    if (getDescription(adapter, out DxgiAdapterDescription description) >= 0 &&
+                        (description.Flags & 0x2) == 0)
+                    {
+                        string name = description.Description?.Trim() ?? string.Empty;
+                        if (name.Length > 0)
+                        {
+                            ulong? dedicatedMemory = description.DedicatedVideoMemory > 0
+                                ? (ulong)description.DedicatedVideoMemory
+                                : null;
+                            adapters.Add(new GraphicsAdapterSnapshot(name, dedicatedMemory, dedicatedMemory is not null));
+                        }
+                    }
+                }
+                finally
+                {
+                    ReleaseComObject(adapter);
+                }
             }
 
-            return ParseDxDiagXml(File.ReadAllText(reportPath));
+            return adapters
+                .DistinctBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or XmlException)
+        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException or COMException)
         {
             return [];
         }
         finally
         {
-            try
-            {
-                File.Delete(reportPath);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                // The randomized report is diagnostic-only. Leaving it behind is
-                // safer than turning an otherwise read-only inspection into a failure.
-            }
+            ReleaseComObject(factory);
         }
     }
 
@@ -288,13 +312,83 @@ public sealed class SystemHardwareProbe : IHardwareProbe
         return bytes <= ulong.MaxValue ? (ulong)bytes : null;
     }
 
-    private static string? ReadString(object? value) => value?.ToString()?.Trim() is { Length: > 0 } text ? text : null;
+    private static ulong? ReadPositiveUInt64(string? value) =>
+        ulong.TryParse(value, out ulong parsed) && parsed > 0 ? parsed : null;
 
-    private static int? ReadPositiveInt(object? value) =>
-        int.TryParse(value?.ToString(), out int parsed) && parsed > 0 ? parsed : null;
+    private static T GetComDelegate<T>(IntPtr instance, int slot) where T : Delegate
+    {
+        IntPtr vtable = Marshal.ReadIntPtr(instance);
+        IntPtr method = Marshal.ReadIntPtr(vtable, slot * IntPtr.Size);
+        return Marshal.GetDelegateForFunctionPointer<T>(method);
+    }
 
-    private static ulong? ReadPositiveUInt64(object? value) =>
-        ulong.TryParse(value?.ToString(), out ulong parsed) && parsed > 0 ? parsed : null;
+    private static void ReleaseComObject(IntPtr instance)
+    {
+        if (instance != IntPtr.Zero)
+        {
+            _ = GetComDelegate<ReleaseDelegate>(instance, 2)(instance);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DisplayDevice
+    {
+        public int Size;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string? DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string? DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string? DeviceId;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string? DeviceKey;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MemoryStatusEx
+    {
+        public uint Length;
+        public uint MemoryLoad;
+        public ulong TotalPhysical;
+        public ulong AvailablePhysical;
+        public ulong TotalPageFile;
+        public ulong AvailablePageFile;
+        public ulong TotalVirtual;
+        public ulong AvailableVirtual;
+        public ulong AvailableExtendedVirtual;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DxgiAdapterDescription
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string? Description;
+        public uint VendorId;
+        public uint DeviceId;
+        public uint SubSystemId;
+        public uint Revision;
+        public nuint DedicatedVideoMemory;
+        public nuint DedicatedSystemMemory;
+        public nuint SharedSystemMemory;
+        public long AdapterLuid;
+        public uint Flags;
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int EnumAdapters1Delegate(IntPtr factory, uint index, out IntPtr adapter);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetDesc1Delegate(IntPtr adapter, out DxgiAdapterDescription description);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate uint ReleaseDelegate(IntPtr instance);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumDisplayDevices(string? device, uint deviceIndex, ref DisplayDevice displayDevice, uint flags);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx status);
+
+    [DllImport("dxgi.dll", ExactSpelling = true)]
+    private static extern int CreateDXGIFactory1(ref Guid riid, out IntPtr factory);
 
     private sealed record ProcessorInventory(string Name, int LogicalProcessorCount, int? PhysicalCoreCount);
 }

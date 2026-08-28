@@ -1,4 +1,4 @@
-﻿<Window xmlns="https://github.com/avaloniaui"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:AncestorsEnhanced.App.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -120,10 +120,19 @@
                 <TextBlock Text="SUGGESTED STARTING POINT" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" />
                 <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.PresetName}" FontSize="21" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
                 <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.Description}" MaxWidth="650" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
+                <TextBlock Text="{Binding HardwareScanMessage}" IsVisible="{Binding HasHardwareScanMessage}" MaxWidth="650" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource GoldTextBrush}" />
+                <TextBlock Text="CPU, memory, graphics adapter and dedicated VRAM are read locally from Windows. AEC uses them only for a conservative recommendation, never as a benchmark." IsVisible="{Binding !HardwareDiagnostics.Recommendation.CanStagePreset}" MaxWidth="650" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" />
+                <Expander Header="Detected hardware" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}">
+                  <StackPanel Spacing="2" Margin="0,5,0,0">
+                    <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}"><Run Text="CPU: " /><Run Text="{Binding HardwareDiagnostics.Cpu}" /></TextBlock>
+                    <TextBlock FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}"><Run Text="Memory: " /><Run Text="{Binding HardwareDiagnostics.Memory}" /></TextBlock>
+                    <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}"><Run Text="Graphics: " /><Run Text="{Binding HardwareDiagnostics.Graphics}" /></TextBlock>
+                  </StackPanel>
+                </Expander>
               </StackPanel>
               <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
-                <Button Classes="PrimaryAction" Content="Review recommended tweak" Command="{Binding LoadHardwareRecommendationCommand}" IsVisible="{Binding HardwareDiagnostics.Recommendation.CanStagePreset}" />
-                <Button Content="Check GPU details" Command="{Binding RunDetailedHardwareDetectionCommand}" IsVisible="{Binding CanShowHardwareScanAction}" IsEnabled="{Binding CanRunDetailedHardwareDetection}" />
+                <Button Classes="PrimaryAction" Content="Review recommendation" Command="{Binding LoadHardwareRecommendationCommand}" IsVisible="{Binding HardwareDiagnostics.Recommendation.CanStagePreset}" />
+                <Button Content="{Binding DetailedHardwareActionLabel}" Command="{Binding RunDetailedHardwareDetectionCommand}" IsVisible="{Binding CanShowHardwareScanAction}" IsEnabled="{Binding CanRunDetailedHardwareDetection}" />
               </StackPanel>
             </Grid>
           </Border>
@@ -133,7 +142,15 @@
               <StackPanel Spacing="5"><TextBlock Text="GRAPHICS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding HomeGraphicsSummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" /><Button Content="Change graphics" Command="{Binding ShowGraphicsCommand}" HorizontalAlignment="Left" /></StackPanel>
             </Border>
             <Border Grid.Column="1" Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-              <StackPanel Spacing="5"><TextBlock Text="GAMEPLAY RESEARCH" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding HomeGameplaySummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" /><Button Content="Preview difficulty controls" Command="{Binding ShowGameplayCommand}" HorizontalAlignment="Left" /></StackPanel>
+              <StackPanel Spacing="5">
+                <TextBlock Text="GAMEPLAY DIFFICULTY" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" />
+                <TextBlock Text="{Binding HomeGameplaySummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding ExternalPakHelpText}" IsVisible="{Binding HasExternalPaks}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource GoldTextBrush}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="Adjust difficulty" Command="{Binding ShowGameplayCommand}" />
+                  <Button Content="Open game PAK folder" Command="{Binding OpenGamePakFolderCommand}" IsVisible="{Binding CanOpenGamePakFolder}" />
+                </StackPanel>
+              </StackPanel>
             </Border>
             <Border Grid.Row="1" Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
               <StackPanel Spacing="5"><TextBlock Text="SAVES &amp; BACKUPS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding HomeSavesSummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" /><Button Content="Manage saves" Command="{Binding ShowSaveGamesCommand}" HorizontalAlignment="Left" /></StackPanel>
@@ -184,12 +201,8 @@
           </Border>
         </Grid>
 
-        <Border Padding="14,11"
-                CornerRadius="7"
-                Background="{DynamicResource SurfaceBrush}"
-                BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="1">
-          <Grid ColumnDefinitions="*,320" ColumnSpacing="18">
+        <Border Classes="SettingCard" Padding="14,11">
+          <StackPanel Spacing="10">
             <StackPanel Spacing="2">
               <TextBlock Text="{Binding ViewModeTitle}"
                          FontSize="18"
@@ -198,14 +211,19 @@
               <TextBlock Text="{Binding ViewModeDescription}"
                          FontSize="12"
                          TextWrapping="Wrap"
-                         Foreground="{DynamicResource LabelTextBrush}" />
+                         Foreground="{DynamicResource SecondaryTextBrush}" />
             </StackPanel>
-            <TextBox Grid.Column="1"
-                     IsVisible="{Binding IsAdvancedMode}"
-                     Text="{Binding SearchText, Mode=TwoWay}"
-                     PlaceholderText="Search settings…"
-                     VerticalAlignment="Center" />
-          </Grid>
+            <Grid IsVisible="{Binding IsAdvancedMode}" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+              <TextBox Text="{Binding SearchText, Mode=TwoWay}"
+                       PlaceholderText="Search settings…"
+                       VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                <ToggleButton Classes="mode" Command="{Binding ShowAllGraphicsCommand}" IsChecked="{Binding IsAllGraphicsFilter}" Content="All" />
+                <ToggleButton Classes="mode" Command="{Binding ShowModifiedGraphicsCommand}" IsChecked="{Binding IsModifiedGraphicsFilter}" Content="Modified" />
+                <ToggleButton Classes="mode" Command="{Binding ShowGameDefaultsGraphicsCommand}" IsChecked="{Binding IsGameDefaultsGraphicsFilter}" Content="Game defaults" />
+              </StackPanel>
+            </Grid>
+          </StackPanel>
         </Border>
 
         <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource OliveBorderBrush}" BorderThickness="1"
@@ -229,27 +247,27 @@
             <Button Classes="CardHeader" Command="{Binding ToggleGraphicsPresetsCommand}" Padding="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsHitTestVisible="False">
                 <StackPanel Spacing="2">
-                  <TextBlock Text="Graphics tweaks" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                  <TextBlock Text="Optional changes for specific visual goals. Each affects only its listed settings." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                  <TextBlock Text="Graphics setups and styles" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                  <TextBlock Text="Choose one hardware setup for a full quality baseline. Image-style adjustments can be added afterwards." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{Binding GraphicsPresetsToggleLabel}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
               </Grid>
             </Button>
             <StackPanel IsVisible="{Binding IsGraphicsPresetsExpanded}" Spacing="8">
               <Grid>
-                <TextBlock Text="Tweaks can be combined, but review the resulting changes together. Nothing is written until you review it." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <TextBlock Text="Hardware setups configure every Ancestors quality category plus core texture streaming and anti-aliasing. Do not combine hardware setups; image-style adjustments remain optional. Nothing is written until review." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
               </Grid>
               <ItemsControl ItemsSource="{Binding BuiltInGraphicsPresets}">
                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
-                    <Border Padding="12,9" Margin="0,0,8,6" MinHeight="132" CornerRadius="6" Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                    <Border Classes="PresetCard" Padding="12,9" Margin="0,0,8,6" MinHeight="132">
                       <Grid RowDefinitions="*,Auto" RowSpacing="8">
                         <StackPanel Spacing="2">
                           <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
                           <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button Grid.Row="1" Content="Review tweak" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
+                        <Button Grid.Row="1" Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
                       </Grid>
                     </Border>
                   </DataTemplate>
@@ -258,12 +276,6 @@
             </StackPanel>
           </StackPanel>
         </Border>
-
-        <StackPanel Orientation="Horizontal" Spacing="6">
-          <ToggleButton Classes="mode" Command="{Binding ShowAllGraphicsCommand}" IsChecked="{Binding IsAllGraphicsFilter}" Content="All" />
-          <ToggleButton Classes="mode" Command="{Binding ShowModifiedGraphicsCommand}" IsChecked="{Binding IsModifiedGraphicsFilter}" Content="Modified" />
-          <ToggleButton Classes="mode" Command="{Binding ShowGameDefaultsGraphicsCommand}" IsChecked="{Binding IsGameDefaultsGraphicsFilter}" Content="Game defaults" />
-        </StackPanel>
 
         <ItemsControl ItemsSource="{Binding FeatureGroups}"
                       IsEnabled="{Binding CanEditSettings}">
@@ -375,16 +387,8 @@
                                                   AutomationProperties.Name="Skip startup videos"
                                                   Content="Skip startup videos" />
 
-                                    <Grid IsVisible="{Binding IsRegularEditor}"
-                                          ColumnDefinitions="Auto,*"
-                                          ColumnSpacing="12">
-                                      <CheckBox IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
-                                                IsVisible="{Binding ShowOverrideToggle}"
-                                                VerticalAlignment="Center"
-                                                Content="Use custom value" />
-
-                                      <Grid Grid.Column="1"
-                                            IsEnabled="{Binding IsCustomEditorEnabled}"
+                                    <Grid IsVisible="{Binding IsRegularEditor}">
+                                      <Grid IsEnabled="{Binding IsCustomEditorEnabled}"
                                             IsVisible="{Binding ShowValueEditor}">
                                         <ToggleSwitch IsVisible="{Binding IsToggle}"
                                                       IsChecked="{Binding ToggleValue, Mode=TwoWay}"
@@ -420,21 +424,8 @@
                                         </ComboBox>
                                       </Grid>
 
-                                      <Border Grid.Column="1"
-                                              IsVisible="{Binding ShowUnknownGameValue}"
-                                              Padding="10,7"
-                                              CornerRadius="5"
-                                              Background="{DynamicResource EditorSurfaceBrush}"
-                                              BorderBrush="{DynamicResource EditorBorderBrush}"
-                                              BorderThickness="1">
-                                        <TextBlock Text="Runtime value is not stored in the game config"
-                                                   TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource LabelTextBrush}" />
-                                      </Border>
-
-                                      <TextBlock Grid.Column="1"
-                                                 IsVisible="{Binding HasUnsupportedCurrentValue}"
-                                                 Text="Unsupported value. Disable Use custom value to reset it."
+                                      <TextBlock IsVisible="{Binding HasUnsupportedCurrentValue}"
+                                                 Text="Unsupported value detected."
                                                  TextWrapping="Wrap"
                                                  Foreground="{DynamicResource GoldTextBrush}" />
                                     </Grid>
@@ -538,7 +529,7 @@
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
               <StackPanel Spacing="2">
                 <TextBlock Text="Save Games" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
-                <TextBlock Text="Five slots · checkpoints · restore" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" />
+                <TextBlock Text="Five slots · checkpoints · restore" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
               </StackPanel>
             </Grid>
           </Border>
@@ -718,6 +709,7 @@
           </Border>
         </StackPanel>
         <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="12">
+          <Border Classes="SettingCard" Padding="14,11">
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Spacing="3">
               <TextBlock Text="Gameplay difficulty" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
@@ -730,6 +722,7 @@
               </StackPanel>
             </Border>
           </Grid>
+          </Border>
 
           <StackPanel IsVisible="{Binding IsGameplaySimpleMode}" Spacing="12">
             <Border Classes="SettingCard InteractiveCard" Padding="14,11" IsVisible="{Binding HasGameplayDifficultyPresets}">
@@ -747,7 +740,7 @@
                   <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:GameplayDifficultyPresetViewModel">
-                      <Border Padding="12,9" Margin="0,0,8,6" MinHeight="132" CornerRadius="6" Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                      <Border Classes="PresetCard" Padding="12,9" Margin="0,0,8,6" MinHeight="132">
                         <Grid RowDefinitions="*,Auto" RowSpacing="8">
                           <StackPanel Spacing="2">
                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
@@ -766,6 +759,15 @@
 
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding HasGameplaySimpleControls}">
               <StackPanel Spacing="10">
+                <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                      <TextBlock Text="Patch scope" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                      <TextBlock Text="Player only changes the controlled ape. Player + Clan also patches the NPC clan members." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="1" IsChecked="{Binding IncludeClanInGameplayPatch}" OnContent="Player + Clan" OffContent="Player only" VerticalAlignment="Center" />
+                  </Grid>
+                </Border>
                 <StackPanel Spacing="3">
                   <TextBlock Text="Simple controls" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
                   <TextBlock Text="{Binding GameplayControlRangeLabel}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
@@ -790,18 +792,6 @@
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
               </StackPanel>
-          </Border>
-          <Border Padding="12,9" CornerRadius="6" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-              <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="{Binding GameplayDraftStatus}" FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding GameplayState.Description}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" TextWrapping="Wrap" IsVisible="{Binding HasGameplayPendingChanges}" />
-              </StackPanel>
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <Button Content="Restore game default" Command="{Binding ResetGameplayCommand}" IsEnabled="{Binding CanResetGameplay}" />
-                <Button Classes="PrimaryAction" Content="{Binding GameplayReviewButtonLabel}" Command="{Binding OpenGameplayReviewCommand}" IsEnabled="{Binding CanReviewGameplay}" />
-              </StackPanel>
-            </Grid>
           </Border>
 
           <StackPanel IsVisible="{Binding IsGameplayAdvancedMode}" Spacing="12">
@@ -929,17 +919,6 @@
               <TextBlock Text="Create a profile from the current editable graphics setup or import a .aecprofile file. Loaded values are always reviewed before anything is applied." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
-          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1"
-                  IsVisible="{Binding HasProfilePendingDeletion}">
-            <StackPanel Spacing="8">
-              <TextBlock Text="Delete this profile?" FontWeight="SemiBold" Foreground="{DynamicResource WarningTextBrush}" />
-              <TextBlock Text="{Binding ProfilePendingDeletion.Name, StringFormat=This permanently removes {0} from My profiles.}" FontSize="12" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
-              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button Content="Cancel" Command="{Binding CancelProfileDeletionCommand}" />
-                <Button Classes="DangerAction" Content="Delete profile" Command="{Binding ConfirmProfileDeletionCommand}" />
-              </StackPanel>
-            </StackPanel>
-          </Border>
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   IsVisible="{Binding HasProfilePendingRename}">
             <StackPanel Spacing="8" MaxWidth="660">
@@ -980,7 +959,7 @@
           <ItemsControl ItemsSource="{Binding UserProfiles}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:UserProfileRowViewModel">
-                <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,0,8">
+                <Border Classes="SettingCard" Padding="14,11" Margin="0,0,0,8">
                   <StackPanel Spacing="2">
                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
                     <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
@@ -997,6 +976,20 @@
                         </StackPanel>
                       </Expander>
                     </StackPanel>
+                    <Border Margin="0,8,0,0" Padding="12,9" CornerRadius="6"
+                            Background="{DynamicResource WarningSurfaceBrush}"
+                            BorderBrush="{DynamicResource WarningBorderBrush}"
+                            BorderThickness="1"
+                            IsVisible="{Binding IsPendingDeletion}">
+                      <StackPanel Spacing="8">
+                        <TextBlock Text="Delete this profile?" FontWeight="SemiBold" Foreground="{DynamicResource WarningTextBrush}" />
+                        <TextBlock Text="This permanently removes this profile from My profiles." FontSize="12" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                          <Button Content="Cancel" Command="{Binding $parent[Window].DataContext.CancelProfileDeletionCommand}" />
+                          <Button Classes="DangerAction" Content="Delete profile" Command="{Binding $parent[Window].DataContext.ConfirmProfileDeletionCommand}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
                   </StackPanel>
                 </Border>
               </DataTemplate>
@@ -1127,7 +1120,7 @@
               <StackPanel Grid.Row="7" Grid.Column="1" Spacing="4">
                 <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.PresetName}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
                 <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.Description}" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
-                <Button Content="Run detailed hardware detection" Command="{Binding RunDetailedHardwareDetectionCommand}" IsEnabled="{Binding CanRunDetailedHardwareDetection}" HorizontalAlignment="Left" />
+                <Button Content="{Binding DetailedHardwareActionLabel}" Command="{Binding RunDetailedHardwareDetectionCommand}" IsEnabled="{Binding CanRunDetailedHardwareDetection}" HorizontalAlignment="Left" />
                 <Button Content="Stage recommended preset" Command="{Binding LoadHardwareRecommendationCommand}" IsEnabled="{Binding CanStageHardwareRecommendation}" HorizontalAlignment="Left" />
               </StackPanel>
               <TextBlock Grid.Row="8" Text="Hardware status" Foreground="{DynamicResource TechnicalTextBrush}" />
@@ -1183,21 +1176,33 @@
     </ScrollViewer>
 
     <Border Grid.Row="2" Grid.Column="1"
-              IsVisible="{Binding ShowBottomBar}"
+            IsVisible="{Binding ShowBottomBar}"
             Padding="16,10"
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,1,0,0">
       <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
         <StackPanel Spacing="1" VerticalAlignment="Center">
-          <TextBlock Text="{Binding PendingSummary}"
-                     FontWeight="SemiBold"
-                     Foreground="{DynamicResource BodyTextBrush}" />
-          <TextBlock Text="{Binding PendingDetails}"
-                     IsVisible="{Binding HasPendingChanges}"
-                     TextWrapping="Wrap"
-                     FontSize="12"
-                     Foreground="{DynamicResource GoldTextBrush}" />
+          <StackPanel IsVisible="{Binding !ShowGameplayView}" Spacing="1">
+            <TextBlock Text="{Binding PendingSummary}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource BodyTextBrush}" />
+            <TextBlock Text="{Binding PendingDetails}"
+                       IsVisible="{Binding HasPendingChanges}"
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       Foreground="{DynamicResource GoldTextBrush}" />
+          </StackPanel>
+          <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="1">
+            <TextBlock Text="{Binding GameplayDraftStatus}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource BodyTextBrush}" />
+            <TextBlock Text="{Binding GameplayState.Description}"
+                       IsVisible="{Binding HasGameplayPendingChanges}"
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       Foreground="{DynamicResource GoldTextBrush}" />
+          </StackPanel>
           <TextBlock Text="{Binding OperationMessage}"
                      TextWrapping="Wrap"
                      FontSize="12"
@@ -1224,6 +1229,17 @@
                   Classes="PrimaryAction"
                   IsVisible="{Binding ShowPendingActions}"
                   Content="Review" />
+          <Button Command="{Binding ResetGameplayCommand}"
+                  IsEnabled="{Binding CanResetGameplay}"
+                  IsVisible="{Binding ShowGameplayView}"
+                  Margin="0,0,8,0"
+                  Content="Restore game default"
+                  ToolTip.Tip="Removes the AEC gameplay difficulty PAK and restores unmodded game behavior." />
+          <Button Command="{Binding OpenGameplayReviewCommand}"
+                  Classes="PrimaryAction"
+                  IsEnabled="{Binding CanReviewGameplay}"
+                  IsVisible="{Binding ShowGameplayView}"
+                  Content="{Binding GameplayReviewButtonLabel}" />
         </WrapPanel>
       </Grid>
     </Border>

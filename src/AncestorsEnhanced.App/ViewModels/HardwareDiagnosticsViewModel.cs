@@ -39,7 +39,7 @@ public sealed record HardwareDiagnosticsViewModel(
     }
 
     internal static string FormatBytes(ulong bytes) =>
-        $"{bytes / (1024d * 1024d * 1024d):0.#} GB";
+        $"{bytes / (1024d * 1024d * 1024d):0.#} GiB";
 }
 
 public sealed record HardwareRecommendationViewModel(
@@ -51,28 +51,46 @@ public static class HardwareRecommendationEngine
 {
     public static HardwareRecommendationViewModel Recommend(HardwareSnapshot snapshot)
     {
-        if (snapshot.UnavailableReason is not null || snapshot.MaximumReportedGraphicsMemoryBytes is not ulong vram)
+        GraphicsAdapterSnapshot? primaryAdapter = snapshot.GraphicsAdapters
+            .Where(adapter => adapter.IsMemoryAuthoritative && adapter.ReportedMemoryBytes is > 0)
+            .OrderByDescending(adapter => adapter.ReportedMemoryBytes)
+            .FirstOrDefault();
+        if (snapshot.UnavailableReason is not null || primaryAdapter?.ReportedMemoryBytes is not ulong vram ||
+            IsBasicDisplayAdapter(primaryAdapter.Name))
         {
             return new("No automatic preset", "AEC needs a locally reported graphics adapter and VRAM before it can make a conservative recommendation.", false);
         }
 
         const ulong GiB = 1024UL * 1024UL * 1024UL;
         ulong? ram = snapshot.InstalledMemoryBytes;
+        string hardware = $"{primaryAdapter.Name} · {HardwareDiagnosticsViewModel.FormatBytes(vram)} dedicated VRAM · {snapshot.LogicalProcessorCount} logical processors" +
+            (ram is ulong memory ? $" · {HardwareDiagnosticsViewModel.FormatBytes(memory)} system memory" : string.Empty);
         if (vram <= 4 * GiB)
         {
-            return new("Low VRAM Tweak", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM. This is a conservative starting point, not a performance measurement.", true);
+            return new("Low VRAM Setup", $"Based on {hardware}. This complete quality baseline protects graphics memory; it is not a performance measurement.", true);
         }
 
-        if (vram <= 6 * GiB || snapshot.LogicalProcessorCount <= 4)
+        if (vram <= 6 * GiB || snapshot.LogicalProcessorCount <= 4 || ram is < 16 * GiB)
         {
-            return new("Performance Tweak", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM and {snapshot.LogicalProcessorCount} logical processors. Test in-game before keeping it.", true);
+            return new("Performance Setup", $"Based on {hardware}. This complete quality baseline favors stable frame times; test in-game before keeping it.", true);
         }
 
-        if (vram >= 12 * GiB && ram >= 24 * GiB)
+        if (vram >= 15 * GiB && ram >= 32 * GiB && snapshot.LogicalProcessorCount >= 12)
         {
-            return new("High Quality Tweak", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM and {HardwareDiagnosticsViewModel.FormatBytes(ram.Value)} system memory. This is not an FPS guarantee.", true);
+            return new("Ultra Setup", $"Based on {hardware}. This complete quality baseline raises world, fog and shadow detail; it is not an FPS guarantee.", true);
         }
 
-        return new("Balanced Tweak", $"Based on {HardwareDiagnosticsViewModel.FormatBytes(vram)} reported VRAM. This stages only the listed adjustments, not a complete game quality state.", true);
+        // Windows reports bytes while graphics cards are commonly sold in decimal GB.
+        // Eleven GiB includes the normal reported size of a 12 GB card without
+        // treating an 8 GB class adapter as high-end.
+        if (vram >= 11 * GiB && ram >= 24 * GiB && snapshot.LogicalProcessorCount >= 8)
+        {
+            return new("High Quality Setup", $"Based on {hardware}. This complete quality baseline adds world and reflection detail; it is not an FPS guarantee.", true);
+        }
+
+        return new("Balanced Setup", $"Based on {hardware}. This complete quality baseline covers all six Ancestors quality categories.", true);
     }
+
+    private static bool IsBasicDisplayAdapter(string adapterName) =>
+        adapterName.Contains("Microsoft Basic Display", StringComparison.OrdinalIgnoreCase);
 }

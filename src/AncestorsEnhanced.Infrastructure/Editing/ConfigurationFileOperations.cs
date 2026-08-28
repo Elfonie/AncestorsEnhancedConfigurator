@@ -197,7 +197,7 @@ internal static class ConfigurationFileOperations
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(temporaryPath, path, overwrite: File.Exists(path));
+            File.Move(temporaryPath, path, overwrite: true);
             if (attributes is not null)
             {
                 File.SetAttributes(path, attributes.Value & ~FileAttributes.ReparsePoint);

@@ -81,9 +81,9 @@ public sealed class SafeGameplayDifficultyEditorTests
         Assert.Equal(23, patches.Count);
         Assert.Collection(
             patches,
-            patch => AssertFloatPatch(patch, "food", 1795, 24f, 31.2f),
-            patch => AssertFloatPatch(patch, "water", 1968, 30f, 21f),
-            patch => AssertFloatPatch(patch, "sleep", 2170, 16f, 17.6f),
+            patch => AssertFloatPatch(patch, "food", 2772, 24f, 31.2f),
+            patch => AssertFloatPatch(patch, "water", 2916, 30f, 21f),
+            patch => AssertFloatPatch(patch, "sleep", 3089, 16f, 17.6f),
             patch => AssertFloatPatch(patch, "minor-fall", 1621, .025f, .0375f),
             patch => AssertFloatPatch(patch, "major-fall", 1699, .05f, .075f),
             patch => AssertFloatPatch(patch, "minor-bleed", 2466, .01f, .012f),
@@ -107,15 +107,27 @@ public sealed class SafeGameplayDifficultyEditorTests
     }
 
     [Fact]
+    public void CatalogIncludesClanPatchesWhenRequested()
+    {
+        IReadOnlyList<GameplayAssetPatch> patches = GameplayDifficultyPatchCatalog.Create(
+            130, 70, 110, 150, 120, 80, 140, 130, 60, 110, 90, 130, 120, 80, 70, includeClan: true);
+
+        Assert.Equal(26, patches.Count);
+        Assert.Contains(patches, patch => patch.SettingId == "clan-food" && patch.Mutations[0].Offset == 1795);
+        Assert.Contains(patches, patch => patch.SettingId == "clan-water" && patch.Mutations[0].Offset == 1968);
+        Assert.Contains(patches, patch => patch.SettingId == "clan-sleep" && patch.Mutations[0].Offset == 2170);
+    }
+
+    [Fact]
     public void CatalogSupportsTheExperimentalDifficultyBounds()
     {
         IReadOnlyList<GameplayAssetPatch> patches = GameplayDifficultyPatchCatalog.Create(10, 1000, 10, 1000, 10, 1000, 10, 1000, 10, 10, 10, 1000, 10, 1000, 10);
 
         Assert.Collection(
             patches,
-            patch => AssertFloatPatch(patch, "food", 1795, 24f, 2.4f),
-            patch => AssertFloatPatch(patch, "water", 1968, 30f, 300f),
-            patch => AssertFloatPatch(patch, "sleep", 2170, 16f, 1.6f),
+            patch => AssertFloatPatch(patch, "food", 2772, 24f, 2.4f),
+            patch => AssertFloatPatch(patch, "water", 2916, 30f, 300f),
+            patch => AssertFloatPatch(patch, "sleep", 3089, 16f, 1.6f),
             patch => AssertFloatPatch(patch, "minor-fall", 1621, .025f, .25f),
             patch => AssertFloatPatch(patch, "major-fall", 1699, .05f, .5f),
             patch => AssertFloatPatch(patch, "minor-bleed", 2466, .01f, .001f),

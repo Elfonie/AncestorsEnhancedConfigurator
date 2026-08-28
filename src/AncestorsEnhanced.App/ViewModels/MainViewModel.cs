@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using AncestorsEnhanced.Core;
@@ -24,6 +25,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly IUserProfileLibrary _profileLibrary;
     private readonly GameContextVerifier _gameContextVerifier;
     private readonly IHardwareProbe _hardwareProbe;
+    private readonly Func<string, bool> _directoryOpener;
     private readonly UiMutationGate _mutationGate = new();
     private VerifiedGameContext? _verifiedGameContext;
     private bool _saveGamesRefreshFailed;
@@ -92,32 +94,38 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             new ProfileSetting("r.SceneColorFringeQuality", "0"),
             new ProfileSetting("r.Tonemapper.Sharpen", "0.4"),
             new ProfileSetting("mod.VignettePercent", "50")])),
-        new("Performance Tweak", "Reduce GPU-heavy effects", CreateBuiltInProfile("Performance Tweak", [
-            new ProfileSetting("r.ViewDistanceScale", "0.8"),
-            new ProfileSetting("r.ShadowQuality", "1"),
-            new ProfileSetting("r.VolumetricFog", "0"),
-            new ProfileSetting("r.SSR.Quality", "0")])),
-        new("Balanced Tweak", "Moderate quality baseline", CreateBuiltInProfile("Balanced Tweak", [
-            new ProfileSetting("r.ViewDistanceScale", "1"),
-            new ProfileSetting("r.ShadowQuality", "3"),
-            new ProfileSetting("r.SSR.Quality", "2")])),
-        new("High Quality Tweak", "Increase detail and reflections", CreateBuiltInProfile("High Quality Tweak", [
-            new ProfileSetting("r.ViewDistanceScale", "1.2"),
-            new ProfileSetting("r.ShadowQuality", "4"),
+        new("Performance Setup", "Complete baseline for constrained hardware", CreateHardwareBaselineProfile("Performance Setup", GameGraphicsQuality.Medium, [
+            new ProfileSetting("r.PostProcessAAQuality", "3"),
             new ProfileSetting("r.MaxAnisotropy", "16"),
-            new ProfileSetting("r.SSR.Quality", "3")])),
-        new("Ultra Tweak", "High-end renderer adjustments", CreateBuiltInProfile("Ultra Tweak", [
-            new ProfileSetting("r.ViewDistanceScale", "1.2"),
-            new ProfileSetting("r.Shadow.MaxResolution", "4096"),
-            new ProfileSetting("r.ShadowQuality", "5"),
-            new ProfileSetting("r.VolumetricFog.GridPixelSize", "4"),
-            new ProfileSetting("r.MaxAnisotropy", "16")])),
-        new("Low VRAM Tweak", "Conservative texture streaming", CreateBuiltInProfile("Low VRAM Tweak", [
             new ProfileSetting("r.Streaming.PoolSize", "2048"),
-            new ProfileSetting("r.Streaming.MipBias", "1"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1")])),
+        new("Balanced Setup", "Complete High-quality baseline for mainstream hardware", CreateHardwareBaselineProfile("Balanced Setup", GameGraphicsQuality.High, [
+            new ProfileSetting("r.PostProcessAAQuality", "4"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "3072"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1")])),
+        new("High Quality Setup", "Complete High-quality baseline with extra world and reflection detail", CreateHardwareBaselineProfile("High Quality Setup", GameGraphicsQuality.High, [
+            new ProfileSetting("r.PostProcessAAQuality", "4"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "4096"),
             new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1"),
-            new ProfileSetting("r.SSR.Quality", "0"),
-            new ProfileSetting("r.VolumetricFog", "0")])),
+            new ProfileSetting("r.ViewDistanceScale", "1.1"),
+            new ProfileSetting("r.SSR.Quality", "3")])),
+        new("Ultra Setup", "Complete High-quality baseline for exceptional hardware", CreateHardwareBaselineProfile("Ultra Setup", GameGraphicsQuality.High, [
+            new ProfileSetting("r.PostProcessAAQuality", "4"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "6144"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1"),
+            new ProfileSetting("r.ViewDistanceScale", "1.2"),
+            new ProfileSetting("foliage.DensityScale", "1.5"),
+            new ProfileSetting("grass.DensityScale", "1.5"),
+            new ProfileSetting("r.SSR.Quality", "3"),
+            new ProfileSetting("r.Shadow.MaxResolution", "4096")])),
+        new("Low VRAM Setup", "Complete baseline that protects limited graphics memory", CreateHardwareBaselineProfile("Low VRAM Setup", GameGraphicsQuality.Low, [
+            new ProfileSetting("r.PostProcessAAQuality", "0"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "1024"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1")])),
         new("Cinematic Tweak", "Atmosphere and post-processing adjustments without resetting other choices", CreateBuiltInProfile("Cinematic Tweak", [
             new ProfileSetting("r.DepthOfFieldQuality", "4"),
             new ProfileSetting("r.MotionBlurQuality", "4"),
@@ -176,6 +184,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial bool IsDetailedHardwareDetectionRunning { get; set; }
+
+    [ObservableProperty]
+    public partial string HardwareScanMessage { get; set; } = "";
 
     [ObservableProperty]
     public partial bool IsSaveGamesView { get; set; }
@@ -245,6 +256,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial bool IsExperimentalGameplaySettingsEnabled { get; set; }
 
     [ObservableProperty]
+    public partial bool IncludeClanInGameplayPatch { get; set; }
+
+    [ObservableProperty]
     public partial bool HasAcknowledgedDetailedHardwareScan { get; set; }
 
     [ObservableProperty]
@@ -296,7 +310,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         HardwareSnapshot? detailedHardwareSnapshot = null,
         Action<HardwareSnapshot>? detailedHardwareScanCompleted = null,
         IHardwareProbe? hardwareProbe = null,
-        IGameplayDifficultyEditor? gameplayDifficultyEditor = null)
+        IGameplayDifficultyEditor? gameplayDifficultyEditor = null,
+        Func<string, bool>? directoryOpener = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(settingsEditor);
@@ -304,6 +319,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _gameContextVerifier = new GameContextVerifier(inspector);
         _gameplayEditor = gameplayDifficultyEditor ?? new SafeGameplayDifficultyEditor(_gameContextVerifier);
         _hardwareProbe = hardwareProbe ?? EmptyHardwareProbe.Instance;
+        _directoryOpener = directoryOpener ?? TryOpenDirectory;
         _settingsEditor = settingsEditor;
         _saveManagerFactory = saveManagerFactory ?? (context => new SafeSaveGameManager(context, _gameContextVerifier));
         _profileLibrary = profileLibrary ?? EmptyUserProfileLibrary.Instance;
@@ -397,6 +413,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ? GameplayDraftStatus
         : GameplayState.Description;
 
+    public int ExternalPakCount => _snapshot?.PakFiles.Count(pak =>
+        pak.Classification is not PakClassification.BaseGame and not PakClassification.AecOwned) ?? 0;
+
+    public bool HasExternalPaks => ExternalPakCount > 0;
+
+    public string ExternalPakHelpText => ExternalPakCount == 1
+        ? "1 external PAK is preventing gameplay editing. AEC will not remove it; inspect or remove it manually from the game PAK folder."
+        : $"{ExternalPakCount} external PAKs are preventing gameplay editing. AEC will not remove them; inspect or remove them manually from the game PAK folder.";
+
+    public string? GamePakFolderPath => TryGetGamePakFolder(_snapshot?.Installation?.InstallDirectory);
+
+    public bool CanOpenGamePakFolder => HasExternalPaks && GamePakFolderPath is not null;
+
     public string HomeTitle => IsBusy
         ? "Checking Ancestors…"
         : DetectionStatus switch
@@ -450,8 +479,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool CanRunDetailedHardwareDetection => OperatingSystem.IsWindows() && !IsAnyOperationRunning;
 
+    public string DetailedHardwareActionLabel => IsDetailedHardwareDetectionRunning
+        ? "Checking hardware…"
+        : "Refresh hardware details";
+
+    public bool HasHardwareScanMessage => !string.IsNullOrWhiteSpace(HardwareScanMessage);
+
     public bool CanShowHardwareScanAction =>
-        (!HasAcknowledgedDetailedHardwareScan || _detailedHardwareSnapshot is null) &&
         !CanStageHardwareRecommendation &&
         CanRunDetailedHardwareDetection;
 
@@ -513,7 +547,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool ShowReviewActions => IsReviewingChanges;
 
-    public bool ShowBottomBar => ShowGraphicsView || HasPendingChanges || IsReviewingChanges;
+    public bool ShowBottomBar => ShowGraphicsView || ShowGameplayView || HasPendingChanges || HasGameplayPendingChanges || IsReviewingChanges;
 
     public bool IsAnyOperationRunning =>
         IsBusy ||
@@ -530,6 +564,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanResetGameplay));
         OnPropertyChanged(nameof(CanEditGameplay));
         OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+        OnPropertyChanged(nameof(DetailedHardwareActionLabel));
         OnPropertyChanged(nameof(HomeTitle));
     }
     public bool CanEditSettings => !IsReviewingChanges && !IsAnyOperationRunning;
@@ -547,14 +582,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool IsModifiedGraphicsFilter => GraphicsFilter == "Modified";
 
     public IReadOnlyList<BuiltInGraphicsPresetViewModel> PrimaryGraphicsPresets =>
-        BuiltInGraphicsPresets.Where(preset => preset.Name is not "Ultra Tweak" and not "Low VRAM Tweak").ToArray();
+        BuiltInGraphicsPresets.Where(preset => preset.Name is not "Ultra Setup" and not "Low VRAM Setup").ToArray();
 
     public IReadOnlyList<BuiltInGraphicsPresetViewModel> AdditionalGraphicsTweaks =>
-        BuiltInGraphicsPresets.Where(preset => preset.Name is "Ultra Tweak" or "Low VRAM Tweak").ToArray();
+        BuiltInGraphicsPresets.Where(preset => preset.Name is "Ultra Setup" or "Low VRAM Setup").ToArray();
 
     public bool IsGameDefaultsGraphicsFilter => GraphicsFilter == "Game defaults";
 
-    public string GraphicsPresetsToggleLabel => IsGraphicsPresetsExpanded ? "Hide tweaks" : "Show tweaks";
+    public string GraphicsPresetsToggleLabel => IsGraphicsPresetsExpanded ? "Hide presets" : "Show presets";
 
     public string GameplayPresetsToggleLabel => IsGameplayPresetsExpanded ? "Hide presets" : "Show presets";
 
@@ -716,6 +751,25 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
+    private void OpenGamePakFolder()
+    {
+        string? pakFolder = GamePakFolderPath;
+        if (pakFolder is null || !HasExternalPaks)
+        {
+            return;
+        }
+
+        if (_directoryOpener(pakFolder))
+        {
+            ShowMessage("Opened the game PAK folder. AEC will not remove external files for you.", "#B4D941");
+        }
+        else
+        {
+            ShowMessage("The game PAK folder could not be opened. Check that the game installation still exists.", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
     private void ShowGameplaySimple() => IsGameplayAdvancedMode = false;
 
     [RelayCommand]
@@ -736,7 +790,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             control.MultiplierPercent = control.HigherIsHarder
                 ? preset.MultiplierPercent
-                : 200 - preset.MultiplierPercent;
+                : Math.Max(10, 200 - preset.MultiplierPercent);
         }
 
         foreach (GameplayDifficultyControlViewModel control in GameplayAdvancedControls)
@@ -909,12 +963,17 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         IsDetailedHardwareDetectionRunning = true;
         try
         {
+            HardwareScanMessage = "Checking hardware details…";
+            ShowMessage(HardwareScanMessage, "#D6BC84");
             HardwareSnapshot detailedSnapshot = await Task.Run(() => _hardwareProbe.Inspect(includeDetailedGraphics: true));
             HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(detailedSnapshot);
             _detailedHardwareSnapshot = detailedSnapshot;
             HasAcknowledgedDetailedHardwareScan = true;
             _detailedHardwareScanCompleted?.Invoke(detailedSnapshot);
-            ShowMessage("Detailed hardware detection completed. Review the recommendation before staging it.", "#B4D941");
+            HardwareScanMessage = detailedSnapshot.HasGraphicsMemory
+                ? "Hardware details checked. AEC can now offer a conservative graphics recommendation."
+                : "Hardware details checked. Windows did not report dedicated GPU memory, so AEC will not guess a graphics recommendation.";
+            ShowMessage(HardwareScanMessage, detailedSnapshot.HasGraphicsMemory ? "#B4D941" : "#D6BC84");
         }
         finally
         {
@@ -1275,6 +1334,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsGraphicsSectionActive));
         OnPropertyChanged(nameof(IsSettingsSectionActive));
         OnPropertyChanged(nameof(PageContextLabel));
+        OnPropertyChanged(nameof(ShowBottomBar));
     }
 
     [RelayCommand]
@@ -1299,6 +1359,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         IsDiagnosticsView = false;
         IsHomeView = true;
         UpdateViewVisibility();
+    }
+
+    partial void OnIsHomeViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowHomeView));
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
     }
 
     partial void OnIsGameplayViewChanged(bool value)
@@ -1358,6 +1425,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         _experimentalGameplaySettingsChanged?.Invoke(value);
         NotifyGameplayRangeChanged();
+        UpdateGameplayControlRanges();
+    }
+
+    partial void OnIncludeClanInGameplayPatchChanged(bool value)
+    {
+        CloseReview();
+        NotifyGameplayStateChanged();
     }
 
     partial void OnIsGraphicsPresetsExpandedChanged(bool value) =>
@@ -1369,7 +1443,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnHasAcknowledgedDetailedHardwareScanChanged(bool value)
     {
         OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        OnPropertyChanged(nameof(DetailedHardwareActionLabel));
     }
+
+    partial void OnHardwareScanMessageChanged(string value) =>
+        OnPropertyChanged(nameof(HasHardwareScanMessage));
 
     partial void OnUserProfilesChanged(IReadOnlyList<UserProfileRowViewModel> value) =>
         OnPropertyChanged(nameof(HasUserProfiles));
@@ -1377,8 +1455,23 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnImportedProfileChanged(ImportedProfileViewModel? value) =>
         OnPropertyChanged(nameof(HasImportedProfile));
 
-    partial void OnProfilePendingDeletionChanged(UserProfileRowViewModel? value) =>
+    partial void OnProfilePendingDeletionChanging(UserProfileRowViewModel? value)
+    {
+        if (ProfilePendingDeletion is not null && !ReferenceEquals(ProfilePendingDeletion, value))
+        {
+            ProfilePendingDeletion.IsPendingDeletion = false;
+        }
+    }
+
+    partial void OnProfilePendingDeletionChanged(UserProfileRowViewModel? value)
+    {
+        if (value is not null)
+        {
+            value.IsPendingDeletion = true;
+        }
+
         OnPropertyChanged(nameof(HasProfilePendingDeletion));
+    }
 
     partial void OnProfilePendingRenameChanged(UserProfileRowViewModel? value)
     {
@@ -1754,10 +1847,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             Task<GameInspectionSnapshot> inspectionTask = Task.Run(_inspector.Inspect);
             Task<HardwareSnapshot> hardwareTask = Task.Run(() => _hardwareProbe.Inspect());
-            GameInspectionSnapshot snapshot = await inspectionTask;
             HardwareSnapshot ordinaryHardware = await hardwareTask;
             HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(_detailedHardwareSnapshot ?? ordinaryHardware);
             OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+            GameInspectionSnapshot snapshot = await inspectionTask;
             if (await Task.Run(() => _settingsEditor.RecoverInterruptedChanges(snapshot)))
             {
                 _lastRefreshRecoveredOperation = true;
@@ -1812,6 +1905,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(GamePresetName));
             OnPropertyChanged(nameof(HomeGraphicsSummary));
             OnPropertyChanged(nameof(HomeGameplaySummary));
+            NotifyExternalPakFolderState();
             RebuildEditors();
             UpdatePendingChanges();
             ApplyViewMode();
@@ -1866,6 +1960,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             SaveManager?.Dispose();
             SaveManager = null;
             OnPropertyChanged(nameof(HomeSavesSummary));
+            NotifyExternalPakFolderState();
             ShowMessage($"Scan failed: {exception.Message}", "#E04D42");
             LogDetection("failed: " + exception.Message);
             return false;
@@ -1931,7 +2026,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             ISaveGameManager manager = _saveManagerFactory(context);
             SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
-            var watchdog = new SaveGameWatchdog(context, _gameContextVerifier);
+            var watchdog = new SaveGameWatchdog(
+                context,
+                _gameContextVerifier,
+                message => AppDiagnostics.Logger?.Write(message));
             var viewModel = new SaveManagerViewModel(
                 manager,
                 context.UserDataDirectory,
@@ -2181,6 +2279,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         GameplayDifficultyPresets = isSupported ? GameplayDifficultyCatalog.CreatePresets() : [];
         GameplaySimpleControls = isSupported ? GameplayDifficultyCatalog.CreateSimpleControls() : [];
         GameplayAdvancedControls = isSupported ? GameplayDifficultyCatalog.CreateAdvancedControls() : [];
+        UpdateGameplayControlRanges();
         GameplayState = _gameplayEditor.Inspect(snapshot);
         if (isSupported && GameplayState.Kind != GameplayDifficultyStateKind.Unverified)
         {
@@ -2244,13 +2343,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         GameplayPercent("exhaustion-threshold"),
         GameplayPercent("exhaustion-penalty"),
         GameplayPercent("wound-recovery-duration"),
-        GameplayPercent("poison-stamina-penalty"));
+        GameplayPercent("poison-stamina-penalty"),
+        IncludeClanInGameplayPatch);
 
     private int GameplayPercent(string id) =>
         AllGameplayControls.FirstOrDefault(control => string.Equals(control.Id, id, StringComparison.Ordinal))?.MultiplierPercent ?? 100;
 
     private void ApplyGameplaySettingsToControls(GameplayDifficultySettings settings)
     {
+        IncludeClanInGameplayPatch = settings.IncludeClan;
         foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
         {
             control.MultiplierPercent = control.Id switch
@@ -2286,6 +2387,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanEditGameplay));
         OnPropertyChanged(nameof(GameplayReviewButtonLabel));
         OnPropertyChanged(nameof(HomeGameplaySummary));
+        OnPropertyChanged(nameof(ShowBottomBar));
     }
 
     private void NotifyGameplayRangeChanged()
@@ -2293,6 +2395,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(GameplayMinimumPercent));
         OnPropertyChanged(nameof(GameplayMaximumPercent));
         OnPropertyChanged(nameof(GameplayControlRangeLabel));
+    }
+
+    private void UpdateGameplayControlRanges()
+    {
+        int max = GameplayMaximumPercent;
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.MaxPercent = max;
+        }
     }
 
     private static string ProfileContents(UserProfile profile)
@@ -2314,6 +2425,24 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             graphics,
             [],
             []);
+
+    private static UserProfile CreateHardwareBaselineProfile(
+        string name,
+        GameGraphicsQuality quality,
+        IReadOnlyList<ProfileSetting> hardwareOverrides)
+    {
+        var graphics = new List<ProfileSetting>
+        {
+            new(SystemSaveSettingKeys.ViewDistanceQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.PostProcessingQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.ShadowQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.TextureQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.VisualEffectsQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.FoliageQuality, quality.ToString()),
+        };
+        graphics.AddRange(hardwareOverrides);
+        return CreateBuiltInProfile(name, graphics);
+    }
 
     private void LoadProfileForReview(UserProfile profile)
     {
@@ -2448,6 +2577,69 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             .First(setting => string.Equals(setting.Id, settingId, StringComparison.Ordinal))
             .Name;
 
+    private void NotifyExternalPakFolderState()
+    {
+        OnPropertyChanged(nameof(ExternalPakCount));
+        OnPropertyChanged(nameof(HasExternalPaks));
+        OnPropertyChanged(nameof(ExternalPakHelpText));
+        OnPropertyChanged(nameof(GamePakFolderPath));
+        OnPropertyChanged(nameof(CanOpenGamePakFolder));
+    }
+
+    private static string? TryGetGamePakFolder(string? installDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(installDirectory))
+        {
+            return null;
+        }
+
+        try
+        {
+            string root = Path.GetFullPath(installDirectory);
+            string pakFolder = Path.GetFullPath(Path.Combine(root, "Ancestors", "Content", "Paks"));
+            string relative = Path.GetRelativePath(root, pakFolder);
+            return relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative)
+                ? null
+                : pakFolder;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
+    private static bool TryOpenDirectory(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                _ = Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+                return true;
+            }
+
+            if (OperatingSystem.IsLinux())
+            {
+                var startInfo = new ProcessStartInfo { FileName = "xdg-open", UseShellExecute = false };
+                startInfo.ArgumentList.Add(path);
+                _ = Process.Start(startInfo);
+                return true;
+            }
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or
+            InvalidOperationException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return false;
+        }
+
+        return false;
+    }
+
     private bool TryGetEditorByTechnicalKey(string key, out SettingEditorViewModel? editor)
     {
         editor = null;
@@ -2559,15 +2751,29 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             control.PropertyChanged -= OnGameplayControlChanged;
         }
-        _searchDebounceSource?.Cancel();
-        try
+        CancellationTokenSource? searchSource = _searchDebounceSource;
+        Task? searchTask = _searchDebounceTask;
+        searchSource?.Cancel();
+        if (searchTask is null || searchTask.IsCompleted)
         {
-            _searchDebounceTask?.Wait(TimeSpan.FromMilliseconds(300));
+            searchSource?.Dispose();
         }
-        catch (AggregateException)
+        else
         {
+            _ = searchTask.ContinueWith(
+                completed =>
+                {
+                    if (completed.IsFaulted)
+                    {
+                        AppDiagnostics.Logger?.Write($"Search debounce failed during shutdown: {completed.Exception}");
+                    }
+
+                    searchSource?.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
-        _searchDebounceSource?.Dispose();
         _mutationGate.Changed -= OnMutationGateChanged;
         _searchDebounceSource = null;
         _searchDebounceTask = null;

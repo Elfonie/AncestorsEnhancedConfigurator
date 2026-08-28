@@ -56,7 +56,19 @@ public sealed class AccessibilityPreferencesStoreTests : IDisposable
         Directory.CreateDirectory(_directory);
         File.WriteAllText(Path.Combine(_directory, "accessibility.json"), "not json");
 
-        Assert.False(new AccessibilityPreferencesStore(_directory).Load().HighContrastEnabled);
+        var diagnostics = new List<string>();
+
+        Assert.False(new AccessibilityPreferencesStore(_directory, diagnostics.Add).Load().HighContrastEnabled);
+        Assert.Contains(diagnostics, message => message.Contains("Could not load accessibility preferences", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SavingUsesAUniqueTemporaryFileAndCleansItUp()
+    {
+        var store = new AccessibilityPreferencesStore(_directory);
+
+        Assert.True(store.TrySave(new AccessibilityPreferences(DiscordRichPresenceEnabled: true)));
+        Assert.Empty(Directory.EnumerateFiles(_directory, ".accessibility.json.*.tmp"));
     }
 
     public void Dispose()

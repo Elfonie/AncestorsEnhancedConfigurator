@@ -5,9 +5,10 @@ namespace AncestorsEnhanced.Infrastructure.Paks;
 
 internal static class AecPakOwnershipMarker
 {
-    internal const int CurrentVersion = 3;
+    internal const int CurrentVersion = 4;
     private const int LegacyGameplayVersion = 1;
     private const int PreviousGameplayVersion = 2;
+    private const int Version3 = 3;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -97,7 +98,7 @@ internal static class AecPakOwnershipMarker
         value.Length == 64 && value.All(char.IsAsciiHexDigit);
 
     private static bool IsSupportedVersion(int version) =>
-        version is LegacyGameplayVersion or PreviousGameplayVersion or CurrentVersion;
+        version is LegacyGameplayVersion or PreviousGameplayVersion or Version3 or CurrentVersion;
 
     private static string Sha256(byte[] content) =>
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content));

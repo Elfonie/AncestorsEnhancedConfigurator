@@ -22,6 +22,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private Task _settingsWriteTail = Task.CompletedTask;
     private CancellationTokenSource? _metadataWriteDebounce;
     private Task? _watchdogRefreshTask;
+    private int _gameProcessRefreshInProgress;
     private int _watchdogRefreshVersion;
     private int _settingsVersion;
     private bool _disposed;
@@ -462,16 +463,33 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void OnGameProcessTimerTick(object? sender, EventArgs eventArgs) => _ = RefreshGameRunningStateAsync();
+    private void OnGameProcessTimerTick(object? sender, EventArgs eventArgs) => QueueGameRunningStateRefresh();
+
+    internal void QueueGameRunningStateRefresh()
+    {
+        if (Interlocked.CompareExchange(ref _gameProcessRefreshInProgress, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _ = RefreshGameRunningStateAsync();
+    }
 
     private async Task RefreshGameRunningStateAsync()
     {
-        bool running = await Task.Run(() =>
+        try
         {
-            try { return _isGameRunningProbe(); }
-            catch (Exception) { return true; }
-        });
-        IsGameRunning = running;
+            bool running = await Task.Run(() =>
+            {
+                try { return _isGameRunningProbe(); }
+                catch (Exception) { return true; }
+            });
+            IsGameRunning = running;
+        }
+        finally
+        {
+            Volatile.Write(ref _gameProcessRefreshInProgress, 0);
+        }
     }
 
     private void RefreshGameRunningState()

@@ -8,6 +8,7 @@ public partial class SettingEditorViewModel : ViewModelBase
 {
     private readonly SettingEditSnapshot _snapshot;
     private readonly string? _initialValue;
+    private bool _suppressAutoCustom = true;
 
     [ObservableProperty]
     public partial bool UseCustomValue { get; set; }
@@ -45,6 +46,7 @@ public partial class SettingEditorViewModel : ViewModelBase
                              string.Equals(choice.Value, startingValue, StringComparison.Ordinal))
                          ?? Choices.FirstOrDefault(choice =>
                              string.Equals(choice.Value, snapshot.DefaultValue, StringComparison.Ordinal));
+        _suppressAutoCustom = false;
     }
 
     public event EventHandler? Changed;
@@ -77,7 +79,7 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public bool CanSetCustomValue => _snapshot.CanSetCustomValue;
 
-    public bool IsCustomEditorEnabled => UseCustomValue && CanSetCustomValue;
+    public bool IsCustomEditorEnabled => CanSetCustomValue;
 
     public bool HasUnsupportedCurrentValue => UseCustomValue && !CanSetCustomValue;
 
@@ -87,9 +89,7 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public bool HasKnownGameValue => _snapshot.GameControlledValue is not null;
 
-    public bool ShowValueEditor =>
-        CanSetCustomValue &&
-        (_snapshot.IsDirect || UseCustomValue || HasKnownGameValue);
+    public bool ShowValueEditor => CanSetCustomValue;
 
     public bool ShowUnknownGameValue =>
         IsRegularEditor &&
@@ -237,6 +237,7 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     public void Reset()
     {
+        _suppressAutoCustom = true;
         string startingValue = StartingValue();
         UseCustomValue = _snapshot.CurrentOverride is not null;
         ToggleValue = startingValue == "1";
@@ -253,6 +254,7 @@ public partial class SettingEditorViewModel : ViewModelBase
             string.Equals(choice.Value, startingValue, StringComparison.Ordinal))
             ?? Choices.FirstOrDefault(choice =>
                 string.Equals(choice.Value, _snapshot.DefaultValue, StringComparison.Ordinal));
+        _suppressAutoCustom = false;
         NotifyStateChanged();
     }
 
@@ -260,7 +262,25 @@ public partial class SettingEditorViewModel : ViewModelBase
     {
         if (ShowOverrideToggle)
         {
+            _suppressAutoCustom = true;
             UseCustomValue = false;
+            string startingValue = _snapshot.GameControlledValue ?? _snapshot.DefaultValue;
+            ToggleValue = startingValue == "1";
+            if (decimal.TryParse(
+                    startingValue,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out decimal number))
+            {
+                NumberValue = number * _snapshot.DisplayMultiplier;
+            }
+
+            SelectedChoice = Choices.FirstOrDefault(choice =>
+                string.Equals(choice.Value, startingValue, StringComparison.Ordinal))
+                ?? Choices.FirstOrDefault(choice =>
+                    string.Equals(choice.Value, _snapshot.DefaultValue, StringComparison.Ordinal));
+            _suppressAutoCustom = false;
+            NotifyStateChanged();
         }
     }
 
@@ -275,12 +295,30 @@ public partial class SettingEditorViewModel : ViewModelBase
 
     partial void OnToggleValueChanged(bool value)
     {
+        if (!_suppressAutoCustom)
+        {
+            UseCustomValue = true;
+        }
         NotifyStateChanged();
     }
 
-    partial void OnNumberValueChanged(decimal value) => NotifyStateChanged();
+    partial void OnNumberValueChanged(decimal value)
+    {
+        if (!_suppressAutoCustom)
+        {
+            UseCustomValue = true;
+        }
+        NotifyStateChanged();
+    }
 
-    partial void OnSelectedChoiceChanged(SettingChoiceViewModel? value) => NotifyStateChanged();
+    partial void OnSelectedChoiceChanged(SettingChoiceViewModel? value)
+    {
+        if (!_suppressAutoCustom && value is not null)
+        {
+            UseCustomValue = true;
+        }
+        NotifyStateChanged();
+    }
 
     private string? DesiredValue => _snapshot.Kind switch
     {

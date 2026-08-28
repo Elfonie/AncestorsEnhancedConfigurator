@@ -62,6 +62,36 @@ public sealed class VerifiedGameContextTests
         Assert.False(captured.Matches(drifted));
     }
 
+    [Fact]
+    public void MatchesHandlesAbsentLibraryRootsWithoutUsingTheCurrentDirectory()
+    {
+        var installation = new GameInstallationSnapshot(
+            StoreKind.EpicGames,
+            HostKind.Windows,
+            CompatibilityLayerKind.None,
+            null!,
+            "C:\\install",
+            null,
+            ExecutableExists: true,
+            AncestorsEnhanced.Core.AncestorsGameProfile.SupportedContentSignature);
+        var snapshot = new GameInspectionSnapshot(
+            DateTimeOffset.UnixEpoch,
+            installation,
+            "C:\\user",
+            [],
+            null,
+            [],
+            []);
+        VerifiedGameContext context = Assert.IsType<VerifiedGameContext>(
+            VerifiedGameContext.TryCreateFromSnapshot(snapshot));
+
+        Assert.True(context.Matches(snapshot));
+        Assert.False(context.Matches(snapshot with
+        {
+            Installation = installation with { LibraryRoot = "C:\\different-library" },
+        }));
+    }
+
     private static (VerifiedGameContext Context, GameInspectionSnapshot Snapshot) SnapshotPair()
     {
         GameInstallationSnapshot installation = new(

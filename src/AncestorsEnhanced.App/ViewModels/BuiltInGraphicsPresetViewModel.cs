@@ -7,10 +7,14 @@ public sealed record BuiltInGraphicsPresetViewModel(
     string Summary,
     UserProfile Profile)
 {
+    public bool IsHardwareSetup => Name is "Performance Setup" or "Balanced Setup" or "High Quality Setup" or "Ultra Setup" or "Low VRAM Setup";
+
+    public string ActionLabel => IsHardwareSetup ? "Use setup" : "Add to review";
+
     public string Category => Name switch
     {
         "Clear Image" => "Image Style",
-        "Performance Tweak" or "Balanced Tweak" or "High Quality Tweak" => "Quality",
+        "Cinematic Tweak" => "Image Style",
         _ => "Hardware"
     };
 

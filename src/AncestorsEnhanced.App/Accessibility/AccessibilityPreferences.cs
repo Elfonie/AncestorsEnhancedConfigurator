@@ -17,13 +17,15 @@ public sealed class AccessibilityPreferencesStore
     private const string FileName = "accessibility.json";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly string _filePath;
+    private readonly Action<string> _diagnosticLog;
 
-    public AccessibilityPreferencesStore(string? directory = null)
+    public AccessibilityPreferencesStore(string? directory = null, Action<string>? diagnosticLog = null)
     {
         directory ??= Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "AncestorsEnhanced");
         _filePath = Path.Combine(directory, FileName);
+        _diagnosticLog = diagnosticLog ?? (message => AppDiagnostics.Logger?.Write(message));
     }
 
     public AccessibilityPreferences Load()
@@ -38,8 +40,9 @@ public sealed class AccessibilityPreferencesStore
             return JsonSerializer.Deserialize<AccessibilityPreferences>(File.ReadAllText(_filePath), JsonOptions)
                 ?? new AccessibilityPreferences();
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            WriteDiagnostic($"Could not load accessibility preferences; using defaults: {exception.GetType().Name}");
             return new AccessibilityPreferences();
         }
     }
@@ -55,14 +58,43 @@ public sealed class AccessibilityPreferencesStore
             }
 
             Directory.CreateDirectory(directory);
-            string temporaryPath = _filePath + ".tmp";
-            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(preferences, JsonOptions));
-            File.Move(temporaryPath, _filePath, true);
-            return true;
+            string temporaryPath = Path.Combine(
+                directory,
+                $".{FileName}.{Guid.NewGuid():N}.tmp");
+            try
+            {
+                File.WriteAllText(temporaryPath, JsonSerializer.Serialize(preferences, JsonOptions));
+                File.Move(temporaryPath, _filePath, overwrite: true);
+                return true;
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(temporaryPath);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    WriteDiagnostic($"Could not clean up temporary accessibility preferences: {exception.GetType().Name}");
+                }
+            }
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            WriteDiagnostic($"Could not save accessibility preferences: {exception.GetType().Name}");
             return false;
+        }
+    }
+
+    private void WriteDiagnostic(string message)
+    {
+        try
+        {
+            _diagnosticLog(message);
+        }
+        catch
+        {
+            // Diagnostics must never turn an optional-preference failure into an app failure.
         }
     }
 }

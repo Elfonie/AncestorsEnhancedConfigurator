@@ -53,7 +53,7 @@ public sealed class MainViewModelTests
             new RecordingEditor());
 
         Assert.False(viewModel.IsGraphicsPresetsExpanded);
-        Assert.Equal("Show tweaks", viewModel.GraphicsPresetsToggleLabel);
+        Assert.Equal("Show presets", viewModel.GraphicsPresetsToggleLabel);
         Assert.False(viewModel.IsGameplayPresetsExpanded);
         Assert.Equal("Show presets", viewModel.GameplayPresetsToggleLabel);
 
@@ -61,9 +61,48 @@ public sealed class MainViewModelTests
         viewModel.ToggleGameplayPresetsCommand.Execute(null);
 
         Assert.True(viewModel.IsGraphicsPresetsExpanded);
-        Assert.Equal("Hide tweaks", viewModel.GraphicsPresetsToggleLabel);
+        Assert.Equal("Hide presets", viewModel.GraphicsPresetsToggleLabel);
         Assert.True(viewModel.IsGameplayPresetsExpanded);
         Assert.Equal("Hide presets", viewModel.GameplayPresetsToggleLabel);
+    }
+
+    [Fact]
+    public void DetailedHardwareActionReportsProgressImmediately()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+
+        Assert.Equal("Refresh hardware details", viewModel.DetailedHardwareActionLabel);
+
+        viewModel.IsDetailedHardwareDetectionRunning = true;
+
+        Assert.Equal("Checking hardware…", viewModel.DetailedHardwareActionLabel);
+
+        viewModel.IsDetailedHardwareDetectionRunning = false;
+        viewModel.HasAcknowledgedDetailedHardwareScan = true;
+
+        Assert.Equal("Refresh hardware details", viewModel.DetailedHardwareActionLabel);
+    }
+
+    [Fact]
+    public async Task NavigatingDirectlyToGraphicsMakesBottomBarVisible()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.ShowHomeView);
+        Assert.False(viewModel.ShowGraphicsView);
+        Assert.False(viewModel.ShowBottomBar);
+
+        viewModel.ShowGraphicsCommand.Execute(null);
+
+        Assert.False(viewModel.ShowHomeView);
+        Assert.True(viewModel.ShowGraphicsView);
+        Assert.True(viewModel.ShowBottomBar);
     }
 
     [Fact]
@@ -277,7 +316,7 @@ public sealed class MainViewModelTests
 
         Assert.Equal(1, editor.DiscardCount);
         Assert.False(viewModel.IsReviewingChanges);
-        Assert.True(viewModel.HasPendingChanges);
+        Assert.True(viewModel.HasPendingChanges, viewModel.OperationMessage);
         Assert.Equal(0, editor.ApplyCount);
     }
 
@@ -577,6 +616,36 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task ProfileDeletionConfirmationIsTrackedOnTheSelectedProfile()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Safe profile",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [new ProfileSetting("r.ViewDistanceScale", "1.5")],
+            [],
+            []);
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile)));
+        await viewModel.InitializeAsync();
+
+        UserProfileRowViewModel row = Assert.Single(viewModel.UserProfiles);
+        viewModel.RequestProfileDeletionCommand.Execute(row);
+
+        Assert.True(viewModel.HasProfilePendingDeletion);
+        Assert.True(row.IsPendingDeletion);
+
+        viewModel.CancelProfileDeletionCommand.Execute(null);
+
+        Assert.False(viewModel.HasProfilePendingDeletion);
+        Assert.False(row.IsPendingDeletion);
+    }
+
+    [Fact]
     public async Task GameplayProfileDoesNotStageAnyValuesUntilGameplayPakSupportExists()
     {
         UserProfile profile = new(
@@ -688,14 +757,39 @@ public sealed class MainViewModelTests
     {
         var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
 
-        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "High Quality Tweak");
-        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Ultra Tweak");
-        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Low VRAM Tweak");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "High Quality Setup");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Ultra Setup");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Low VRAM Setup");
         Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Cinematic Tweak");
     }
 
     [Fact]
-    public async Task BuiltInTweakStagesOnlyItsListedSettings()
+    public void HardwareSetupsCoverEveryNativeQualityCategoryAndCoreMemoryControls()
+    {
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
+        string[] nativeQualityKeys =
+        [
+            SystemSaveSettingKeys.ViewDistanceQuality,
+            SystemSaveSettingKeys.PostProcessingQuality,
+            SystemSaveSettingKeys.ShadowQuality,
+            SystemSaveSettingKeys.TextureQuality,
+            SystemSaveSettingKeys.VisualEffectsQuality,
+            SystemSaveSettingKeys.FoliageQuality,
+        ];
+
+        foreach (BuiltInGraphicsPresetViewModel preset in viewModel.BuiltInGraphicsPresets.Where(preset => preset.IsHardwareSetup))
+        {
+            string[] keys = preset.Profile.Graphics.Select(setting => setting.Key).ToArray();
+
+            Assert.All(nativeQualityKeys, key => Assert.Contains(key, keys));
+            Assert.Contains(preset.Profile.Graphics, setting => setting.Key == "r.MaxAnisotropy" && setting.Value == "16");
+            Assert.Contains(preset.Profile.Graphics, setting => setting.Key == "r.Streaming.PoolSize");
+            Assert.Contains(preset.Profile.Graphics, setting => setting.Key == "r.Streaming.LimitPoolSizeToVRAM" && setting.Value == "1");
+        }
+    }
+
+    [Fact]
+    public async Task HardwareSetupStagesOnlyItsListedSettings()
     {
         GameInspectionSnapshot snapshot = CreateSnapshot() with
         {
@@ -710,22 +804,69 @@ public sealed class MainViewModelTests
                     [
                         new IniSettingSnapshot("SystemSettings", "r.ViewDistanceScale", "1.2", 1),
                         new IniSettingSnapshot("SystemSettings", "r.MotionBlurQuality", "4", 2),
+                        new IniSettingSnapshot("SystemSettings", "r.PostProcessAAQuality", "3", 3),
+                        new IniSettingSnapshot("SystemSettings", "r.MaxAnisotropy", "4", 4),
+                        new IniSettingSnapshot("SystemSettings", "r.Streaming.PoolSize", "1000", 5),
+                        new IniSettingSnapshot("SystemSettings", "r.Streaming.LimitPoolSizeToVRAM", "1", 6),
+                        new IniSettingSnapshot("SystemSettings", "r.SSR.Quality", "2", 7),
+                        new IniSettingSnapshot("SystemSettings", "foliage.DensityScale", "1.5", 8),
+                        new IniSettingSnapshot("SystemSettings", "grass.DensityScale", "1.5", 9),
+                        new IniSettingSnapshot("SystemSettings", "r.Shadow.MaxResolution", "1024", 10),
                     ],
                     null),
             ],
+            BinarySettingsFile = new BinarySettingsFileSnapshot(
+                "System.sav",
+                "System.sav",
+                true,
+                128,
+                DateTimeOffset.UnixEpoch,
+                "Decoded and verified",
+                new SystemGraphicsSettingsSnapshot(
+                    1920, 1080, 1920, 1080, 1,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    60,
+                    false)),
         };
         var viewModel = new MainViewModel(new FixedInspector(snapshot), new RecordingEditor());
         await viewModel.InitializeAsync();
         SettingEditorViewModel motionBlur = Assert.Single(
             viewModel.FeatureGroups.SelectMany(group => group.Settings),
             setting => setting.TechnicalKey == "r.MotionBlurQuality").Editor!;
+        viewModel.IsAdvancedMode = true;
+        Dictionary<string, SettingEditorViewModel> editorsByKey = viewModel.FeatureGroups
+            .SelectMany(group => group.Settings)
+            .Where(setting => setting.Editor is not null)
+            .ToDictionary(setting => setting.TechnicalKey, setting => setting.Editor!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (BuiltInGraphicsPresetViewModel hardwareSetup in viewModel.BuiltInGraphicsPresets.Where(preset => preset.IsHardwareSetup))
+        {
+            foreach (ProfileSetting profileSetting in hardwareSetup.Profile.Graphics)
+            {
+                Assert.True(
+                    editorsByKey.TryGetValue(profileSetting.Key, out SettingEditorViewModel? editor),
+                    $"{hardwareSetup.Name}: {profileSetting.Key} must be available without experimental graphics settings.");
+                Assert.True(
+                    editor!.CanApplyProfileValue(profileSetting.Value),
+                    $"{hardwareSetup.Name}: {profileSetting.Key}={profileSetting.Value} must be a supported value.");
+            }
+        }
+
+        BuiltInGraphicsPresetViewModel performanceSetup = viewModel.BuiltInGraphicsPresets.Single(
+            preset => preset.Name == "Performance Setup");
 
         Assert.True(motionBlur.HasActiveOverride);
         viewModel.LoadBuiltInGraphicsPresetCommand.Execute(
-            viewModel.BuiltInGraphicsPresets.Single(preset => preset.Name == "Performance Tweak"));
+            performanceSetup);
 
         Assert.True(motionBlur.HasActiveOverride);
-        Assert.True(viewModel.HasPendingChanges);
+        Assert.True(viewModel.HasPendingChanges, viewModel.OperationMessage);
         Assert.DoesNotContain(viewModel.PendingChanges, change => change.Name == "Quality and activation");
     }
 

@@ -244,6 +244,80 @@ public sealed class MainGameplayTabTests
     }
 
     [Fact]
+    public async Task TogglingPatchScopeTriggersPendingGameplayChanges()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
+
+        Assert.False(viewModel.IncludeClanInGameplayPatch);
+        Assert.False(viewModel.HasGameplayPendingChanges);
+
+        viewModel.IncludeClanInGameplayPatch = true;
+
+        Assert.True(viewModel.HasGameplayPendingChanges);
+        Assert.True(viewModel.CanReviewGameplay);
+    }
+
+    [Fact]
+    public async Task BottomBarIsVisibleInGameplayView()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new NoopEditor(),
+            _ => new NoopManager());
+
+        await viewModel.InitializeAsync();
+        viewModel.ShowGameplayCommand.Execute(null);
+
+        Assert.True(viewModel.ShowGameplayView);
+        Assert.True(viewModel.ShowBottomBar);
+    }
+
+    [Fact]
+    public async Task HomeOpensTheExactGamePakFolderWhenExternalPaksBlockGameplay()
+    {
+        GameInspectionSnapshot supported = CreateSnapshot() with
+        {
+            PakFiles =
+            [
+                new PakFileSnapshot(
+                    "SomeMod_P.pak",
+                    "SomeMod_P.pak",
+                    123,
+                    DateTimeOffset.UnixEpoch,
+                    PakClassification.PatchStyle),
+            ],
+        };
+        string? openedPath = null;
+        var viewModel = new MainViewModel(
+            new FixedInspector(supported),
+            new NoopEditor(),
+            _ => new NoopManager(),
+            directoryOpener: path =>
+            {
+                openedPath = path;
+                return true;
+            });
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.HasExternalPaks);
+        Assert.True(viewModel.CanOpenGamePakFolder);
+        Assert.Contains("preventing gameplay editing", viewModel.ExternalPakHelpText, StringComparison.Ordinal);
+
+        viewModel.OpenGamePakFolderCommand.Execute(null);
+
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine("install", "Ancestors", "Content", "Paks")),
+            openedPath);
+        Assert.Contains("Opened the game PAK folder", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GameplayReadinessDoesNotTreatAecOwnedPakAsAnExternalConflict()
     {
         GameInspectionSnapshot supported = CreateSnapshot() with
@@ -318,7 +392,7 @@ public sealed class MainGameplayTabTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal("Balanced Tweak", viewModel.HardwareDiagnostics.Recommendation.PresetName);
+        Assert.Equal("Balanced Setup", viewModel.HardwareDiagnostics.Recommendation.PresetName);
         Assert.True(viewModel.CanStageHardwareRecommendation);
     }
 

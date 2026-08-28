@@ -833,6 +833,50 @@ public sealed class SaveManagerViewModelTests
         }
     }
 
+    [Fact]
+    public async Task QueuedGameProcessRefreshDoesNotOverlapASlowProbe()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var completed = new ManualResetEventSlim();
+        int probes = 0;
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+            userData,
+            watchdog: null,
+            dispatchToUi: action => action(),
+            mutationGate: null,
+            gameRunningProbe: () =>
+            {
+                Interlocked.Increment(ref probes);
+                started.Set();
+                release.Wait(TimeSpan.FromSeconds(5));
+                completed.Set();
+                return true;
+            });
+        try
+        {
+            viewModel.QueueGameRunningStateRefresh();
+            Assert.True(started.Wait(TimeSpan.FromSeconds(5)));
+            viewModel.QueueGameRunningStateRefresh();
+
+            await Task.Delay(100);
+            Assert.Equal(1, Volatile.Read(ref probes));
+
+            release.Set();
+            Assert.True(await Task.Run(() => completed.Wait(TimeSpan.FromSeconds(5))));
+            await WaitUntilAsync(() => viewModel.IsGameRunning, TimeSpan.FromSeconds(5), "Game state was not refreshed.");
+        }
+        finally
+        {
+            release.Set();
+            viewModel.Dispose();
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout, string failureMessage)
     {
         DateTime deadline = DateTime.UtcNow + timeout;

@@ -121,10 +121,17 @@ public sealed record VerifiedGameContext(
             // A build ID that was present must not silently disappear or change.
             && string.Equals(BuildId ?? string.Empty, installation.BuildId ?? string.Empty, StringComparison.Ordinal)
             && string.Equals(ContentSignature ?? string.Empty, installation.ContentSignature ?? string.Empty, StringComparison.Ordinal)
-            && string.Equals(
-                Path.GetFullPath(LibraryRoot ?? string.Empty),
-                Path.GetFullPath(installation.LibraryRoot ?? string.Empty),
-                PathComparison);
+            && OptionalPathEquals(LibraryRoot, installation.LibraryRoot);
+    }
+
+    private static bool OptionalPathEquals(string? left, string? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), PathComparison);
     }
 
     private static StringComparison PathComparison => OperatingSystem.IsWindows()

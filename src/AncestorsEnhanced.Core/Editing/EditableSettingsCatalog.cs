@@ -55,7 +55,11 @@ public static class EditableSettingsCatalog
                 ("4", "4×"),
                 ("8", "8×"),
                 ("16", "16×")),
-            ["r.Streaming.PoolSize"] = Number(4096, 256, 16384, 256),
+            // The verified Ancestors scalability data contains 500, 1000 and 1500 MB.
+            // A 256 MB step marked those legitimate game values unsupported, which in
+            // turn could prevent a hardware recommendation from loading. Four MB keeps
+            // ordinary memory budgets practical while accepting every known stock value.
+            ["r.Streaming.PoolSize"] = Number(4096, 256, 16384, 4),
             ["r.Streaming.MipBias"] = Number(0, -4, 16, 0.25m),
             ["r.Streaming.Boost"] = Number(1, 0.1m, 4, 0.1m),
             ["r.Streaming.LimitPoolSizeToVRAM"] = Toggle(defaultValue: true),

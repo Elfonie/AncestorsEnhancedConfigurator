@@ -270,6 +270,27 @@ public sealed class SaveGameWatchdogTests : IDisposable
     }
 
     [Fact]
+    public void CheckpointSubscriberFailuresAreWrittenToDiagnostics()
+    {
+        string userData = CreateUserData();
+        var diagnostics = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ => new SaveGameOperationResult(true, "Checkpoint saved.", "checkpoint"),
+            diagnostics.Enqueue)
+        {
+            Cooldown = TimeSpan.Zero,
+        };
+        watchdog.CheckpointCreated += (_, _) => throw new InvalidOperationException("UI handler failed");
+        watchdog.Start();
+
+        watchdog.BeginSlotMutation(0).Dispose();
+
+        WaitFor(() => diagnostics.Any(message => message.Contains("CheckpointCreated subscriber failed", StringComparison.Ordinal)));
+        Assert.Contains(diagnostics, message => message.Contains("UI handler failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task SlotMutationDoesNotStartWorkerBeforeWatchdogIsEnabled()
     {
         string userData = CreateUserData();

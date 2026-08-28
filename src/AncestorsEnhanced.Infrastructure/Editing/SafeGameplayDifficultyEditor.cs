@@ -239,6 +239,15 @@ public sealed class SafeGameplayDifficultyEditor : IGameplayDifficultyEditor
         Add("Exhaustion penalty", "gameplay.exhaustion-penalty", before.ExhaustionPenaltyPercent, after.ExhaustionPenaltyPercent);
         Add("Wound recovery time", "gameplay.wound-recovery-duration", before.WoundRecoveryDurationPercent, after.WoundRecoveryDurationPercent);
         Add("Poison stamina penalty", "gameplay.poison-stamina-penalty", before.PoisonStaminaPenaltyPercent, after.PoisonStaminaPenaltyPercent);
+        if (before.IncludeClan != after.IncludeClan)
+        {
+            changes.Add(new SettingChangePreview(
+                "Patch scope",
+                GameplayPakBuilder.OwnPatchName,
+                "gameplay.patch-scope",
+                before.IncludeClan ? "Player + Clan" : "Player only",
+                after.IncludeClan ? "Player + Clan" : "Player only"));
+        }
         return [.. changes];
 
         void Add(string name, string key, int oldValue, int newValue)
@@ -282,7 +291,8 @@ public sealed class SafeGameplayDifficultyEditor : IGameplayDifficultyEditor
                 settings.ExhaustionThresholdPercent,
                 settings.ExhaustionPenaltyPercent,
                 settings.WoundRecoveryDurationPercent,
-                settings.PoisonStaminaPenaltyPercent));
+                settings.PoisonStaminaPenaltyPercent,
+                settings.IncludeClan));
 
     private static byte[] BuildVersion2Pak(string installDirectory, GameplayDifficultySettings settings) =>
         GameplayPakBuilder.Build(

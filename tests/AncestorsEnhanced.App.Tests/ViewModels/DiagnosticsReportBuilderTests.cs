@@ -37,7 +37,7 @@ public sealed class DiagnosticsReportBuilderTests
             : "%HOME%/Games/Ancestors";
         Assert.Contains(expectedInstallation, report, StringComparison.Ordinal);
         Assert.Contains("GPU and VRAM: Test GPU", report, StringComparison.Ordinal);
-        Assert.Contains("Hardware recommendation: Balanced Tweak", report, StringComparison.Ordinal);
+        Assert.Contains("Hardware recommendation: Balanced Setup", report, StringComparison.Ordinal);
         Assert.Contains("mod.pak", report, StringComparison.Ordinal);
     }
 

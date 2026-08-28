@@ -15,7 +15,8 @@ public sealed record GameplayDifficultySettings(
     int ExhaustionThresholdPercent = 100,
     int ExhaustionPenaltyPercent = 100,
     int WoundRecoveryDurationPercent = 100,
-    int PoisonStaminaPenaltyPercent = 100)
+    int PoisonStaminaPenaltyPercent = 100,
+    bool IncludeClan = false)
 {
     public static GameplayDifficultySettings GameDefault { get; } = new(100, 100, 100, 100, 100, 100, 100, 100, 100);
 

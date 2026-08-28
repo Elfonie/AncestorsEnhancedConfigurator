@@ -340,11 +340,11 @@ internal sealed class SettingsTransaction(
                 }
                 catch (Exception exception) when (IsExpectedWriteException(exception))
                 {
-                    return SettingsOperationResult.RolledBack(
+                    return SettingsOperationResult.Reverted(
                         "The configuration was restored, but its history marker could not be written: " + exception.Message);
                 }
 
-                return SettingsOperationResult.RolledBack(
+                return SettingsOperationResult.Reverted(
                     "The last configurator change was restored from its backup.");
             });
         }

@@ -226,6 +226,14 @@
     <Style Selector="Border.SettingCard:pointerover">
       <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />
     </Style>
+    <!-- Preset cards are informational surfaces with a contained action. They share
+         one visual tier without inheriting the elevation of a whole settings group. -->
+    <Style Selector="Border.PresetCard">
+      <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
 
     <!-- Inputs -->
     <Style Selector="TextBox">

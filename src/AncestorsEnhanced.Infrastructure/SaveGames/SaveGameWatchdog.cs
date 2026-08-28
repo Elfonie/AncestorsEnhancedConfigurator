@@ -17,6 +17,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 {
     private readonly Func<int, SaveGameOperationResult> _createCheckpoint;
     private readonly string _userDataDirectory;
+    private readonly Action<string> _diagnosticLog;
     private readonly Lock _gate = new();
     private readonly object _lifecycleGate = new();
     private readonly Dictionary<int, WorkerState> _running = new();
@@ -33,23 +34,34 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     private bool _watcherRestartScheduled;
 
     /// <summary>Binds to a verified game context and its user-data path.</summary>
-    public SaveGameWatchdog(VerifiedGameContext context, GameContextVerifier verifier)
-        : this(context.UserDataDirectory, () => verifier.Verify(context))
+    public SaveGameWatchdog(
+        VerifiedGameContext context,
+        GameContextVerifier verifier,
+        Action<string>? diagnosticLog = null)
+        : this(context.UserDataDirectory, () => verifier.Verify(context), diagnosticLog)
     {
     }
 
-    public SaveGameWatchdog(string userDataDirectory, Func<bool>? revalidate = null)
+    public SaveGameWatchdog(
+        string userDataDirectory,
+        Func<bool>? revalidate = null,
+        Action<string>? diagnosticLog = null)
     {
         _userDataDirectory = userDataDirectory;
         var manager = new SafeSaveGameManager(userDataDirectory, null, revalidate);
         _createCheckpoint = slot => manager.CreateCheckpoint(
             slot.ToString(CultureInfo.InvariantCulture), "AutoBackup");
+        _diagnosticLog = diagnosticLog ?? WriteTrace;
     }
 
-    internal SaveGameWatchdog(string userDataDirectory, Func<int, SaveGameOperationResult> createCheckpoint)
+    internal SaveGameWatchdog(
+        string userDataDirectory,
+        Func<int, SaveGameOperationResult> createCheckpoint,
+        Action<string>? diagnosticLog = null)
     {
         _userDataDirectory = userDataDirectory;
         _createCheckpoint = createCheckpoint ?? throw new ArgumentNullException(nameof(createCheckpoint));
+        _diagnosticLog = diagnosticLog ?? WriteTrace;
     }
 
     public event EventHandler<string>? CheckpointCreated;
@@ -644,7 +656,8 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         {
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                try { handler(this, slot); } catch { }
+                try { handler(this, slot); }
+                catch (Exception exception) { WriteSubscriberFailure("CheckpointCreated", exception); }
             });
         }
     }
@@ -655,10 +668,25 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         {
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                try { handler(this, message); } catch { }
+                try { handler(this, message); }
+                catch (Exception exception) { WriteSubscriberFailure("WatcherError", exception); }
             });
         }
     }
+
+    private void WriteSubscriberFailure(string eventName, Exception exception)
+    {
+        try
+        {
+            _diagnosticLog($"Save watcher {eventName} subscriber failed: {exception}");
+        }
+        catch
+        {
+            Trace.TraceError($"Save watcher {eventName} subscriber failed: {exception.GetType().Name}");
+        }
+    }
+
+    private static void WriteTrace(string message) => Trace.TraceError(message);
 
     private sealed record WorkerState(long Generation, Task Task);
 }
