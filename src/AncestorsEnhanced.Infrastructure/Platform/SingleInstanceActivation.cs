@@ -14,7 +14,9 @@ public sealed class SingleInstanceActivationListener : IDisposable
     private readonly string _pipeName;
     private readonly Action _activate;
     private readonly CancellationTokenSource _cancellation = new();
+    private readonly object _startGate = new();
     private Task? _listenerTask;
+    private TaskCompletionSource? _ready;
     private bool _disposed;
 
     public SingleInstanceActivationListener(string identifier, Action activate)
@@ -27,8 +29,26 @@ public sealed class SingleInstanceActivationListener : IDisposable
 
     public void Start()
     {
+        StartAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Starts the listener and completes only after a named-pipe server instance
+    /// exists. A mutex alone cannot prove that a second launch can already send
+    /// its activation request.
+    /// </summary>
+    public async Task StartAsync(CancellationToken cancellationToken = default)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _listenerTask ??= Task.Run(ListenAsync);
+        Task ready;
+        lock (_startGate)
+        {
+            _ready ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _listenerTask ??= Task.Run(() => ListenAsync(_ready), CancellationToken.None);
+            ready = _ready.Task;
+        }
+
+        await ready.WaitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public static bool TryActivateExistingInstance(string identifier, TimeSpan timeout)
@@ -55,8 +75,9 @@ public sealed class SingleInstanceActivationListener : IDisposable
         return "ancestors-enhanced-" + Convert.ToHexString(hash.AsSpan(0, 12)).ToLowerInvariant();
     }
 
-    private async Task ListenAsync()
+    private async Task ListenAsync(TaskCompletionSource ready)
     {
+        bool hasSignalledReady = false;
         while (!_cancellation.IsCancellationRequested)
         {
             try
@@ -67,6 +88,13 @@ public sealed class SingleInstanceActivationListener : IDisposable
                     maxNumberOfServerInstances: 1,
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous);
+                if (!hasSignalledReady)
+                {
+                    // The server must be constructed before another process is
+                    // told that the owning instance is ready for activation.
+                    ready.TrySetResult();
+                    hasSignalledReady = true;
+                }
                 await server.WaitForConnectionAsync(_cancellation.Token).ConfigureAwait(false);
 
                 // The protocol intentionally accepts no arguments or file paths.
@@ -85,6 +113,11 @@ public sealed class SingleInstanceActivationListener : IDisposable
                 // A malformed/disconnected local client must not end the listener.
             }
         }
+
+        if (!hasSignalledReady)
+        {
+            ready.TrySetCanceled(_cancellation.Token);
+        }
     }
 
     public void Dispose()
@@ -96,6 +129,7 @@ public sealed class SingleInstanceActivationListener : IDisposable
 
         _disposed = true;
         _cancellation.Cancel();
+        _ready?.TrySetCanceled();
         _cancellation.Dispose();
     }
 }

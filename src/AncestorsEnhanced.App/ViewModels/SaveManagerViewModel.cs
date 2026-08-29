@@ -1,5 +1,6 @@
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Infrastructure.Platform;
+using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -20,6 +21,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private readonly object _settingsWriteGate = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private Task _settingsWriteTail = Task.CompletedTask;
+    private readonly object _watchdogLifecycleGate = new();
+    private Task _watchdogLifecycleTail = Task.CompletedTask;
+    private int _watchdogLifecycleVersion;
+    private int _watchdogLifecycleActivated;
+    private int _watchdogDesiredEnabled;
     private CancellationTokenSource? _metadataWriteDebounce;
     private Task? _watchdogRefreshTask;
     private int _gameProcessRefreshInProgress;
@@ -38,6 +44,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial string StatusAccent { get; set; } = "#7A877A";
+
+    public IBrush StatusBrush => StatusPresentation.BrushForLegacyAccent(StatusAccent);
 
     [ObservableProperty]
     public partial IReadOnlyList<SaveGameSlotViewModel> Slots { get; set; } = [];
@@ -144,8 +152,6 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     public bool HasSlots => Slots.Any(slot => slot.HasSave);
 
-    public int[] CooldownChoices { get; } = [5, 10, 20];
-
     public string[] CheckpointOriginFilters { get; } = ["All", "Manual", "AutoBackup", "PreRestore"];
 
     public bool HasNoSlots => !HasSlots;
@@ -155,6 +161,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     public bool HasBackupHealthWarning { get; private set; }
 
     public string BackupHealthAccent { get; private set; } = "#7A877A";
+
+    public IBrush BackupHealthBrush => StatusPresentation.BrushForLegacyAccent(BackupHealthAccent);
 
     public string? LastRecoveryMessage { get; private set; }
 
@@ -187,9 +195,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         RefreshGameRunningState();
         _gameProcessTimer.Start();
+        Volatile.Write(ref _watchdogLifecycleActivated, 1);
+        Volatile.Write(ref _watchdogDesiredEnabled, IsWatchdogEnabled ? 1 : 0);
         if (IsWatchdogEnabled)
         {
-            _watchdog?.Start();
+            QueueWatchdogReconciliation();
         }
     }
 
@@ -239,10 +249,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 : "#7A877A";
         BackupHealthSummary = HasBackupHealthWarning
             ? $"{readableSlots} readable save slot(s) · {checkpointCount} checkpoint(s) · {unreadableSlots} slot(s) need attention"
-            : $"{readableSlots} readable save slot(s) · {checkpointCount} checkpoint(s) available";
+            : $"{readableSlots} readable save slot(s) · {checkpointCount} checkpoint(s) found during the latest scan";
         OnPropertyChanged(nameof(BackupHealthSummary));
         OnPropertyChanged(nameof(HasBackupHealthWarning));
         OnPropertyChanged(nameof(BackupHealthAccent));
+        OnPropertyChanged(nameof(BackupHealthBrush));
 
         NotifyState();
     }
@@ -256,6 +267,17 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 checkpoint.RefreshRestoreAvailability();
             }
         }
+    }
+
+    partial void OnStatusAccentChanged(string value)
+    {
+        OnPropertyChanged(nameof(StatusBrush));
+    }
+
+    public void RefreshThemeBindings()
+    {
+        OnPropertyChanged(nameof(StatusBrush));
+        OnPropertyChanged(nameof(BackupHealthBrush));
     }
 
     public async Task<bool> RefreshSilentlyAsync()
@@ -408,7 +430,12 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         _metadataWriteDebounce = null;
         SaveSettings(waitForCompletion: true);
 
+        Volatile.Write(ref _watchdogLifecycleActivated, 0);
+        Volatile.Write(ref _watchdogDesiredEnabled, 0);
+        QueueWatchdogReconciliation();
+
         Task settingsWrite;
+        Task watchdogLifecycle;
         lock (_settingsWriteGate)
         {
             if (_disposed)
@@ -418,6 +445,10 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             _disposed = true;
             settingsWrite = _settingsWriteTail;
         }
+        lock (_watchdogLifecycleGate)
+        {
+            watchdogLifecycle = _watchdogLifecycleTail;
+        }
         GC.SuppressFinalize(this);
         _gameProcessTimer.Stop();
         _gameProcessTimer.Tick -= OnGameProcessTimerTick;
@@ -425,7 +456,6 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         {
             _watchdog.CheckpointCreated -= OnWatchdogCheckpointCreated;
             _watchdog.WatcherError -= OnWatcherError;
-            _watchdog.StopWatch();
         }
         if (_mutationGate is not null)
         {
@@ -435,7 +465,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         Task allPending;
         try
         {
-            Task[] pending = new Task?[] { settingsWrite, _watchdogRefreshTask }
+            Task[] pending = new Task?[] { settingsWrite, _watchdogRefreshTask, watchdogLifecycle }
                 .OfType<Task>()
                 .ToArray();
             allPending = Task.WhenAll(pending);
@@ -525,24 +555,63 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     partial void OnIsWatchdogEnabledChanged(bool value)
     {
-        if (_watchdog is not null)
+        if (_loadingSettings)
         {
-            if (value && !_loadingSettings)
+            // Loading persisted settings establishes desired state only. Activate
+            // performs the first actual transition after save slots are ready.
+            return;
+        }
+
+        Volatile.Write(ref _watchdogDesiredEnabled, value ? 1 : 0);
+        QueueWatchdogReconciliation();
+        SaveSettings();
+    }
+
+    /// <summary>
+    /// Serializes all watchdog Start/Stop transitions off the UI thread. A stale
+    /// stop can therefore never run after a newer request to enable the watcher.
+    /// </summary>
+    private void QueueWatchdogReconciliation()
+    {
+        if (_watchdog is null)
+        {
+            return;
+        }
+
+        int version = Interlocked.Increment(ref _watchdogLifecycleVersion);
+        lock (_watchdogLifecycleGate)
+        {
+            _watchdogLifecycleTail = _watchdogLifecycleTail.ContinueWith(
+                _ => Task.Run(() => ReconcileWatchdogState(version), CancellationToken.None),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default).Unwrap();
+        }
+    }
+
+    private void ReconcileWatchdogState(int observedVersion)
+    {
+        while (true)
+        {
+            bool shouldRun = !_disposed &&
+                Volatile.Read(ref _watchdogLifecycleActivated) == 1 &&
+                Volatile.Read(ref _watchdogDesiredEnabled) == 1;
+            if (shouldRun)
             {
-                _watchdog.Start();
+                _watchdog!.Start();
             }
             else
             {
-                // StopWatch can wait for an in-flight backup. Keep that wait off
-                // the UI dispatcher; the watchdog's lifecycle lock serializes a
-                // rapid re-enable safely after the stop finishes.
-                _ = Task.Run(_watchdog.StopWatch);
+                _watchdog!.StopWatch();
             }
-        }
 
-        if (!_loadingSettings)
-        {
-            SaveSettings();
+            int currentVersion = Volatile.Read(ref _watchdogLifecycleVersion);
+            if (currentVersion == observedVersion)
+            {
+                return;
+            }
+
+            observedVersion = currentVersion;
         }
     }
 

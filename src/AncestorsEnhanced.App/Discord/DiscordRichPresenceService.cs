@@ -33,6 +33,18 @@ internal sealed class DiscordRichPresenceService : IDisposable
     private bool _disposed;
     private bool _started;
 
+    public event Action? StateChanged;
+
+    public bool IsActive => _started && !_disabled && !_disposed;
+
+    public string StatusMessage => IsActive
+        ? "Active"
+        : _disabled
+            ? "Unavailable on this system"
+            : _disposed
+                ? "Off"
+                : "Waiting to start";
+
     public DiscordRichPresenceService()
         : this(new DiscordSocialSdkNative(ApplicationId))
     {
@@ -43,27 +55,33 @@ internal sealed class DiscordRichPresenceService : IDisposable
         _native = native;
     }
 
-    public void Start()
+    public bool Start()
     {
         if (_disposed || _disabled || _started)
         {
-            return;
+            return IsActive;
         }
 
         try
         {
             _native.Start(Activity);
             _started = true;
+            StateChanged?.Invoke();
+            return true;
         }
         catch (Exception exception) when (IsOptionalIntegrationFailure(exception))
         {
             _disabled = true;
             AppDiagnostics.Logger?.Write($"Discord Rich Presence is unavailable: {exception.GetType().Name}");
+            StateChanged?.Invoke();
+            return false;
         }
         catch (Exception exception)
         {
             _disabled = true;
             AppDiagnostics.Logger?.Write($"Discord Rich Presence was disabled after an unexpected error: {exception}");
+            StateChanged?.Invoke();
+            return false;
         }
     }
 
@@ -83,6 +101,7 @@ internal sealed class DiscordRichPresenceService : IDisposable
             _started = false;
             _disabled = true;
             AppDiagnostics.Logger?.Write($"Discord Rich Presence was disabled while processing callbacks: {exception}");
+            StateChanged?.Invoke();
         }
     }
 
@@ -95,6 +114,7 @@ internal sealed class DiscordRichPresenceService : IDisposable
 
         _disposed = true;
         _native.Dispose();
+        StateChanged?.Invoke();
     }
 
     private static bool IsOptionalIntegrationFailure(Exception exception) =>

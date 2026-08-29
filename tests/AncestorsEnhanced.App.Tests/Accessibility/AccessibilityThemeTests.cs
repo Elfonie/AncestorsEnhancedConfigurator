@@ -1,4 +1,5 @@
 using AncestorsEnhanced.App.Accessibility;
+using AncestorsEnhanced.App.ViewModels;
 using Avalonia;
 using Avalonia.Media;
 
@@ -17,6 +18,7 @@ public sealed class AccessibilityThemeTests
         Assert.Equal(Color.Parse("#FF000000"), ColorOf(application, "AppBackgroundBrush"));
         Assert.Equal(Color.Parse("#FFFFFF00"), ColorOf(application, "AccentBrush"));
         Assert.Equal(Color.Parse("#FF00FFFF"), ColorOf(application, "FocusBrush"));
+        Assert.Equal(Color.Parse("#FFFFFF00"), ColorOf(application, "ToggleSwitchCurtainFillOn"));
     }
 
     [Fact]
@@ -76,6 +78,21 @@ public sealed class AccessibilityThemeTests
         Assert.Equal(Color.Parse("#FFFFFFFF"), ColorOf(application, "BodyTextBrush"));
         Assert.Equal(Color.Parse("#FFFFFF00"), ColorOf(application, "GoldTextBrush"));
         Assert.True(application.Resources["NavActiveBackgroundBrush"] is IBrush);
+    }
+
+    [Fact]
+    public void DynamicStatusBrushesResolveTheCurrentSemanticPalette()
+    {
+        var application = new Application();
+        AccessibilityTheme.Apply(application, false);
+        Assert.Equal(Color.Parse("#FFB4D941"), Assert.IsType<SolidColorBrush>(
+            StatusPresentation.BrushForLegacyAccent("#B4D941", application)).Color);
+
+        AccessibilityTheme.Apply(application, true);
+        Assert.Equal(Color.Parse("#FFFFFF00"), Assert.IsType<SolidColorBrush>(
+            StatusPresentation.BrushForLegacyAccent("#B4D941", application)).Color);
+        Assert.Equal(Color.Parse("#FFFF4D4D"), Assert.IsType<SolidColorBrush>(
+            StatusPresentation.BrushForLegacyAccent("#E04D42", application)).Color);
     }
 
     private static Color ColorOf(Application application, string key)

@@ -51,15 +51,36 @@ public sealed class AccessibilityPreferencesStoreTests : IDisposable
     }
 
     [Fact]
-    public void InvalidPreferenceFileFailsClosedToTheDefault()
+    public void InvalidPreferenceFileFailsClosedToTheDefaultAndIsNotOverwritten()
     {
         Directory.CreateDirectory(_directory);
         File.WriteAllText(Path.Combine(_directory, "accessibility.json"), "not json");
 
         var diagnostics = new List<string>();
 
-        Assert.False(new AccessibilityPreferencesStore(_directory, diagnostics.Add).Load().HighContrastEnabled);
+        var store = new AccessibilityPreferencesStore(_directory, diagnostics.Add);
+
+        Assert.False(store.Load().HighContrastEnabled);
+        Assert.True(store.HasUnreadablePreferences);
+        Assert.False(store.TrySave(new AccessibilityPreferences(HighContrastEnabled: true)));
+        Assert.Equal("not json", File.ReadAllText(Path.Combine(_directory, "accessibility.json")));
         Assert.Contains(diagnostics, message => message.Contains("Could not load accessibility preferences", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ExplicitResetArchivesTheUnreadableFileBeforeWritingDefaults()
+    {
+        Directory.CreateDirectory(_directory);
+        string path = Path.Combine(_directory, "accessibility.json");
+        File.WriteAllText(path, "{ bad json");
+        var store = new AccessibilityPreferencesStore(_directory);
+        _ = store.Load();
+
+        Assert.True(store.TryReset(new AccessibilityPreferences(), out string? archived));
+        Assert.False(store.HasUnreadablePreferences);
+        Assert.NotNull(archived);
+        Assert.Equal("{ bad json", File.ReadAllText(Path.Combine(_directory, archived!)));
+        Assert.False(store.Load().HighContrastEnabled);
     }
 
     [Fact]

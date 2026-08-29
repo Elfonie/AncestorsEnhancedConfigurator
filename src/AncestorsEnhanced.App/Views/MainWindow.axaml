@@ -25,6 +25,7 @@
                  IsVisible="{Binding IsAnyOperationRunning}" />
     <!-- Sidebar navigation -->
     <Border Grid.Column="0"
+            x:Name="NavigationPane"
             Width="176"
             Padding="14,14"
             Background="{DynamicResource RaisedSurfaceBrush}"
@@ -82,11 +83,13 @@
       <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="20">
         <StackPanel Spacing="1">
           <TextBlock Text="{Binding PageContextLabel}"
+                     x:Name="PageContextTitle"
                      FontSize="23"
                      FontWeight="SemiBold"
                      Foreground="{DynamicResource PrimaryTextBrush}" />
         </StackPanel>
         <Button Grid.Column="1"
+                x:Name="ReloadGameDataButton"
                 Content="Reload game data"
                 Command="{Binding RefreshCommand}"
                 IsEnabled="{Binding !IsAnyOperationRunning}"
@@ -106,10 +109,10 @@
               <TextBlock Text="{Binding HomeTitle}" FontSize="24" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
               <TextBlock Text="{Binding InstallationDetails}" Foreground="{DynamicResource SecondaryTextBrush}" />
             </StackPanel>
-            <Border Grid.Column="1" Padding="12,8" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding DetectionColor}" BorderThickness="1">
+            <Border Grid.Column="1" Padding="12,8" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding DetectionBrush}" BorderThickness="1">
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <Ellipse Width="9" Height="9" Fill="{Binding DetectionDotColor}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding DetectionStatus}" FontWeight="SemiBold" Foreground="{Binding DetectionColor}" />
+                <Ellipse Width="9" Height="9" Fill="{Binding DetectionBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding DetectionStatus}" Foreground="{Binding DetectionBrush}" FontWeight="SemiBold" />
               </StackPanel>
             </Border>
           </Grid>
@@ -167,14 +170,14 @@
           <Border Padding="14,10"
                   CornerRadius="7"
                   BorderThickness="1"
-                  BorderBrush="{Binding DetectionColor}"
+                  BorderBrush="{Binding DetectionBrush}"
                   Background="{DynamicResource SurfaceBrush}">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-              <Ellipse Width="9" Height="9" Fill="{Binding DetectionDotColor}" VerticalAlignment="Center" />
+              <Ellipse Width="9" Height="9" Fill="{Binding DetectionBrush}" VerticalAlignment="Center" />
               <StackPanel Grid.Column="1" Spacing="1">
                 <TextBlock Text="{Binding DetectionStatus}"
                            FontWeight="SemiBold"
-                           Foreground="{Binding DetectionColor}" />
+                           Foreground="{Binding DetectionBrush}" />
                 <TextBlock Text="{Binding InstallationDetails}"
                            FontSize="12"
                            Foreground="{DynamicResource SecondaryTextBrush}" />
@@ -294,7 +297,7 @@
                           Background="Transparent"
                           BorderThickness="0">
                     <Grid ColumnDefinitions="4,*,Auto,22" ColumnSpacing="12" IsHitTestVisible="False">
-                      <Border Background="{Binding AccentColor}" CornerRadius="2" />
+                      <Border Background="{Binding AccentBrush}" CornerRadius="2" />
                       <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                         <TextBlock Text="{Binding Category}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" />
                         <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
@@ -567,10 +570,11 @@
                            FontSize="12" Foreground="{DynamicResource LabelTextBrush}" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" VerticalAlignment="Center">
                   <TextBlock Text="Minimum time between auto-backups:" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
-                  <ComboBox ItemsSource="{Binding SaveManager.CooldownChoices}"
-                            SelectedItem="{Binding SaveManager.CooldownMinutes, Mode=TwoWay}"
-                            IsEnabled="{Binding SaveManager.IsWatchdogEnabled}"
-                            Width="76" MinWidth="76" HorizontalAlignment="Left" />
+                  <NumericUpDown Value="{Binding SaveManager.CooldownMinutes, Mode=TwoWay}"
+                                 Minimum="1" Maximum="1440" Increment="1"
+                                 IsEnabled="{Binding SaveManager.IsWatchdogEnabled}"
+                                 Width="94" MinWidth="94" HorizontalAlignment="Left"
+                                 ToolTip.Tip="Any whole number from 1 to 1440 minutes." />
                   <TextBlock Text="min" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
                 </StackPanel>
               </StackPanel>
@@ -584,10 +588,10 @@
                        Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
           </Border>
           <Border Padding="14,10" CornerRadius="7" BorderThickness="1"
-                  BorderBrush="{Binding SaveManager.StatusAccent}"
+                  BorderBrush="{Binding SaveManager.StatusBrush}"
                   Background="{DynamicResource SurfaceBrush}"
                   IsVisible="True">
-            <TextBlock Text="{Binding SaveManager.StatusMessage}" TextWrapping="Wrap" Foreground="{Binding SaveManager.StatusAccent}" />
+            <TextBlock Text="{Binding SaveManager.StatusMessage}" TextWrapping="Wrap" Foreground="{Binding SaveManager.StatusBrush}" />
           </Border>
 
           <Expander Header="{Binding SaveManager.CloudWarningTitle}" Padding="12,8" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource CloudWarningBorderBrush}" BorderThickness="1">
@@ -667,12 +671,12 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding SaveManager.BackupHealthAccent}" BorderThickness="1">
+          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding SaveManager.BackupHealthBrush}" BorderThickness="1">
             <StackPanel Spacing="3">
               <TextBlock Text="Backup health" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
-              <TextBlock Text="{Binding SaveManager.BackupHealthSummary}" TextWrapping="Wrap" Foreground="{Binding SaveManager.BackupHealthAccent}" />
-              <TextBlock Text="This checks what AEC could read during the latest scan. It does not claim a checkpoint was loaded successfully in-game."
-                         IsVisible="{Binding SaveManager.HasBackupHealthWarning}" FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SaveManager.BackupHealthSummary}" TextWrapping="Wrap" Foreground="{Binding SaveManager.BackupHealthBrush}" />
+              <TextBlock Text="This is an inventory-level scan of checkpoint paths, manifests and sizes. Full decompression and hash validation happen immediately before a restore; AEC never treats this list as proof that a checkpoint loaded successfully in-game."
+                         FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
           <StackPanel IsVisible="{Binding SaveManager.HasNoSlots}" Spacing="10" Margin="0,2,0,0">
@@ -856,7 +860,7 @@
             </Border>
           </StackPanel>
 
-          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{Binding GameplayReadiness.AccentColor}" BorderThickness="1">
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{Binding GameplayReadiness.AccentBrush}" BorderThickness="1">
             <StackPanel Spacing="4">
               <TextBlock Text="{Binding GameplayReadiness.Title}" FontWeight="SemiBold" Foreground="{DynamicResource WarningTextBrush}" />
               <TextBlock Text="{Binding GameplayReadiness.Description}" FontSize="12" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
@@ -876,8 +880,8 @@
               </StackPanel>
             </Grid>
           </Border>
-          <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding OperationAccent}" BorderThickness="1">
-            <TextBlock Text="{Binding OperationMessage}" FontSize="12" Foreground="{Binding OperationAccent}" TextWrapping="Wrap" />
+          <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding OperationBrush}" BorderThickness="1">
+            <TextBlock Text="{Binding OperationMessage}" FontSize="12" Foreground="{Binding OperationBrush}" TextWrapping="Wrap" />
           </Border>
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   IsVisible="{Binding IsCreatingProfile}">
@@ -1003,6 +1007,16 @@
               <TextBlock Text="Accessibility options and maintenance for Ancestors Enhanced Configurator." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1"
+                  IsVisible="{Binding HasApplicationPreferencesWarning}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Application preferences need attention" FontWeight="SemiBold" Foreground="{DynamicResource WarningTextBrush}" />
+              <TextBlock Text="{Binding ApplicationPreferencesWarning}" FontSize="12" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
+              <TextBlock Text="Reset archives the unreadable file first, then restores AEC's application preferences to safe defaults. This does not change Ancestors, save games, graphics settings or profiles."
+                         FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+              <Button Content="Reset application preferences" Command="{Binding ResetApplicationPreferencesCommand}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Border>
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
               <StackPanel Spacing="3">
@@ -1035,7 +1049,8 @@
                             VerticalAlignment="Center" />
               <StackPanel Grid.Column="1" Spacing="3">
                 <TextBlock Text="Discord Rich Presence" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                <TextBlock Text="Optional. When enabled, AEC starts Discord's local SDK and reports that the Configurator is open. It is off by default." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Optional. This keeps your preference to use Discord; AEC separately shows whether the local Discord integration actually started. It is off by default." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding DiscordRichPresenceStatus, StringFormat=Status: {0}}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
               </StackPanel>
             </Grid>
           </Border>
@@ -1206,7 +1221,7 @@
           <TextBlock Text="{Binding OperationMessage}"
                      TextWrapping="Wrap"
                      FontSize="12"
-                     Foreground="{Binding OperationAccent}" />
+                     Foreground="{Binding OperationBrush}" />
         </StackPanel>
         <WrapPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Button Command="{Binding RestoreGameDefaultsCommand}"

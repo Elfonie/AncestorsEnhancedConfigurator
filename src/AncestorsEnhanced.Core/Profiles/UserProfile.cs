@@ -109,7 +109,6 @@ public static class UserProfileCodec
         ValidateSection(profile.Graphics, "graphics", keys);
         ValidateSection(profile.Display, "display", keys);
         ValidateSection(profile.Gameplay, "gameplay", keys);
-        ValidateUnsupportedSection(profile.Display, "display");
         ValidateUnsupportedSection(profile.Gameplay, "gameplay");
         if (keys.Count == 0)
         {

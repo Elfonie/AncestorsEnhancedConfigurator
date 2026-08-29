@@ -67,6 +67,24 @@ public sealed class UserProfileCodecTests
     }
 
     [Fact]
+    public void SerializeAndDeserializeAllowsDisplaySettings()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Display setup",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [],
+            [new ProfileSetting("r.ViewDistanceScale", "1.2")],
+            []);
+
+        UserProfile restored = UserProfileCodec.Deserialize(UserProfileCodec.Serialize(profile));
+
+        Assert.Equal(profile.Display, restored.Display);
+    }
+
+    [Fact]
     public void SerializeAndDeserializeAllowsMultilineDescriptions()
     {
         UserProfile profile = Profile(graphics: [new ProfileSetting("r.MotionBlurQuality", "0")]) with

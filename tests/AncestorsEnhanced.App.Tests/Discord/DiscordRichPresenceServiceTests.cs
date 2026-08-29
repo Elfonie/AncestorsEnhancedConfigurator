@@ -19,6 +19,8 @@ public sealed class DiscordRichPresenceServiceTests
         Assert.Equal("small_logo", activity.SmallImage);
         Assert.DoesNotContain("Graphics", activity.Details, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Save", activity.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.True(service.IsActive);
+        Assert.Equal("Active", service.StatusMessage);
     }
 
     [Fact]
@@ -33,6 +35,8 @@ public sealed class DiscordRichPresenceServiceTests
 
         Assert.Equal(1, native.StartAttempts);
         Assert.Equal(0, native.CallbackAttempts);
+        Assert.False(service.IsActive);
+        Assert.Equal("Unavailable on this system", service.StatusMessage);
     }
 
     private sealed class RecordingNative : IDiscordRichPresenceNative

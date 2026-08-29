@@ -50,6 +50,25 @@ public sealed class HardwareRecommendationEngineTests
     }
 
     [Fact]
+    public void RecommendRefusesToGuessWhichOfSeveralDedicatedAdaptersRunsTheGame()
+    {
+        HardwareRecommendationViewModel recommendation = HardwareRecommendationEngine.Recommend(new HardwareSnapshot(
+            "Windows",
+            "CPU",
+            16,
+            8,
+            32UL * 1024 * 1024 * 1024,
+            [
+                new GraphicsAdapterSnapshot("Integrated GPU", 2UL * 1024 * 1024 * 1024, true),
+                new GraphicsAdapterSnapshot("Discrete GPU", 16UL * 1024 * 1024 * 1024, true),
+            ]));
+
+        Assert.Equal("No automatic preset", recommendation.PresetName);
+        Assert.False(recommendation.CanStagePreset);
+        Assert.Contains("More than one", recommendation.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RecommendUsesGpuVramRamAndCpuForTheProfileDecision()
     {
         HardwareRecommendationViewModel recommendation = HardwareRecommendationEngine.Recommend(new HardwareSnapshot(

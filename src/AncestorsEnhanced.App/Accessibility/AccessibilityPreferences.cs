@@ -18,6 +18,7 @@ public sealed class AccessibilityPreferencesStore
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly string _filePath;
     private readonly Action<string> _diagnosticLog;
+    private bool _hasUnreadablePreferences;
 
     public AccessibilityPreferencesStore(string? directory = null, Action<string>? diagnosticLog = null)
     {
@@ -28,6 +29,12 @@ public sealed class AccessibilityPreferencesStore
         _diagnosticLog = diagnosticLog ?? (message => AppDiagnostics.Logger?.Write(message));
     }
 
+    /// <summary>
+    /// A malformed preferences file is deliberately never overwritten by a later
+    /// preference change. The UI must ask the user to reset it explicitly.
+    /// </summary>
+    public bool HasUnreadablePreferences => _hasUnreadablePreferences;
+
     public AccessibilityPreferences Load()
     {
         try
@@ -37,11 +44,21 @@ public sealed class AccessibilityPreferencesStore
                 return new AccessibilityPreferences();
             }
 
-            return JsonSerializer.Deserialize<AccessibilityPreferences>(File.ReadAllText(_filePath), JsonOptions)
-                ?? new AccessibilityPreferences();
+            AccessibilityPreferences? preferences = JsonSerializer.Deserialize<AccessibilityPreferences>(
+                File.ReadAllText(_filePath),
+                JsonOptions);
+            if (preferences is not null)
+            {
+                return preferences;
+            }
+
+            _hasUnreadablePreferences = true;
+            WriteDiagnostic("Could not load accessibility preferences; the file contained null.");
+            return new AccessibilityPreferences();
         }
         catch (Exception exception)
         {
+            _hasUnreadablePreferences = true;
             WriteDiagnostic($"Could not load accessibility preferences; using defaults: {exception.GetType().Name}");
             return new AccessibilityPreferences();
         }
@@ -49,6 +66,13 @@ public sealed class AccessibilityPreferencesStore
 
     public bool TrySave(AccessibilityPreferences preferences)
     {
+        ArgumentNullException.ThrowIfNull(preferences);
+        if (_hasUnreadablePreferences)
+        {
+            WriteDiagnostic("Accessibility preferences were not saved because the unreadable original has not been reset.");
+            return false;
+        }
+
         try
         {
             string? directory = Path.GetDirectoryName(_filePath);
@@ -82,6 +106,51 @@ public sealed class AccessibilityPreferencesStore
         catch (Exception exception)
         {
             WriteDiagnostic($"Could not save accessibility preferences: {exception.GetType().Name}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Archives the unreadable original before replacing it with known-safe
+    /// defaults. Failure leaves the original file untouched.
+    /// </summary>
+    public bool TryReset(AccessibilityPreferences preferences, out string? archivedFileName)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        archivedFileName = null;
+        if (!_hasUnreadablePreferences)
+        {
+            return TrySave(preferences);
+        }
+
+        try
+        {
+            string? directory = Path.GetDirectoryName(_filePath);
+            if (string.IsNullOrWhiteSpace(directory) || !File.Exists(_filePath))
+            {
+                return false;
+            }
+
+            string archivePath = Path.Combine(
+                directory,
+                $"{FileName}.invalid-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}.bak");
+            File.Move(_filePath, archivePath);
+            _hasUnreadablePreferences = false;
+            if (TrySave(preferences))
+            {
+                archivedFileName = Path.GetFileName(archivePath);
+                return true;
+            }
+
+            // Keep the original recoverable even if the replacement could not be written.
+            File.Move(archivePath, _filePath, overwrite: false);
+            _hasUnreadablePreferences = true;
+            return false;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _hasUnreadablePreferences = true;
+            WriteDiagnostic($"Could not reset accessibility preferences: {exception.GetType().Name}");
             return false;
         }
     }

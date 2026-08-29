@@ -39,6 +39,7 @@ public static class AccessibilityTheme
         ["SecondaryTextBrush"] = "#9CB0BC",
         ["TechnicalTextBrush"] = "#71828D",
         ["SuccessTextBrush"] = "#B4D941",
+        ["ErrorTextBrush"] = "#E04D42",
         ["AccentBrush"] = "#B4D941",
         ["AccentHoverBrush"] = "#9ABF31",
         ["FocusBrush"] = "#B4D941",
@@ -65,6 +66,12 @@ public static class AccessibilityTheme
         ["OnboardingPanelBrush"] = "#15232C",
         ["ModalOverlayBrush"] = "#E60C1115",
         ["DialogScrimBrush"] = "#1A000000",
+        ["ToggleSwitchCurtainFillOn"] = "#B4D941",
+        ["ToggleSwitchCurtainFillOnPointerOver"] = "#9ABF31",
+        ["ToggleSwitchCurtainStrokeOn"] = "#B4D941",
+        ["ToggleSwitchCurtainStrokeOnPointerOver"] = "#9ABF31",
+        ["ToggleSwitchKnobFillOn"] = "#070907",
+        ["ToggleSwitchKnobFillOnPointerOver"] = "#070907",
     };
 
     private static readonly IReadOnlyDictionary<string, string> HighContrastColors = new Dictionary<string, string>
@@ -96,6 +103,7 @@ public static class AccessibilityTheme
         ["SecondaryTextBrush"] = "#FFFFFF",
         ["TechnicalTextBrush"] = "#F0F0F0",
         ["SuccessTextBrush"] = "#FFFF00",
+        ["ErrorTextBrush"] = "#FF4D4D",
         ["AccentBrush"] = "#FFFF00",
         ["AccentHoverBrush"] = "#FFFF66",
         ["FocusBrush"] = "#00FFFF",
@@ -122,6 +130,12 @@ public static class AccessibilityTheme
         ["OnboardingPanelBrush"] = "#000000",
         ["ModalOverlayBrush"] = "#E6000000",
         ["DialogScrimBrush"] = "#B3000000",
+        ["ToggleSwitchCurtainFillOn"] = "#FFFF00",
+        ["ToggleSwitchCurtainFillOnPointerOver"] = "#FFFF66",
+        ["ToggleSwitchCurtainStrokeOn"] = "#FFFFFF",
+        ["ToggleSwitchCurtainStrokeOnPointerOver"] = "#FFFFFF",
+        ["ToggleSwitchKnobFillOn"] = "#000000",
+        ["ToggleSwitchKnobFillOnPointerOver"] = "#000000",
     };
 
     /// <summary>

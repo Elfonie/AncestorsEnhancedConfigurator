@@ -44,6 +44,25 @@ public partial class App : Application
                 return;
             }
 
+            // The process mutex is acquired before Avalonia is initialized. Make
+            // the activation endpoint ready just as early, otherwise a second
+            // launch can see the mutex but find no pipe yet.
+            Action? showExistingWindow = null;
+            bool activationRequestedBeforeWindowWasReady = false;
+            var activationListener = new SingleInstanceActivationListener(
+                "AncestorsEnhancedConfigurator",
+                () => Dispatcher.UIThread.Post(() =>
+                {
+                    if (showExistingWindow is null)
+                    {
+                        activationRequestedBeforeWindowWasReady = true;
+                        return;
+                    }
+
+                    showExistingWindow();
+                }));
+            activationListener.Start();
+
             var accessibilityPreferencesStore = new AccessibilityPreferencesStore();
             AccessibilityPreferences preferences = accessibilityPreferencesStore.Load();
             AccessibilityTheme.Apply(this, preferences.HighContrastEnabled);
@@ -72,17 +91,35 @@ public partial class App : Application
                     discordTimer.Stop();
                     discordPresence?.Dispose();
                     discordPresence = null;
+                    mainViewModel?.SetDiscordRichPresenceStatus("Off");
                     return;
                 }
 
                 if (!windowOpened)
                 {
+                    mainViewModel?.SetDiscordRichPresenceStatus("Waiting for AEC to open");
                     return;
                 }
 
-                discordPresence ??= new DiscordRichPresenceService();
-                discordPresence.Start();
-                discordTimer.Start();
+                if (discordPresence is null)
+                {
+                    discordPresence = new DiscordRichPresenceService();
+                    discordPresence.StateChanged += () =>
+                    {
+                        mainViewModel?.SetDiscordRichPresenceStatus(discordPresence.StatusMessage);
+                        if (!discordPresence.IsActive)
+                        {
+                            discordTimer.Stop();
+                        }
+                    };
+                }
+
+                if (discordPresence.Start())
+                {
+                    discordTimer.Start();
+                }
+
+                mainViewModel?.SetDiscordRichPresenceStatus(discordPresence.StatusMessage);
             }
 
             var viewModel = new MainViewModel(
@@ -93,6 +130,7 @@ public partial class App : Application
                 highContrastChanged: enabled =>
                 {
                     AccessibilityTheme.Apply(this, enabled);
+                    mainViewModel?.RefreshThemeBindings();
                     preferences = preferences with { HighContrastEnabled = enabled };
                     SavePreferences(preferences);
                 },
@@ -102,6 +140,23 @@ public partial class App : Application
                     preferences = preferences with { DiscordRichPresenceEnabled = enabled };
                     SavePreferences(preferences);
                     SetDiscordRichPresence(enabled);
+                },
+                applicationPreferencesWarning: accessibilityPreferencesStore.HasUnreadablePreferences
+                    ? "AEC could not read the existing application preferences. They are preserved and none of the changed app options can be saved until you reset them."
+                    : null,
+                resetApplicationPreferences: () =>
+                {
+                    var defaults = new AccessibilityPreferences();
+                    if (!accessibilityPreferencesStore.TryReset(defaults, out string? archivedFileName))
+                    {
+                        AppDiagnostics.Logger?.Write("Could not reset unreadable application preferences.");
+                        return null;
+                    }
+
+                    preferences = defaults;
+                    AccessibilityTheme.Apply(this, highContrastEnabled: false);
+                    SetDiscordRichPresence(enabled: false);
+                    return archivedFileName;
                 },
                 showOnboarding: !preferences.HasCompletedOnboarding,
                 onboardingCompleted: () =>
@@ -155,11 +210,11 @@ public partial class App : Application
                 window.WindowState = WindowState.Normal;
                 window.Activate();
             }
-
-            var activationListener = new SingleInstanceActivationListener(
-                "AncestorsEnhancedConfigurator",
-                () => Dispatcher.UIThread.Post(ShowWindow));
-            activationListener.Start();
+            showExistingWindow = ShowWindow;
+            if (activationRequestedBeforeWindowWasReady)
+            {
+                ShowWindow();
+            }
 
             trayIcon.Clicked += (_, _) => ShowWindow();
             var openMenuItem = new NativeMenuItem { Header = "Open Ancestors Enhanced" };
@@ -198,6 +253,7 @@ public partial class App : Application
                 retryTimer?.Stop();
                 discordTimer.Stop();
                 discordPresence?.Dispose();
+                discordPresence = null;
                 activationListener.Dispose();
                 trayIcon.Dispose();
                 viewModel.Dispose();

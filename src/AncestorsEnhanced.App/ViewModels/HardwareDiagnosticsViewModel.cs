@@ -51,12 +51,24 @@ public static class HardwareRecommendationEngine
 {
     public static HardwareRecommendationViewModel Recommend(HardwareSnapshot snapshot)
     {
-        GraphicsAdapterSnapshot? primaryAdapter = snapshot.GraphicsAdapters
+        GraphicsAdapterSnapshot[] authoritativeAdapters = snapshot.GraphicsAdapters
             .Where(adapter => adapter.IsMemoryAuthoritative && adapter.ReportedMemoryBytes is > 0)
-            .OrderByDescending(adapter => adapter.ReportedMemoryBytes)
-            .FirstOrDefault();
-        if (snapshot.UnavailableReason is not null || primaryAdapter?.ReportedMemoryBytes is not ulong vram ||
-            IsBasicDisplayAdapter(primaryAdapter.Name))
+            .Where(adapter => !IsBasicDisplayAdapter(adapter.Name))
+            .ToArray();
+        if (snapshot.UnavailableReason is not null || authoritativeAdapters.Length == 0)
+        {
+            return new("No automatic preset", "AEC needs a locally reported graphics adapter and VRAM before it can make a conservative recommendation.", false);
+        }
+        if (authoritativeAdapters.Length > 1)
+        {
+            return new(
+                "No automatic preset",
+                "More than one graphics adapter reported dedicated VRAM. AEC cannot safely tell which one Ancestors uses, so it will not choose a preset for you.",
+                false);
+        }
+
+        GraphicsAdapterSnapshot primaryAdapter = authoritativeAdapters[0];
+        if (primaryAdapter.ReportedMemoryBytes is not ulong vram)
         {
             return new("No automatic preset", "AEC needs a locally reported graphics adapter and VRAM before it can make a conservative recommendation.", false);
         }

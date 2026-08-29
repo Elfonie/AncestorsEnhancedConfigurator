@@ -35,6 +35,7 @@
     <SolidColorBrush x:Key="SecondaryTextBrush" Color="#9CB0BC" />
     <SolidColorBrush x:Key="TechnicalTextBrush" Color="#71828D" />
     <SolidColorBrush x:Key="SuccessTextBrush" Color="#B4D941" />
+    <SolidColorBrush x:Key="ErrorTextBrush" Color="#E04D42" />
     <SolidColorBrush x:Key="ReviewSurfaceBrush" Color="#10191F" />
     <SolidColorBrush x:Key="ReviewBorderBrush" Color="#3B7598" />
     <SolidColorBrush x:Key="ReviewTextBrush" Color="#DCEEFF" />
@@ -199,12 +200,10 @@
     <Style Selector="Border.SettingCard">
       <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
       <Setter Property="CornerRadius" Value="9" />
-      <Setter Property="BoxShadow" Value="0 5 16 0 #33000000" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
       <Setter Property="Transitions">
         <Transitions>
-          <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.2" />
           <BrushTransition Property="BorderBrush" Duration="0:0:0.2" />
           <BrushTransition Property="Background" Duration="0:0:0.2" />
         </Transitions>
@@ -217,11 +216,9 @@
     <Style Selector="Border.SettingCard.InteractiveCard:pointerover">
       <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
-      <Setter Property="BoxShadow" Value="0 0 16 3 #FF5A0033" />
     </Style>
     <Style Selector="Border.SettingCard.InteractiveCard:focus-visible">
       <Setter Property="BorderBrush" Value="{DynamicResource FocusBrush}" />
-      <Setter Property="BoxShadow" Value="0 0 0 2 #66B4D941" />
     </Style>
     <Style Selector="Border.SettingCard:pointerover">
       <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />

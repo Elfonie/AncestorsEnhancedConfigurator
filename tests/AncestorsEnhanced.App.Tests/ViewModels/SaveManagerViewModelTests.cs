@@ -526,20 +526,74 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
-    public void TogglingWatchdogStartsAndStopsIt()
+    public void TogglingWatchdogReconcilesToTheLatestRequestedState()
     {
         var watchdog = new FakeWatchdog();
         var viewModel = new SaveManagerViewModel(new FakeSaveGameManager(
             new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())), "user-data-tmp", watchdog);
 
         Assert.False(watchdog.StartCount > 0);
+        viewModel.Activate();
         viewModel.IsWatchdogEnabled = true;
-        Assert.Equal(1, watchdog.StartCount);
+        Assert.True(SpinWait.SpinUntil(() => watchdog.StartCount == 1, TimeSpan.FromSeconds(2)));
         Assert.Equal(0, watchdog.StopCount);
 
         viewModel.IsWatchdogEnabled = false;
         Assert.Equal(1, watchdog.StartCount);
         Assert.True(SpinWait.SpinUntil(() => watchdog.StopCount == 1, TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public void LoadingEnabledSettingsDoesNotQueueAStopAfterActivate()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        try
+        {
+            File.WriteAllText(Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json"),
+                "{\"IsWatchdogEnabled\":true,\"WatchdogIntervalMinutes\":5,\"KeepRunningInTrayWhenClosing\":true}");
+            var watchdog = new FakeWatchdog();
+            using var viewModel = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog);
+
+            viewModel.Activate();
+
+            Assert.True(SpinWait.SpinUntil(() => watchdog.StartCount == 1, TimeSpan.FromSeconds(2)));
+            Assert.False(SpinWait.SpinUntil(() => watchdog.StopCount > 0, TimeSpan.FromMilliseconds(250)));
+        }
+        finally
+        {
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void OffThenOnReconcilesToEnabledEvenWhenThePreviousStopIsBlocked()
+    {
+        using var stopEntered = new ManualResetEventSlim();
+        using var releaseStop = new ManualResetEventSlim();
+        var watchdog = new FakeWatchdog
+        {
+            StopEntered = stopEntered,
+            ReleaseStop = releaseStop,
+        };
+        using var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())),
+            "user-data-tmp",
+            watchdog);
+        viewModel.Activate();
+        viewModel.IsWatchdogEnabled = true;
+        Assert.True(SpinWait.SpinUntil(() => watchdog.StartCount == 1, TimeSpan.FromSeconds(2)));
+
+        viewModel.IsWatchdogEnabled = false;
+        Assert.True(stopEntered.Wait(TimeSpan.FromSeconds(2)));
+        viewModel.IsWatchdogEnabled = true;
+        releaseStop.Set();
+
+        Assert.True(SpinWait.SpinUntil(() => watchdog.StartCount >= 2, TimeSpan.FromSeconds(2)));
+        Assert.True(watchdog.IsRunning);
     }
 
     [Fact]
@@ -561,13 +615,20 @@ public sealed class SaveManagerViewModelTests
 
     private sealed class FakeWatchdog : ISaveGameWatchdog
     {
-        public int StartCount { get; set; }
-        public int StopCount { get; set; }
+        private int _startCount;
+        private int _stopCount;
+
+        public int StartCount => Volatile.Read(ref _startCount);
+        public int StopCount => Volatile.Read(ref _stopCount);
         public bool IsRunning => StartCount > StopCount;
 
         public TimeSpan Cooldown { get; set; } = TimeSpan.FromMinutes(5);
 
         public int SuppressedSlot { get; private set; } = -1;
+
+        public ManualResetEventSlim? StopEntered { get; init; }
+
+        public ManualResetEventSlim? ReleaseStop { get; init; }
 
         public IDisposable BeginSlotMutation(int slotNumber)
         {
@@ -584,9 +645,14 @@ public sealed class SaveManagerViewModelTests
             public void Dispose() { }
         }
 
-        public void Start() => StartCount++;
+        public void Start() => Interlocked.Increment(ref _startCount);
 
-        public void StopWatch() => StopCount++;
+        public void StopWatch()
+        {
+            StopEntered?.Set();
+            _ = ReleaseStop?.Wait(TimeSpan.FromSeconds(10));
+            Interlocked.Increment(ref _stopCount);
+        }
 
         public void RaiseCheckpoint(string slotNumber) =>
             CheckpointCreated?.Invoke(this, slotNumber);

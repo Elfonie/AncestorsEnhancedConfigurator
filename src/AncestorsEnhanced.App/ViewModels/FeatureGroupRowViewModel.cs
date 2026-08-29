@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Avalonia.Media;
 
 namespace AncestorsEnhanced.App.ViewModels;
 
@@ -53,6 +54,8 @@ public partial class FeatureGroupRowViewModel : ViewModelBase, IDisposable
     public string Description { get; }
 
     public string AccentColor { get; }
+
+    public IBrush AccentBrush => StatusPresentation.BrushForLegacyAccent(AccentColor);
 
     public string SettingCount { get; }
 

@@ -1,3 +1,5 @@
+using Avalonia.Media;
+
 namespace AncestorsEnhanced.App.ViewModels;
 
 /// <summary>
@@ -8,4 +10,7 @@ public sealed record GameplayReadinessViewModel(
     string Title,
     string Description,
     string AccentColor,
-    bool IsBlocked);
+    bool IsBlocked)
+{
+    public IBrush AccentBrush => StatusPresentation.BrushForLegacyAccent(AccentColor);
+}

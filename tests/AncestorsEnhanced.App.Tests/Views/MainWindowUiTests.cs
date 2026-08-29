@@ -69,6 +69,32 @@ public sealed class MainWindowUiTests
         }
     });
 
+    [Fact]
+    public Task MinimumWidthKeepsThePersistentNavigationAndHeaderActionsReachable() => Dispatch(() =>
+    {
+        var window = new MainWindow
+        {
+            DataContext = CreateViewModel(showOnboarding: false),
+            Width = 780,
+            Height = 600,
+        };
+        window.Show();
+        try
+        {
+            Border navigation = window.FindControl<Border>("NavigationPane")!;
+            TextBlock title = window.FindControl<TextBlock>("PageContextTitle")!;
+            Button reload = window.FindControl<Button>("ReloadGameDataButton")!;
+
+            Assert.True(navigation.Bounds.Width >= 176);
+            Assert.True(reload.Bounds.Right <= window.Bounds.Width);
+            Assert.True(title.Bounds.Right <= reload.Bounds.Left);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
+
     private static async Task Dispatch(Func<Task> action) =>
         await HeadlessUnitTestSession.StartNew(typeof(AncestorsEnhanced.App.App)).Dispatch(action, CancellationToken.None);
 

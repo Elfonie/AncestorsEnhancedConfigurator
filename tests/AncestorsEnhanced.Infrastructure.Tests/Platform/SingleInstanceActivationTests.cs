@@ -10,7 +10,7 @@ public sealed class SingleInstanceActivationTests
         string identifier = "aec-test-" + Guid.NewGuid().ToString("N");
         using var activated = new ManualResetEventSlim();
         using var listener = new SingleInstanceActivationListener(identifier, activated.Set);
-        listener.Start();
+        await listener.StartAsync();
 
         Assert.True(SingleInstanceActivationListener.TryActivateExistingInstance(identifier, TimeSpan.FromSeconds(3)));
         Assert.True(await Task.Run(() => activated.Wait(TimeSpan.FromSeconds(3))));

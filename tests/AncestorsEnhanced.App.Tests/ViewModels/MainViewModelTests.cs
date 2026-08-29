@@ -4,6 +4,7 @@ using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Core.Profiles;
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.Platform;
 
 namespace AncestorsEnhanced.App.Tests.ViewModels;
 
@@ -46,6 +47,32 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void ResetApplicationPreferencesArchivesBeforeRestoringSafeApplicationDefaults()
+    {
+        int resetCalls = 0;
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            highContrastEnabled: true,
+            discordRichPresenceEnabled: true,
+            applicationPreferencesWarning: "Unreadable preferences",
+            resetApplicationPreferences: () =>
+            {
+                resetCalls++;
+                return "accessibility.json.invalid-test.bak";
+            });
+
+        viewModel.ResetApplicationPreferencesCommand.Execute(null);
+
+        Assert.Equal(1, resetCalls);
+        Assert.False(viewModel.HasApplicationPreferencesWarning);
+        Assert.False(viewModel.IsHighContrastEnabled);
+        Assert.False(viewModel.IsDiscordRichPresenceEnabled);
+        Assert.True(viewModel.IsOnboardingVisible);
+        Assert.Contains("invalid-test", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void GraphicsAndGameplayPresetsStartCollapsedAndToggleOpen()
     {
         var viewModel = new MainViewModel(
@@ -83,6 +110,29 @@ public sealed class MainViewModelTests
         viewModel.HasAcknowledgedDetailedHardwareScan = true;
 
         Assert.Equal("Refresh hardware details", viewModel.DetailedHardwareActionLabel);
+    }
+
+    [Fact]
+    public async Task DetailedHardwareScanDoesNotClaimARecommendationForMultipleDedicatedAdapters()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            hardwareProbe: new FixedHardwareProbe(new HardwareSnapshot(
+                "Windows",
+                "CPU",
+                16,
+                8,
+                32UL * 1024 * 1024 * 1024,
+                [
+                    new GraphicsAdapterSnapshot("GPU 1", 8UL * 1024 * 1024 * 1024, true),
+                    new GraphicsAdapterSnapshot("GPU 2", 16UL * 1024 * 1024 * 1024, true),
+                ])));
+
+        await viewModel.RunDetailedHardwareDetectionCommand.ExecuteAsync(null);
+
+        Assert.False(viewModel.HardwareDiagnostics.Recommendation.CanStagePreset);
+        Assert.Contains("More than one", viewModel.HardwareScanMessage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -671,6 +721,30 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task DisplayProfileSettingsAreStagedThroughTheSameVerifiedEditorPath()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Display setup",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [],
+            [new ProfileSetting("r.ViewDistanceScale", "1.5")],
+            []);
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile)));
+        await viewModel.InitializeAsync();
+
+        viewModel.LoadProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.True(viewModel.HasPendingChanges);
+        Assert.Contains("Loaded Display setup", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CreatingProfileStoresTechnicalKeysNotUiIds()
     {
         var profiles = new RecordingProfileLibrary();
@@ -966,6 +1040,11 @@ public sealed class MainViewModelTests
     private sealed class FixedInspector(GameInspectionSnapshot snapshot) : IReadOnlyGameInspector
     {
         public GameInspectionSnapshot Inspect() => snapshot;
+    }
+
+    private sealed class FixedHardwareProbe(HardwareSnapshot snapshot) : IHardwareProbe
+    {
+        public HardwareSnapshot Inspect(bool includeDetailedGraphics = false) => snapshot;
     }
 
     private sealed class CountingInspector(GameInspectionSnapshot snapshot) : IReadOnlyGameInspector

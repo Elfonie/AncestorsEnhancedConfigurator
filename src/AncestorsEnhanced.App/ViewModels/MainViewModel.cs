@@ -11,6 +11,7 @@ using AncestorsEnhanced.Core.Settings;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Platform;
 using AncestorsEnhanced.Infrastructure.SaveGames;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -42,6 +43,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private bool _reviewRemovesGameplayPak;
     private readonly Action<bool>? _highContrastChanged;
     private readonly Action<bool>? _discordRichPresenceChanged;
+    private readonly Func<string?>? _resetApplicationPreferences;
     private readonly Action? _onboardingCompleted;
     private readonly Action<bool>? _experimentalGraphicsSettingsChanged;
     private readonly Action<bool>? _experimentalGameplaySettingsChanged;
@@ -57,6 +59,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial string DetectionDotColor { get; set; } = "#7A877A";
+
+    public IBrush DetectionBrush => StatusPresentation.BrushForLegacyAccent(DetectionColor);
 
     [ObservableProperty]
     public partial string InstallationPath { get; set; } = "Not detected";
@@ -158,6 +162,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial string OperationAccent { get; set; } = "#7A877A";
 
+    public IBrush OperationBrush => StatusPresentation.BrushForLegacyAccent(OperationAccent);
+
     [ObservableProperty]
     public partial bool CanRevertLast { get; set; }
 
@@ -250,6 +256,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial bool IsDiscordRichPresenceEnabled { get; set; }
 
     [ObservableProperty]
+    public partial string DiscordRichPresenceStatus { get; set; } = "Off";
+
+    [ObservableProperty]
+    public partial string? ApplicationPreferencesWarning { get; set; }
+
+    [ObservableProperty]
     public partial bool IsExperimentalGraphicsSettingsEnabled { get; set; }
 
     [ObservableProperty]
@@ -300,6 +312,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         Action<bool>? highContrastChanged = null,
         bool discordRichPresenceEnabled = false,
         Action<bool>? discordRichPresenceChanged = null,
+        string? applicationPreferencesWarning = null,
+        Func<string?>? resetApplicationPreferences = null,
         bool showOnboarding = false,
         Action? onboardingCompleted = null,
         bool experimentalGraphicsSettingsEnabled = false,
@@ -325,6 +339,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _profileLibrary = profileLibrary ?? EmptyUserProfileLibrary.Instance;
         _highContrastChanged = highContrastChanged;
         _discordRichPresenceChanged = discordRichPresenceChanged;
+        _resetApplicationPreferences = resetApplicationPreferences;
         _onboardingCompleted = onboardingCompleted;
         _experimentalGraphicsSettingsChanged = experimentalGraphicsSettingsChanged;
         _experimentalGameplaySettingsChanged = experimentalGameplaySettingsChanged;
@@ -332,6 +347,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _detailedHardwareScanCompleted = detailedHardwareScanCompleted;
         IsHighContrastEnabled = highContrastEnabled;
         IsDiscordRichPresenceEnabled = discordRichPresenceEnabled;
+        ApplicationPreferencesWarning = applicationPreferencesWarning;
         IsOnboardingVisible = showOnboarding;
         IsExperimentalGraphicsSettingsEnabled = experimentalGraphicsSettingsEnabled;
         IsExperimentalGameplaySettingsEnabled = experimentalGameplaySettingsEnabled;
@@ -970,10 +986,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             _detailedHardwareSnapshot = detailedSnapshot;
             HasAcknowledgedDetailedHardwareScan = true;
             _detailedHardwareScanCompleted?.Invoke(detailedSnapshot);
-            HardwareScanMessage = detailedSnapshot.HasGraphicsMemory
+            HardwareScanMessage = HardwareDiagnostics.Recommendation.CanStagePreset
                 ? "Hardware details checked. AEC can now offer a conservative graphics recommendation."
-                : "Hardware details checked. Windows did not report dedicated GPU memory, so AEC will not guess a graphics recommendation.";
-            ShowMessage(HardwareScanMessage, detailedSnapshot.HasGraphicsMemory ? "#B4D941" : "#D6BC84");
+                : "Hardware details checked. " + HardwareDiagnostics.Recommendation.Description;
+            ShowMessage(
+                HardwareScanMessage,
+                HardwareDiagnostics.Recommendation.CanStagePreset ? "#B4D941" : "#D6BC84");
         }
         finally
         {
@@ -1136,7 +1154,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             UserProfile source = _profileLibrary.Read(profile.Id);
             ProfileComparisonName = source.Name;
-            var profileSettings = source.Graphics.ToDictionary(setting => setting.Key, StringComparer.OrdinalIgnoreCase);
+            var profileSettings = GetLoadableProfileSettings(source)
+                .ToDictionary(setting => setting.Key, StringComparer.OrdinalIgnoreCase);
             var resetKeys = _editors.Values
                 .Where(editor => editor.ShowOverrideToggle && editor.HasCurrentOverride && !profileSettings.ContainsKey(editor.Key))
                 .Select(editor => editor.Key)
@@ -1414,6 +1433,54 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     partial void OnIsDiscordRichPresenceEnabledChanged(bool value) =>
         _discordRichPresenceChanged?.Invoke(value);
+
+    public void SetDiscordRichPresenceStatus(string status) =>
+        DiscordRichPresenceStatus = string.IsNullOrWhiteSpace(status) ? "Unavailable" : status;
+
+    public void RefreshThemeBindings()
+    {
+        OnPropertyChanged(nameof(DetectionBrush));
+        OnPropertyChanged(nameof(OperationBrush));
+        SaveManager?.RefreshThemeBindings();
+        GameplayReadiness = new GameplayReadinessViewModel(
+            GameplayReadiness.Title,
+            GameplayReadiness.Description,
+            GameplayReadiness.AccentColor,
+            GameplayReadiness.IsBlocked);
+        ApplyViewMode();
+    }
+
+    partial void OnApplicationPreferencesWarningChanged(string? value) =>
+        OnPropertyChanged(nameof(HasApplicationPreferencesWarning));
+
+    public bool HasApplicationPreferencesWarning => !string.IsNullOrWhiteSpace(ApplicationPreferencesWarning);
+
+    [RelayCommand]
+    private void ResetApplicationPreferences()
+    {
+        if (!HasApplicationPreferencesWarning || _resetApplicationPreferences is null)
+        {
+            return;
+        }
+
+        string? archivedFileName = _resetApplicationPreferences();
+        if (string.IsNullOrWhiteSpace(archivedFileName))
+        {
+            ShowMessage("Application preferences could not be reset. The original file was kept.", "#E04D42");
+            return;
+        }
+
+        ApplicationPreferencesWarning = null;
+        IsHighContrastEnabled = false;
+        IsDiscordRichPresenceEnabled = false;
+        IsExperimentalGraphicsSettingsEnabled = false;
+        IsExperimentalGameplaySettingsEnabled = false;
+        HasAcknowledgedDetailedHardwareScan = false;
+        _detailedHardwareSnapshot = null;
+        IsOnboardingVisible = true;
+        OnboardingStep = 0;
+        ShowMessage($"Application preferences were reset. The unreadable file was kept as {archivedFileName}.", "#B4D941");
+    }
 
     partial void OnIsExperimentalGraphicsSettingsEnabledChanged(bool value)
     {
@@ -1831,6 +1898,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         DetectionColor = statusColor;
         DetectionDotColor = dotColor;
         OnPropertyChanged(nameof(DetectionStatus));
+        OnPropertyChanged(nameof(DetectionBrush));
         OnPropertyChanged(nameof(HomeTitle));
     }
 
@@ -2415,6 +2483,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         return string.Join(" · ", sections);
     }
 
+    /// <summary>
+    /// Display settings use the same verified editor and value checks as graphics.
+    /// Gameplay remains separate until its runtime PAK path is proven.
+    /// </summary>
+    private static IEnumerable<ProfileSetting> GetLoadableProfileSettings(UserProfile profile) =>
+        profile.Graphics.Concat(profile.Display);
+
     private static UserProfile CreateBuiltInProfile(string name, IReadOnlyList<ProfileSetting> graphics) =>
         new(
             UserProfile.CurrentSchemaVersion,
@@ -2461,14 +2536,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ShowMessage("Gameplay profiles are not available yet. No settings were loaded.", "#D6BC84");
             return;
         }
-        if (profile.Display.Count > 0)
-        {
-            ShowMessage("Display settings in profiles are not available yet. No settings were loaded.", "#D6BC84");
-            return;
-        }
-
         var candidates = new List<(SettingEditorViewModel Editor, ProfileSetting Setting)>();
-        foreach (ProfileSetting setting in profile.Graphics)
+        foreach (ProfileSetting setting in GetLoadableProfileSettings(profile))
         {
             if (!TryGetEditorByTechnicalKey(setting.Key, out SettingEditorViewModel? editor) || editor is null ||
                 !editor.CanApplyProfileValue(setting.Value))
@@ -2480,7 +2549,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         var profileKeys = new HashSet<string>(
-            profile.Graphics.Select(setting => setting.Key),
+            GetLoadableProfileSettings(profile).Select(setting => setting.Key),
             StringComparer.OrdinalIgnoreCase);
         foreach (SettingEditorViewModel editor in _editors.Values)
         {
@@ -2663,6 +2732,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         OperationMessage = message;
         OperationAccent = accent;
+        OnPropertyChanged(nameof(OperationBrush));
     }
 
     private sealed class EmptyUserProfileLibrary : IUserProfileLibrary

@@ -1,3 +1,5 @@
+using Avalonia.Media;
+
 namespace AncestorsEnhanced.App.ViewModels;
 
 public sealed record FeatureSettingRowViewModel(
@@ -14,6 +16,8 @@ public sealed record FeatureSettingRowViewModel(
     SettingEditorViewModel? Editor,
     bool IsExperimental = false)
 {
+    public IBrush AccentBrush => StatusPresentation.BrushForLegacyAccent(AccentColor);
+
     public bool IsEditable => Editor is not null;
 
     public bool IsReadOnly => Editor is null;
