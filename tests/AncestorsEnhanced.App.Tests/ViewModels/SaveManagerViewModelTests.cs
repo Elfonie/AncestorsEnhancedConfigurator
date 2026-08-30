@@ -900,6 +900,30 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
+    public void OversizedToolSettingsAreRejectedSafely()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        string settingsPath = Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json");
+        // Write 2 MiB file
+        File.WriteAllBytes(settingsPath, new byte[2 * 1024 * 1024]);
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+            userData,
+            watchdog: null);
+        try
+        {
+            Assert.True(viewModel.HasToolSettingsWarning);
+            Assert.Contains("exceeds the maximum allowed size", viewModel.ToolSettingsWarning);
+        }
+        finally
+        {
+            viewModel.Dispose();
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task QueuedGameProcessRefreshDoesNotOverlapASlowProbe()
     {
         string userData = TempUserData();
@@ -939,6 +963,56 @@ public sealed class SaveManagerViewModelTests
         {
             release.Set();
             viewModel.Dispose();
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RefreshPreservesMetadataWhenSlotHasError()
+    {
+        string userData = Path.Combine(Path.GetTempPath(), "aec-vm-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(userData);
+        try
+        {
+            var initialSlot = new SaveGameSlotSnapshot(
+                "0",
+                "Savegame0.sav",
+                Path.Combine(userData, "Savegame0.sav"),
+                Exists: true,
+                100,
+                DateTimeOffset.UtcNow,
+                [new SaveGameCheckpoint("cp-1", DateTimeOffset.UtcNow, "0", 100, "hash1", "Manual")]);
+
+            var initialSnapshot = new SaveGamesSnapshot(DateTimeOffset.UtcNow, userData, [initialSlot]);
+            var manager = new FakeSaveGameManager(initialSnapshot);
+            var viewModel = new SaveManagerViewModel(manager, userData);
+            viewModel.Refresh(initialSnapshot);
+
+            viewModel.Slots[0].Checkpoints[0].Title = "Important Checkpoint";
+            viewModel.Slots[0].Checkpoints[0].IsFavorite = true;
+
+            // Simulate slot 0 having a read error on next inspect
+            var erroredSlot = new SaveGameSlotSnapshot(
+                "0",
+                "Savegame0.sav",
+                Path.Combine(userData, "Savegame0.sav"),
+                Exists: false,
+                null,
+                null,
+                [],
+                "Transient sharing violation");
+
+            var erroredSnapshot = new SaveGamesSnapshot(DateTimeOffset.UtcNow, userData, [erroredSlot]);
+            viewModel.Refresh(erroredSnapshot);
+
+            // Now simulate slot 0 being successfully read again on subsequent refresh
+            viewModel.Refresh(initialSnapshot);
+
+            Assert.Equal("Important Checkpoint", viewModel.Slots[0].Checkpoints[0].Title);
+            Assert.True(viewModel.Slots[0].Checkpoints[0].IsFavorite);
+        }
+        finally
+        {
             Directory.Delete(userData, recursive: true);
         }
     }

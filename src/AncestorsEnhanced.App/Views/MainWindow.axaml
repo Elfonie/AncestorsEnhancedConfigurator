@@ -124,7 +124,7 @@
                 <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.PresetName}" FontSize="21" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
                 <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.Description}" MaxWidth="650" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
                 <TextBlock Text="{Binding HardwareScanMessage}" IsVisible="{Binding HasHardwareScanMessage}" MaxWidth="650" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource GoldTextBrush}" />
-                <TextBlock Text="CPU, memory, graphics adapter and dedicated VRAM are read locally from Windows. AEC uses them only for a conservative recommendation, never as a benchmark." IsVisible="{Binding !HardwareDiagnostics.Recommendation.CanStagePreset}" MaxWidth="650" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" />
+                <TextBlock Text="CPU, memory, graphics adapter and dedicated VRAM are read locally from your system. AEC uses them only for a conservative recommendation, never as a benchmark." IsVisible="{Binding !HardwareDiagnostics.Recommendation.CanStagePreset}" MaxWidth="650" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" />
                 <Expander Header="Detected hardware" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}">
                   <StackPanel Spacing="2" Margin="0,5,0,0">
                     <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}"><Run Text="CPU: " /><Run Text="{Binding HardwareDiagnostics.Cpu}" /></TextBlock>
@@ -735,7 +735,7 @@
                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsHitTestVisible="False">
                     <StackPanel Spacing="2">
                       <TextBlock Text="Gameplay presets" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                      <TextBlock Text="Choose a starting point, then fine-tune the six simple controls below." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                      <TextBlock Text="Choose a starting point, then fine-tune the six main survival and hazard controls below." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                     <TextBlock Grid.Column="1" Text="{Binding GameplayPresetsToggleLabel}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
                   </Grid>
@@ -1074,7 +1074,7 @@
                             VerticalAlignment="Center" />
               <StackPanel Grid.Column="1" Spacing="3">
                 <TextBlock Text="Enable experimental gameplay tuning" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                <TextBlock Text="Extends every gameplay percentage control above the normal 10% to 200% range, up to 1000% in 10% steps. This is not a balanced preset range: extreme values can make needs drain unrealistically fast or slow. Simple presets remain within their tested 70% to 150% range." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Extends every gameplay percentage control above the normal 10% to 200% range, up to 1000% in 10% steps. This is not a balanced preset range: extreme values can make required portions, damage and healing behave very differently. Simple presets remain within their tested 70% to 150% range." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
               </StackPanel>
             </Grid>
           </Border>

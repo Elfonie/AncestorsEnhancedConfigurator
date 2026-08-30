@@ -84,12 +84,19 @@ public sealed class AccessibilityPreferencesStoreTests : IDisposable
     }
 
     [Fact]
-    public void SavingUsesAUniqueTemporaryFileAndCleansItUp()
+    public void OversizedPreferenceFileFailsClosed()
     {
-        var store = new AccessibilityPreferencesStore(_directory);
+        Directory.CreateDirectory(_directory);
+        string path = Path.Combine(_directory, "accessibility.json");
+        // Write 300 KiB file
+        File.WriteAllBytes(path, new byte[300 * 1024]);
 
-        Assert.True(store.TrySave(new AccessibilityPreferences(DiscordRichPresenceEnabled: true)));
-        Assert.Empty(Directory.EnumerateFiles(_directory, ".accessibility.json.*.tmp"));
+        var diagnostics = new List<string>();
+        var store = new AccessibilityPreferencesStore(_directory, diagnostics.Add);
+
+        Assert.False(store.Load().HighContrastEnabled);
+        Assert.True(store.HasUnreadablePreferences);
+        Assert.Contains(diagnostics, message => message.Contains("exceeds 256 KiB", StringComparison.Ordinal));
     }
 
     public void Dispose()

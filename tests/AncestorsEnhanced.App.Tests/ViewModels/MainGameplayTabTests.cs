@@ -133,8 +133,9 @@ public sealed class MainGameplayTabTests
         Assert.Equal(5, viewModel.GameplayDifficultyPresets.Count);
         Assert.Equal(6, viewModel.GameplaySimpleControls.Count);
         Assert.Contains(viewModel.GameplaySimpleControls, control =>
-            control.Name == "Food need" &&
-            control.StockValue == "24 portions per day · game default");
+            control.Name == "Food required" &&
+            control.StockValue == "24 food portions for a full day · game default" &&
+            control.Description.Contains("Normal hunger-bar decay still lasts one game day.", StringComparison.Ordinal));
 
         viewModel.ShowGameplayAdvancedCommand.Execute(null);
 
@@ -351,7 +352,7 @@ public sealed class MainGameplayTabTests
             _ => new NoopManager());
 
         await viewModel.InitializeAsync();
-        Assert.Single(viewModel.GameplaySimpleControls, control => control.Name == "Food need").MultiplierPercent = 120;
+        Assert.Single(viewModel.GameplaySimpleControls, control => control.Name == "Food required").MultiplierPercent = 120;
 
         Assert.Equal("Custom gameplay difficulty · pending review", viewModel.GameplayDraftStatus);
     }
@@ -372,7 +373,7 @@ public sealed class MainGameplayTabTests
 
         Assert.True(viewModel.IsReviewingChanges);
         Assert.Equal("Review gameplay difficulty", viewModel.ReviewSummary);
-        Assert.Equal("Food need", Assert.Single(viewModel.ReviewChanges).Name);
+        Assert.Equal("Food required", Assert.Single(viewModel.ReviewChanges).Name);
 
         await viewModel.ConfirmApplyCommand.ExecuteAsync(null);
 
@@ -469,7 +470,7 @@ public sealed class MainGameplayTabTests
                 DateTimeOffset.UnixEpoch,
                 "5495393",
                 snapshot.UserDataDirectory!,
-                [new SettingChangePreview("Food need", "AncestorsEnhanced-Gameplay_P.pak", "gameplay.food", "100%", $"{settings.FoodPercent}%")],
+                [new SettingChangePreview("Food required", "AncestorsEnhanced-Gameplay_P.pak", "gameplay.food", "100%", $"{settings.FoodPercent}%")],
                 []);
         }
 

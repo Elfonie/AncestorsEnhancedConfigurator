@@ -71,7 +71,8 @@ public sealed class SingleInstanceActivationListener : IDisposable
 
     public static string BuildPipeName(string identifier)
     {
-        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(identifier));
+        string scope = global::System.Environment.UserName;
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{identifier}:{scope}"));
         return "ancestors-enhanced-" + Convert.ToHexString(hash.AsSpan(0, 12)).ToLowerInvariant();
     }
 
@@ -112,11 +113,22 @@ public sealed class SingleInstanceActivationListener : IDisposable
             {
                 // A malformed/disconnected local client must not end the listener.
             }
+            catch (Exception) when (!_cancellation.IsCancellationRequested)
+            {
+                // If named pipe server creation fails (e.g. UnauthorizedAccessException or platform denial),
+                // ensure startup is not deadlocked.
+                if (!hasSignalledReady)
+                {
+                    ready.TrySetResult();
+                    hasSignalledReady = true;
+                }
+                break;
+            }
         }
 
         if (!hasSignalledReady)
         {
-            ready.TrySetCanceled(_cancellation.Token);
+            ready.TrySetResult();
         }
     }
 

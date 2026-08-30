@@ -224,9 +224,9 @@ public sealed class SafeGameplayDifficultyEditor : IGameplayDifficultyEditor
         GameplayDifficultySettings after)
     {
         var changes = new List<SettingChangePreview>(16);
-        Add("Food need", "gameplay.food", before.FoodPercent, after.FoodPercent);
-        Add("Water need", "gameplay.water", before.WaterPercent, after.WaterPercent);
-        Add("Sleep need", "gameplay.sleep", before.SleepPercent, after.SleepPercent);
+        Add("Food required", "gameplay.food", before.FoodPercent, after.FoodPercent);
+        Add("Water required", "gameplay.water", before.WaterPercent, after.WaterPercent);
+        Add("Sleep required", "gameplay.sleep", before.SleepPercent, after.SleepPercent);
         Add("Fall damage", "gameplay.fall-damage", before.FallDamagePercent, after.FallDamagePercent);
         Add("Bleeding", "gameplay.bleeding", before.BleedingPercent, after.BleedingPercent);
         Add("Poison", "gameplay.poison", before.PoisonPercent, after.PoisonPercent);
@@ -317,7 +317,7 @@ public sealed class SafeGameplayDifficultyEditor : IGameplayDifficultyEditor
     private static GameplayDifficultyState ActiveState(GameplayDifficultySettings settings, string formatNote = "") => new(
         GameplayDifficultyStateKind.Active,
         settings,
-        $"AEC gameplay PAK active{formatNote} · Food {settings.FoodPercent}% · Water {settings.WaterPercent}% · Sleep {settings.SleepPercent}% · Fall damage {settings.FallDamagePercent}% · Bleeding {settings.BleedingPercent}% · Poison {settings.PoisonPercent}% · Energy recovery {settings.EnergyRecoveryPercent}% · Wound sleep healing {settings.WoundSleepHealingPercent}% · Wound stamina penalty {settings.WoundStaminaPenaltyPercent}% · Poison recovery {settings.PoisonRecoveryPercent}% · Rest delay {settings.RestDelayPercent}% · Exhaustion threshold {settings.ExhaustionThresholdPercent}% · Exhaustion penalty {settings.ExhaustionPenaltyPercent}% · Wound recovery time {settings.WoundRecoveryDurationPercent}% · Poison stamina penalty {settings.PoisonStaminaPenaltyPercent}%");
+        $"AEC gameplay PAK active{formatNote} · Food required {settings.FoodPercent}% · Water required {settings.WaterPercent}% · Sleep required {settings.SleepPercent}% · Fall damage {settings.FallDamagePercent}% · Bleeding {settings.BleedingPercent}% · Poison {settings.PoisonPercent}% · Energy recovery {settings.EnergyRecoveryPercent}% · Wound sleep healing {settings.WoundSleepHealingPercent}% · Wound stamina penalty {settings.WoundStaminaPenaltyPercent}% · Poison recovery {settings.PoisonRecoveryPercent}% · Rest delay {settings.RestDelayPercent}% · Exhaustion threshold {settings.ExhaustionThresholdPercent}% · Exhaustion penalty {settings.ExhaustionPenaltyPercent}% · Wound recovery time {settings.WoundRecoveryDurationPercent}% · Poison stamina penalty {settings.PoisonStaminaPenaltyPercent}%");
 
     private static GameplayDifficultyState Unverified(string description) => new(
         GameplayDifficultyStateKind.Unverified,

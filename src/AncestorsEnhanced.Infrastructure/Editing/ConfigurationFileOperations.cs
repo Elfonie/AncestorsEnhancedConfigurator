@@ -50,7 +50,7 @@ internal static class ConfigurationFileOperations
         if (!string.Equals(
                 Path.GetDirectoryName(path),
                 configDirectory,
-                StringComparison.OrdinalIgnoreCase))
+                PathComparison))
         {
             throw new InvalidOperationException("The target path leaves the configuration directory.");
         }
@@ -608,6 +608,7 @@ internal static class ConfigurationFileOperations
         string target = Path.GetFullPath(targetDirectory);
         string relative = Path.GetRelativePath(root, target);
         if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) ||
+            relative.Equals(".", StringComparison.Ordinal) ||
             relative.Equals("..", StringComparison.Ordinal) ||
             relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
         {

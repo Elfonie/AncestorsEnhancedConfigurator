@@ -168,4 +168,21 @@ public sealed class ConfigurationFileOperationsTests
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    [Fact]
+    public void DeleteDirectorySafelyRejectsSameDirectory()
+    {
+        string directory = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), $"aec-del-safe-{Guid.NewGuid():N}")).FullName;
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                ConfigurationFileOperations.DeleteDirectorySafely(directory, directory));
+            Assert.True(Directory.Exists(directory));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }

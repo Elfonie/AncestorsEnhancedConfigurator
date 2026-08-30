@@ -196,6 +196,12 @@ internal sealed class SaveGameCheckpointStore(
 
         try
         {
+            FileInfo info = new(settingsPath);
+            if (info.Length > 1024 * 1024)
+            {
+                return null;
+            }
+
             using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(settingsPath));
             if (!document.RootElement.TryGetProperty("CheckpointMetadata", out JsonElement metadata) ||
                 metadata.ValueKind != JsonValueKind.Object)

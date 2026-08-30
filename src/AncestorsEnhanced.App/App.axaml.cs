@@ -37,6 +37,10 @@ public partial class App : Application
 
         if (desktopLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            var accessibilityPreferencesStore = new AccessibilityPreferencesStore();
+            AccessibilityPreferences preferences = accessibilityPreferencesStore.Load();
+            AccessibilityTheme.Apply(this, preferences.HighContrastEnabled);
+
             if (desktop.Args?.Contains("--already-running", StringComparer.Ordinal) == true)
             {
                 desktop.MainWindow = new AlreadyRunningWindow();
@@ -62,10 +66,6 @@ public partial class App : Application
                     showExistingWindow();
                 }));
             activationListener.Start();
-
-            var accessibilityPreferencesStore = new AccessibilityPreferencesStore();
-            AccessibilityPreferences preferences = accessibilityPreferencesStore.Load();
-            AccessibilityTheme.Apply(this, preferences.HighContrastEnabled);
 
             // Persists preference changes and never loses them silently: a failed write is
             // logged and reported so the user knows the setting will not survive a restart.

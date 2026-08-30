@@ -493,7 +493,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         !IsReviewingChanges &&
         !IsAnyOperationRunning;
 
-    public bool CanRunDetailedHardwareDetection => OperatingSystem.IsWindows() && !IsAnyOperationRunning;
+    public bool CanRunDetailedHardwareDetection => !IsAnyOperationRunning;
 
     public string DetailedHardwareActionLabel => IsDetailedHardwareDetectionRunning
         ? "Checking hardware…"
@@ -1809,9 +1809,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnSearchTextChanged(string value)
     {
         CancellationTokenSource? previous = _searchDebounceSource;
-        previous?.Cancel();
-        previous?.Dispose();
         _searchDebounceSource = new CancellationTokenSource();
+        try
+        {
+            previous?.Cancel();
+            previous?.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
 
         CancellationToken token = _searchDebounceSource.Token;
         _searchDebounceTask = DebouncedSearchApplyAsync(token);
@@ -1839,7 +1845,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ApplyViewMode);
         }
-        catch (OperationCanceledException)
+        catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException)
         {
             // A newer search request replaced this one.
         }
@@ -2275,10 +2281,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         CloseReview();
         UpdatePendingChanges();
-        if (GraphicsFilter != "All")
-        {
-            ApplyViewMode();
-        }
         if (HasPendingChanges)
         {
             ShowMessage("Review the pending values, then apply or discard them.", "#FF5A00");

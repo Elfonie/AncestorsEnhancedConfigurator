@@ -237,7 +237,7 @@ public partial class MainWindow : Window
         {
             await Clipboard.SetTextAsync(viewModel.CreateDiagnosticsReport());
         }
-        catch (Exception exception) when (exception is InvalidOperationException or NotSupportedException)
+        catch (Exception exception) when (exception is InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException or TimeoutException)
         {
             viewModel.ReportDiagnosticsCopyError();
         }

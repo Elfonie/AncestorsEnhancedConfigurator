@@ -214,5 +214,17 @@ public sealed class PakV5ArchiveTests
         writer.Write(bytes);
         writer.Write((byte)0);
     }
+
+    [Fact]
+    public void BuildFilesRejectsCaseInsensitiveDuplicates()
+    {
+        var files = new List<(string FileName, byte[] Content)>
+        {
+            ("Ancestors/Content/Test.uasset", [1, 2, 3]),
+            ("ancestors/content/test.uasset", [4, 5, 6]),
+        };
+
+        Assert.Throws<ArgumentException>(() => PakV5Archive.BuildFiles(files));
+    }
 }
 #pragma warning restore CA5350

@@ -310,6 +310,51 @@ public sealed class SaveGameWatchdogTests : IDisposable
         Assert.Equal(0, Volatile.Read(ref calls));
     }
 
+    [Fact]
+    public void StopWatchWaitsForSlowWorkerCompletion()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1, 2, 3));
+
+        var workerStarted = new ManualResetEventSlim();
+        var workerCanFinish = new ManualResetEventSlim();
+        int checkpointCount = 0;
+
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ =>
+            {
+                workerStarted.Set();
+                workerCanFinish.Wait(TimeSpan.FromSeconds(5));
+                Interlocked.Increment(ref checkpointCount);
+                return new SaveGameOperationResult(true, "Checkpoint saved.", "cp-1");
+            })
+        {
+            Cooldown = TimeSpan.Zero,
+        };
+
+        watchdog.Start();
+        // Trigger worker
+        watchdog.BeginSlotMutation(0).Dispose();
+
+        // Wait until worker is actively inside the checkpoint creation delegate
+        Assert.True(workerStarted.Wait(TimeSpan.FromSeconds(5)));
+
+        // Unblock worker after 500ms
+        Task.Run(async () =>
+        {
+            await Task.Delay(500);
+            workerCanFinish.Set();
+        });
+
+        // StopWatch must block until the worker has finished
+        watchdog.StopWatch();
+
+        Assert.Equal(1, Volatile.Read(ref checkpointCount));
+        Assert.False(watchdog.IsRunning);
+    }
+
     private string CreateUserData()
     {
         string userData = Path.Combine(_temporaryDirectory, "Saved");

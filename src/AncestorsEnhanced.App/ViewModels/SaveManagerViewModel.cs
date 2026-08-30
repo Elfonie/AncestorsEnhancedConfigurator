@@ -641,6 +641,14 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
         try
         {
+            FileInfo fileInfo = new(path);
+            if (fileInfo.Length > 1024 * 1024)
+            {
+                ToolSettingsWarning =
+                    "Auto-backup settings file exceeds the maximum allowed size (1 MiB). Safe defaults are active.";
+                return;
+            }
+
             ToolSettings? settings = System.Text.Json.JsonSerializer.Deserialize<ToolSettings>(
                 File.ReadAllText(path),
                 JsonSettings);
@@ -956,11 +964,20 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
 
     private void RemoveMetadataForMissingCheckpoints(SaveGamesSnapshot snapshot)
     {
-        var active = snapshot.Slots
+        var readableSlots = snapshot.Slots.Where(slot => slot.ErrorMessage is null).ToArray();
+        var readableSlotPrefixes = readableSlots
+            .Select(slot => slot.SlotNumber + ":")
+            .ToArray();
+
+        var active = readableSlots
             .SelectMany(slot => slot.Checkpoints)
             .Select(CheckpointMetadataKey)
             .ToHashSet(StringComparer.Ordinal);
-        string[] staleKeys = _checkpointMetadata.Keys.Where(key => !active.Contains(key)).ToArray();
+
+        string[] staleKeys = _checkpointMetadata.Keys
+            .Where(key => readableSlotPrefixes.Any(prefix => key.StartsWith(prefix, StringComparison.Ordinal)) && !active.Contains(key))
+            .ToArray();
+
         foreach (string key in staleKeys)
         {
             _checkpointMetadata.Remove(key);

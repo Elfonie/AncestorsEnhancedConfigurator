@@ -160,7 +160,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             {
                 try
                 {
-                    _ = Task.WaitAll(tasks, TimeSpan.FromSeconds(5));
+                    Task.WaitAll(tasks);
                 }
                 catch (AggregateException)
                 {

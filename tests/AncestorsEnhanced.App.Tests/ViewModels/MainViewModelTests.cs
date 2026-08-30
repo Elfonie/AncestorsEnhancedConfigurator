@@ -113,26 +113,21 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
-    public async Task DetailedHardwareScanDoesNotClaimARecommendationForMultipleDedicatedAdapters()
+    public void MultipleDedicatedAdaptersDoNotProduceAnAutomaticRecommendation()
     {
-        var viewModel = new MainViewModel(
-            new FixedInspector(CreateSnapshot()),
-            new RecordingEditor(),
-            hardwareProbe: new FixedHardwareProbe(new HardwareSnapshot(
-                "Windows",
-                "CPU",
-                16,
-                8,
-                32UL * 1024 * 1024 * 1024,
-                [
-                    new GraphicsAdapterSnapshot("GPU 1", 8UL * 1024 * 1024 * 1024, true),
-                    new GraphicsAdapterSnapshot("GPU 2", 16UL * 1024 * 1024 * 1024, true),
-                ])));
+        HardwareRecommendationViewModel recommendation = HardwareRecommendationEngine.Recommend(new HardwareSnapshot(
+            "Windows",
+            "CPU",
+            16,
+            8,
+            32UL * 1024 * 1024 * 1024,
+            [
+                new GraphicsAdapterSnapshot("GPU 1", 8UL * 1024 * 1024 * 1024, true),
+                new GraphicsAdapterSnapshot("GPU 2", 16UL * 1024 * 1024 * 1024, true),
+            ]));
 
-        await viewModel.RunDetailedHardwareDetectionCommand.ExecuteAsync(null);
-
-        Assert.False(viewModel.HardwareDiagnostics.Recommendation.CanStagePreset);
-        Assert.Contains("More than one", viewModel.HardwareScanMessage, StringComparison.Ordinal);
+        Assert.False(recommendation.CanStagePreset);
+        Assert.Contains("More than one", recommendation.Description, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1040,11 +1035,6 @@ public sealed class MainViewModelTests
     private sealed class FixedInspector(GameInspectionSnapshot snapshot) : IReadOnlyGameInspector
     {
         public GameInspectionSnapshot Inspect() => snapshot;
-    }
-
-    private sealed class FixedHardwareProbe(HardwareSnapshot snapshot) : IHardwareProbe
-    {
-        public HardwareSnapshot Inspect(bool includeDetailedGraphics = false) => snapshot;
     }
 
     private sealed class CountingInspector(GameInspectionSnapshot snapshot) : IReadOnlyGameInspector

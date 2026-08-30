@@ -44,6 +44,14 @@ public sealed class AccessibilityPreferencesStore
                 return new AccessibilityPreferences();
             }
 
+            FileInfo fileInfo = new(_filePath);
+            if (fileInfo.Length > 256 * 1024)
+            {
+                _hasUnreadablePreferences = true;
+                WriteDiagnostic("Could not load accessibility preferences; file size exceeds 256 KiB.");
+                return new AccessibilityPreferences();
+            }
+
             AccessibilityPreferences? preferences = JsonSerializer.Deserialize<AccessibilityPreferences>(
                 File.ReadAllText(_filePath),
                 JsonOptions);

@@ -70,7 +70,7 @@ internal static class PakV5Archive
         {
             throw new ArgumentException("At least one named PAK entry is required.", nameof(files));
         }
-        if (files.Select(file => file.FileName).Distinct(StringComparer.Ordinal).Count() != files.Count)
+        if (files.Select(file => file.FileName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Count)
         {
             throw new ArgumentException("PAK entry names must be unique.", nameof(files));
         }

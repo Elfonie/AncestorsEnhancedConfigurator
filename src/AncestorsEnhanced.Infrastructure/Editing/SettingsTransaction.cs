@@ -165,7 +165,7 @@ internal sealed class SettingsTransaction(
         }
         catch (Exception exception) when (IsExpectedWriteException(exception))
         {
-            return Failure($"No changes were kept: {exception.Message}");
+            return SettingsOperationResult.RolledBack($"No changes were kept: {exception.Message}");
         }
     }
 

@@ -308,7 +308,8 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 return new SaveGameOperationResult(
                     true,
                     $"The save was loaded, but its timestamp could not be updated: {warning.Message}",
-                    CommitState: SaveOperationCommitState.CommittedWithWarning);
+                    safetyCheckpointId,
+                    SaveOperationCommitState.CommittedWithWarning);
             }
 
             return new SaveGameOperationResult(

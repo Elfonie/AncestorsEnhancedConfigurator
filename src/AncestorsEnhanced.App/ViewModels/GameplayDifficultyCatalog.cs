@@ -13,17 +13,17 @@ public static class GameplayDifficultyCatalog
     public static IReadOnlyList<GameplayDifficultyPresetViewModel> CreatePresets() =>
     [
         new("Game default", "100% across every available control", "Removes the AEC gameplay PAK and restores unmodified game behavior.", 100),
-        new("Explorer", "Lower survival pressure", "Reduces needs and the verified fall, bleeding and poison health-loss categories together without changing combat, QTEs or animal damage.", 70),
-        new("Survival", "Higher survival pressure", "Raises the verified needs, falls, bleeding and poison health-loss categories together without changing unrelated systems.", 130),
-        new("Hardcore", "Maximum supported simple pressure", "Uses 150% for each verified survival and hazard category.", 150),
+        new("Explorer", "Lower survival pressure", "Makes food, water and sleep portions more effective, and reduces verified fall, bleeding and poison damage. It does not slow the normal need-bar timer.", 70),
+        new("Survival", "Higher survival pressure", "Makes food, water and sleep portions less effective, and raises verified fall, bleeding and poison damage. It does not speed up the normal need-bar timer.", 130),
+        new("Hardcore", "Maximum supported simple pressure", "Uses 150% for required portions and each verified hazard category. The normal need-bar timer remains unchanged.", 150),
         new("Custom", "Choose each category yourself", "Starts from game defaults; adjust each available category below in 10% steps.", 100),
     ];
 
     public static IReadOnlyList<GameplayDifficultyControlViewModel> CreateSimpleControls() =>
     [
-        new("food", "Food need", "24 portions per day · game default", "Higher is harder: scales the verified Food NeededPerDay value.", true),
-        new("water", "Water need", "30 portions per day · game default", "Higher is harder: scales the verified Liquid NeededPerDay value.", true),
-        new("sleep", "Sleep need", "16 portions per day · game default", "Higher is harder: scales the verified Sleep NeededPerDay value.", true),
+        new("food", "Food required", "24 food portions for a full day · game default", "Higher is harder: each food portion restores a smaller share of the hunger meter. Normal hunger-bar decay still lasts one game day.", true),
+        new("water", "Water required", "30 water portions for a full day · game default", "Higher is harder: each drink restores a smaller share of the thirst meter. Normal thirst-bar decay still lasts one game day.", true),
+        new("sleep", "Sleep required", "16 sleep portions for a full day · game default", "Higher is harder: each sleep portion restores a smaller share of the fatigue meter. Normal fatigue-bar decay still lasts one game day.", true),
         new("fall-damage", "Fall damage", "Minor 2.5% · Major 5% · game default", "Higher is harder: scales the verified minor and major fall-damage values as one paired control.", true),
         new("bleeding", "Bleeding", "Minor 1% · Major 2% health loss · game default", "Higher is harder: scales the verified minor and major bleeding health-loss values as one paired control.", true),
         new("poison", "Poison", "Minor 1% · Major 2% health loss · game default", "Higher is harder: scales the verified minor and major poisoning health-loss values as one paired control.", true),

@@ -1273,9 +1273,10 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
             install);
 
         SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
-        SettingsOperationResult result = editor.Apply(plan);
+        SettingsOperationResult result = editor.Apply(editor.IssuePlan(plan));
 
         Assert.False(result.Succeeded, result.Message);
+        Assert.Equal(SettingsOperationStatus.RolledBack, result.Status);
         // The apply must fail in the write/rollback phase, not in the pre-check;
         // otherwise the deleted vignette file was never touched and the rollback
         // path is not exercised.

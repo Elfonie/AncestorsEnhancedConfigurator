@@ -35,10 +35,10 @@ Manual and automatic checkpoints may be created while Ancestors is running. Rest
 
 | Installation | Detection | Graphics and checkpoints | Gameplay difficulty |
 | --- | --- | --- | --- |
-| Steam on Windows | Supported | Supported when build/content identity is verified | Available only for exact Steam build `5495393` with the researched stock signature; runtime verification is still pending |
+| Steam on Windows | Supported | Supported when build/content identity is verified | Available only for exact Steam build `5495393` with the researched stock signature; a controlled run confirms the base regimen overlay reaches live saved state, while the complete control/effect matrix remains pending |
 | Epic Games on Windows | Supported | Supported when the stock-content signature is verified | Not supported |
 | GOG on Windows | Supported | Supported when the stock-content signature is verified | Not supported |
-| Steam through Proton on Linux | Supported | Supported when the Steam installation and Proton user-data path are unambiguous and verified | Same exact-build restriction; runtime verification is still pending |
+| Steam through Proton on Linux | Supported | Supported when the Steam installation and Proton user-data path are unambiguous and verified | Same exact-build restriction; no Linux runtime pass has confirmed load priority and player-visible effects |
 | Heroic | Detection only | Read-only | Not supported |
 
 AEC checks Steam, Epic Games, GOG, and Heroic in a deterministic order. If several distinct installations or several possible Proton/Wine users are found, AEC refuses to choose a write target automatically.
@@ -83,13 +83,15 @@ Backup Health reports what AEC could parse during its latest scan. It does not p
 
 Gameplay difficulty is build-bound to Steam build `5495393` and the matching researched stock PAK signature. Standard controls use 10% steps from 10% through 200%. The explicit experimental toggle extends all percentage controls to 1000%; this is an extreme technical range, not a balanced preset range.
 
-Simple contains six coordinated survival controls:
+Simple contains six coordinated survival and hazard controls. The requirement controls change
+how much recovery is needed; they do not shorten the normal meter cycle, which is driven by
+the game's 1,440 virtual-minute day:
 
 | Control | Game default | Direction |
 | --- | --- | --- |
-| Food need | 24 portions per day | Higher is harder |
-| Water need | 30 portions per day | Higher is harder |
-| Sleep need | 16 portions per day | Higher is harder |
+| Food required | 24 portions per day | Higher is harder because each portion restores less |
+| Water required | 30 portions per day | Higher is harder because each portion restores less |
+| Sleep required | 16 portions per day | Higher is harder because each portion restores less |
 | Fall damage | Minor 2.5%, Major 5% | Higher is harder |
 | Bleeding health loss | Minor 1%, Major 2% | Higher is harder |
 | Poison health loss | Minor 1%, Major 2% | Higher is harder |
@@ -114,9 +116,9 @@ AEC verifies stock asset SHA-256 values and expected bytes, creates a determinis
 
 ### Gameplay runtime gate
 
-Static research, deterministic PAK construction, readback, ownership, and transaction safety are covered. They do **not** prove that UE4 loads the PAK with the intended priority or that every percentage produces the expected player-visible behavior.
+Static research, deterministic PAK construction, readback, ownership, and transaction safety are covered. A controlled Windows save observation also confirms that the base regimen overlay reaches live saved state. That observation does **not** prove that every percentage, asset, or hazard control produces the expected player-visible behavior.
 
-Before treating Gameplay as runtime-verified for a release, the exact supported game build still needs an in-game pass covering all enabled controls, PAK priority, restart detection, stock restoration, and save-game safety. The application reports this as **runtime verification pending**.
+Before treating Gameplay as runtime-verified for a release, the exact supported game build still needs an in-game pass covering all enabled controls, PAK priority, restart detection, stock restoration, and save-game safety. In particular, `NeededPerDay` must not be described as changing passive hunger, thirst, or sleep drain speed: the verified property changes required portions and per-portion effect, while the normal day cycle remains fixed. The application reports this as **runtime verification pending**.
 
 ## Transaction and ownership safety
 
