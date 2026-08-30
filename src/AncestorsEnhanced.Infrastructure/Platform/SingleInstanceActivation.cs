@@ -11,6 +11,7 @@ namespace AncestorsEnhanced.Infrastructure.Platform;
 /// </summary>
 public sealed class SingleInstanceActivationListener : IDisposable
 {
+    private static readonly TimeSpan ActivationReadTimeout = TimeSpan.FromSeconds(2);
     private readonly string _pipeName;
     private readonly Action _activate;
     private readonly CancellationTokenSource _cancellation = new();
@@ -100,7 +101,11 @@ public sealed class SingleInstanceActivationListener : IDisposable
 
                 // The protocol intentionally accepts no arguments or file paths.
                 // A connected client can only request the existing window to activate.
-                if (server.ReadByte() >= 0)
+                using var readCancellation = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token);
+                readCancellation.CancelAfter(ActivationReadTimeout);
+                byte[] request = new byte[1];
+                int received = await server.ReadAsync(request, readCancellation.Token).ConfigureAwait(false);
+                if (received == 1)
                 {
                     _activate();
                 }
@@ -108,6 +113,11 @@ public sealed class SingleInstanceActivationListener : IDisposable
             catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
             {
                 break;
+            }
+            catch (OperationCanceledException)
+            {
+                // A connected client that never writes is discarded after the
+                // bounded protocol timeout, leaving the listener available.
             }
             catch (IOException) when (!_cancellation.IsCancellationRequested)
             {

@@ -37,8 +37,15 @@ jobs:
       - name: Build
         run: dotnet build AncestorsEnhanced.slnx -c Release --no-restore
 
-      - name: Test
-        run: dotnet test AncestorsEnhanced.slnx -c Release --no-build --no-restore
+      - name: Test with coverage
+        run: dotnet test AncestorsEnhanced.slnx -c Release --no-build --no-restore --collect:"XPlat Code Coverage" --results-directory TestResults
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: AncestorsEnhanced-coverage-${{ matrix.rid }}
+          path: TestResults/**/coverage.cobertura.xml
+          if-no-files-found: error
 
       - name: Package vulnerability gate
         shell: pwsh

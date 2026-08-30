@@ -170,6 +170,30 @@ internal static class ConfigurationFileOperations
         }
     }
 
+    // This is a last-moment containment check for destructive path operations.
+    // It narrows parent replacement races but cannot provide handle-relative
+    // object identity; callers must not describe it as a complete TOCTOU cure.
+    private static void ValidateMutationDirectory(string directory)
+    {
+        string current = Path.GetFullPath(directory);
+        while (true)
+        {
+            if (Directory.Exists(current) &&
+                File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
+            {
+                throw new InvalidOperationException("A linked directory will not be changed.");
+            }
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrEmpty(parent) || string.Equals(parent, current, PathComparison))
+            {
+                return;
+            }
+
+            current = parent;
+        }
+    }
+
     public static void WriteBytesAtomically(string path, byte[] content)
     {
         string directory = Path.GetDirectoryName(path)
@@ -197,6 +221,8 @@ internal static class ConfigurationFileOperations
                 stream.Flush(flushToDisk: true);
             }
 
+            ValidateMutationDirectory(directory);
+            ValidateWritableTarget(path);
             File.Move(temporaryPath, path, overwrite: true);
             if (attributes is not null)
             {
@@ -248,6 +274,8 @@ internal static class ConfigurationFileOperations
             WriteBytesAtomically(temporaryPath, content);
             if (!expectedExists)
             {
+                ValidateMutationDirectory(directory);
+                ValidateWritableTarget(path);
                 File.Move(temporaryPath, path, overwrite: false);
                 return;
             }
@@ -259,6 +287,8 @@ internal static class ConfigurationFileOperations
 
             FileAttributes attributes = File.GetAttributes(path);
             UnixFileMode? unixMode = !OperatingSystem.IsWindows() ? File.GetUnixFileMode(path) : null;
+            ValidateMutationDirectory(directory);
+            ValidateWritableTarget(path);
             File.Move(path, capturedPath, overwrite: false);
             ValidateWritableTarget(capturedPath);
             string capturedSha = Sha256(ReadStableBounded(capturedPath, 64L * 1024 * 1024));
@@ -275,6 +305,8 @@ internal static class ConfigurationFileOperations
             }
             try
             {
+                ValidateMutationDirectory(directory);
+                ValidateWritableTarget(path);
                 File.Move(temporaryPath, path, overwrite: false);
                 committed = true;
             }
@@ -283,6 +315,7 @@ internal static class ConfigurationFileOperations
                 RestoreCapturedFile(path, capturedPath);
                 throw;
             }
+            ValidateMutationDirectory(directory);
             TryDeleteFile(capturedPath);
         }
         catch
@@ -316,6 +349,8 @@ internal static class ConfigurationFileOperations
         string directory = Path.GetDirectoryName(path)
             ?? throw new InvalidOperationException("The target directory is missing.");
         string capturedPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.cas");
+        ValidateMutationDirectory(directory);
+        ValidateWritableTarget(path);
         File.Move(path, capturedPath, overwrite: false);
         try
         {
@@ -329,6 +364,7 @@ internal static class ConfigurationFileOperations
 
             try
             {
+                ValidateMutationDirectory(directory);
                 File.Delete(capturedPath);
             }
             catch

@@ -23,7 +23,12 @@ internal sealed class SaveGameCheckpointStore(
     private readonly Func<DateTimeOffset, string> _newCheckpointId =
         newCheckpointId ?? SaveGamePaths.NewCheckpointId;
 
-    public string Create(string userDataDirectory, int slotNumber, byte[] content, string origin = "Manual")
+    public string Create(
+        string userDataDirectory,
+        int slotNumber,
+        byte[] content,
+        string origin = "Manual",
+        IReadOnlySet<string>? protectedCheckpointIds = null)
     {
         if (maxCheckpointsPerSlot < 1)
         {
@@ -104,7 +109,13 @@ internal sealed class SaveGameCheckpointStore(
         // never turn a successfully published checkpoint into a reported failure.
         try
         {
-            EnforceCap(userDataDirectory, slotRoot, slotNumber, maxCheckpointsPerSlot, checkpointDirectory);
+            EnforceCap(
+                userDataDirectory,
+                slotRoot,
+                slotNumber,
+                maxCheckpointsPerSlot,
+                checkpointDirectory,
+                protectedCheckpointIds);
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or
@@ -156,7 +167,8 @@ internal sealed class SaveGameCheckpointStore(
         string slotRoot,
         int slotNumber,
         int maxCheckpointsPerSlot,
-        string protectedCheckpointDirectory)
+        string protectedCheckpointDirectory,
+        IReadOnlySet<string>? protectedCheckpointIds)
     {
         string[] directories = Directory.EnumerateDirectories(slotRoot).ToArray();
         List<string> checkpoints = directories
@@ -179,7 +191,8 @@ internal sealed class SaveGameCheckpointStore(
                          Path.GetFullPath(path),
                          protectedCheckpointDirectory,
                          PathComparison)
-                         && !favorites.Contains(Path.GetFileName(path)))
+                          && !favorites.Contains(Path.GetFileName(path))
+                          && !(protectedCheckpointIds?.Contains(Path.GetFileName(path)) ?? false))
                      .Take(overflow))
         {
             TryDeleteDirectory(checkpoint);

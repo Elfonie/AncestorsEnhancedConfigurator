@@ -20,7 +20,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private bool _loadingSettings;
     private readonly object _settingsWriteGate = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
-    private Task _settingsWriteTail = Task.CompletedTask;
+    private Task<bool> _settingsWriteTail = Task.FromResult(true);
     private readonly object _watchdogLifecycleGate = new();
     private Task _watchdogLifecycleTail = Task.CompletedTask;
     private int _watchdogLifecycleVersion;
@@ -226,7 +226,8 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 () => CanMutate,
                 expandedSlots.Contains(slot.SlotNumber),
                 metadataProvider: checkpoint => GetCheckpointMetadata(checkpoint),
-                metadataChanged: SaveCheckpointMetadata,
+                metadataChanged: (checkpoint, metadata) => SaveCheckpointMetadata(checkpoint, metadata),
+                favoriteMetadataChanged: (checkpoint, metadata) => SaveCheckpointMetadata(checkpoint, metadata, requireDurableFavorite: true),
                 existingCheckpoints: existingCheckpointsBySlot.GetValueOrDefault(slot.SlotNumber)))
             .ToArray();
 
@@ -737,7 +738,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void SaveSettings(bool waitForCompletion = false)
+    private bool SaveSettings(bool waitForCompletion = false)
     {
         var settings = new ToolSettings
         {
@@ -750,17 +751,17 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         string? directory = Path.GetDirectoryName(ToolSettingsPath());
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
         {
-            return;
+            return false;
         }
 
         string path = ToolSettingsPath();
         int version = Interlocked.Increment(ref _settingsVersion);
-        Task pending;
+        Task<bool> pending;
         lock (_settingsWriteGate)
         {
             if (_disposed)
             {
-                return;
+                return false;
             }
 
             pending = _settingsWriteTail = _settingsWriteTail.ContinueWith(
@@ -770,15 +771,15 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 TaskScheduler.Default);
         }
 
-        // Favorite changes protect retention immediately. Text metadata is
-        // queued after a short quiet period to keep typing off the UI thread.
         if (waitForCompletion)
         {
-            pending.GetAwaiter().GetResult();
+            return pending.GetAwaiter().GetResult();
         }
+
+        return true;
     }
 
-    private void WriteSettings(string path, ToolSettings settings, int version)
+    private bool WriteSettings(string path, ToolSettings settings, int version)
     {
         try
         {
@@ -787,7 +788,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             // item rather than only the most recently started task.
             if (version != Volatile.Read(ref _settingsVersion))
             {
-                return;
+                return true;
             }
 
             byte[] payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(settings, JsonSettings);
@@ -807,10 +808,12 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 {
                 }
             }
+            return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             ReportStatus("Could not save tool settings: " + exception.Message, "#E04D42");
+            return false;
         }
     }
 
@@ -915,10 +918,14 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     private CheckpointMetadata? GetCheckpointMetadata(SaveGameCheckpoint checkpoint) =>
         _checkpointMetadata.GetValueOrDefault(CheckpointMetadataKey(checkpoint));
 
-    private void SaveCheckpointMetadata(SaveGameCheckpoint checkpoint, CheckpointMetadata metadata)
+    private bool SaveCheckpointMetadata(
+        SaveGameCheckpoint checkpoint,
+        CheckpointMetadata metadata,
+        bool requireDurableFavorite = false)
     {
         string key = CheckpointMetadataKey(checkpoint);
         CheckpointMetadata normalized = NormalizeMetadata(metadata);
+        bool hadPrevious = _checkpointMetadata.TryGetValue(key, out CheckpointMetadata? previous);
         bool favoriteChanged = (_checkpointMetadata.GetValueOrDefault(key)?.IsFavorite ?? false) != normalized.IsFavorite;
         if (string.IsNullOrWhiteSpace(normalized.Title) && string.IsNullOrWhiteSpace(normalized.Note) && !normalized.IsFavorite)
         {
@@ -931,11 +938,23 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         if (favoriteChanged)
         {
             _metadataWriteDebounce?.Cancel();
-            SaveSettings(waitForCompletion: true);
-            return;
+            bool persisted = SaveSettings(waitForCompletion: requireDurableFavorite);
+            if (!persisted && requireDurableFavorite)
+            {
+                if (hadPrevious)
+                {
+                    _checkpointMetadata[key] = previous!;
+                }
+                else
+                {
+                    _checkpointMetadata.Remove(key);
+                }
+            }
+            return persisted;
         }
 
         QueueDebouncedMetadataSave();
+        return true;
     }
 
     private void QueueDebouncedMetadataSave()

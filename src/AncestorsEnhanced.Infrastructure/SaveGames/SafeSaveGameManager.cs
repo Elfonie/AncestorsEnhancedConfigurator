@@ -247,7 +247,15 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                         true,
                         $"Slot {slot + 1} already matches this checkpoint; no save file was changed.");
                 }
-                safetyCheckpointId = _store.Create(_userDataDirectory, slot, current, "PreRestore");
+                // The selected source remains transactionally necessary until the
+                // restore reaches a terminal state. PreRestore publication may run
+                // retention, so it must not evict that source under cap pressure.
+                safetyCheckpointId = _store.Create(
+                    _userDataDirectory,
+                    slot,
+                    current,
+                    "PreRestore",
+                    new HashSet<string>(StringComparer.Ordinal) { checkpointId });
             }
 
             // The atomic replace is the commit point. After it, the save has already

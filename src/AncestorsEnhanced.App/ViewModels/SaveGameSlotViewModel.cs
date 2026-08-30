@@ -23,6 +23,7 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         bool showAllCheckpoints = false,
         Func<SaveGameCheckpoint, CheckpointMetadata?>? metadataProvider = null,
         Action<SaveGameCheckpoint, CheckpointMetadata>? metadataChanged = null,
+        Func<SaveGameCheckpoint, CheckpointMetadata, bool>? favoriteMetadataChanged = null,
         IReadOnlyDictionary<string, SaveGameCheckpointViewModel>? existingCheckpoints = null)
     {
         _exists = slot.Exists;
@@ -52,7 +53,10 @@ public partial class SaveGameSlotViewModel : ViewModelBase
                     canRestore ?? (() => true),
                     _canMutate,
                     metadataProvider?.Invoke(checkpoint),
-                    metadata => metadataChanged?.Invoke(checkpoint, metadata)))
+                    metadata => metadataChanged?.Invoke(checkpoint, metadata),
+                    favoriteMetadataChanged is null
+                        ? null
+                        : metadata => favoriteMetadataChanged(checkpoint, metadata)))
             .ToArray();
         UpdateVisibleCheckpoints();
     }

@@ -12,6 +12,7 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
     private readonly Func<bool> _canRestore;
     private readonly Func<bool> _canMutate;
     private readonly Action<CheckpointMetadata> _metadataChanged;
+    private readonly Func<CheckpointMetadata, bool>? _favoriteMetadataChanged;
     private bool _isInitializing;
 
     public SaveGameCheckpointViewModel(
@@ -21,7 +22,8 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         Func<bool> canRestore,
         Func<bool>? canMutate = null,
         CheckpointMetadata? metadata = null,
-        Action<CheckpointMetadata>? metadataChanged = null)
+        Action<CheckpointMetadata>? metadataChanged = null,
+        Func<CheckpointMetadata, bool>? favoriteMetadataChanged = null)
     {
         Id = checkpoint.Id;
         SlotNumber = checkpoint.SlotNumber;
@@ -33,6 +35,7 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         _canRestore = canRestore;
         _canMutate = canMutate ?? (() => true);
         _metadataChanged = metadataChanged ?? (_ => { });
+        _favoriteMetadataChanged = favoriteMetadataChanged;
         _isInitializing = true;
         Origin = checkpoint.Origin;
         Title = metadata?.Title ?? "";
@@ -124,7 +127,34 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
 
     partial void OnIsFavoriteChanged(bool value)
     {
-        if (!_isInitializing) SaveMetadata();
+        if (_isInitializing)
+        {
+            return;
+        }
+
+        CheckpointMetadata metadata = CurrentMetadata();
+        if (_favoriteMetadataChanged is null)
+        {
+            _metadataChanged(metadata);
+            return;
+        }
+
+        if (_favoriteMetadataChanged(metadata))
+        {
+            return;
+        }
+
+        // A pin only promises retention protection once its metadata is durable.
+        // Revert the visible state immediately when that write fails.
+        _isInitializing = true;
+        try
+        {
+            IsFavorite = !value;
+        }
+        finally
+        {
+            _isInitializing = false;
+        }
     }
 
     [RelayCommand]
@@ -197,8 +227,10 @@ public partial class SaveGameCheckpointViewModel : ViewModelBase
         _ => origin,
     };
 
-    private void SaveMetadata() => _metadataChanged(new CheckpointMetadata(
+    private CheckpointMetadata CurrentMetadata() => new(
         string.IsNullOrWhiteSpace(Title) ? null : Title.Trim(),
         string.IsNullOrWhiteSpace(Note) ? null : Note.Trim(),
-        IsFavorite));
+        IsFavorite);
+
+    private void SaveMetadata() => _metadataChanged(CurrentMetadata());
 }

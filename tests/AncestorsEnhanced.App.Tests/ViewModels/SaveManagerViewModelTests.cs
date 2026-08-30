@@ -138,6 +138,39 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
+    public void FavoriteRevertsWhenItsDurableRetentionPinCannotBeSaved()
+    {
+        var checkpoint = new SaveGameCheckpoint(
+            "checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");
+        var viewModel = new SaveGameCheckpointViewModel(
+            checkpoint,
+            () => Task.CompletedTask,
+            () => Task.CompletedTask,
+            () => true,
+            favoriteMetadataChanged: _ => false);
+
+        viewModel.IsFavorite = true;
+
+        Assert.False(viewModel.IsFavorite);
+    }
+
+    [Fact]
+    public void SaveManagerDoesNotPresentAFavoriteWhenItsSettingsDirectoryIsUnavailable()
+    {
+        string unavailableDirectory = Path.Combine(Path.GetTempPath(), "aec-missing-" + Guid.NewGuid().ToString("N"));
+        var checkpoint = new SaveGameCheckpoint("checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");
+        var slot = new SaveGameSlotSnapshot("0", "Savegame0.sav", "path", true, 1, DateTimeOffset.UnixEpoch, [checkpoint]);
+        using var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, unavailableDirectory, [slot])),
+            unavailableDirectory);
+        viewModel.Refresh(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, unavailableDirectory, [slot]));
+
+        viewModel.Slots[0].Checkpoints[0].IsFavorite = true;
+
+        Assert.False(viewModel.Slots[0].Checkpoints[0].IsFavorite);
+    }
+
+    [Fact]
     public void CheckpointMetadataIsNotReportedDuringViewModelConstruction()
     {
         var checkpoint = new SaveGameCheckpoint("checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");

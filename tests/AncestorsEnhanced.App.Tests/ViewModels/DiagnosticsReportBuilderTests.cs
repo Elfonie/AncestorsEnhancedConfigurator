@@ -56,4 +56,25 @@ public sealed class DiagnosticsReportBuilderTests
             "/home/<user>/.steam/steamapps/common/Ancestors",
             DiagnosticsReportBuilder.RedactPath("/home/another-user/.steam/steamapps/common/Ancestors"));
     }
+
+    [Fact]
+    public void BuildRedactsCustomAbsolutePathsFromFieldsAndInspectionNotes()
+    {
+        string report = DiagnosticsReportBuilder.Build(
+            "AEC", "1.0.0", "Ready", "Detected",
+            @"D:\PrivateDiskName\Games\Ancestors",
+            "/mnt/private-volume/SteamLibrary/Ancestors",
+            @"D:\PrivateDiskName\Games\Ancestors\System.sav",
+            "Read successfully", "Windows", TestHardware(), [], [],
+            [new NoticeRowViewModel("Warning", "Found D:\\PrivateDiskName\\Games\\Ancestors and /mnt/private-volume/SteamLibrary/Ancestors")]);
+
+        Assert.DoesNotContain("PrivateDiskName", report, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("private-volume", report, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Installation path: <custom path>", report, StringComparison.Ordinal);
+        Assert.Contains("<path>", report, StringComparison.Ordinal);
+    }
+
+    private static HardwareDiagnosticsViewModel TestHardware() => HardwareDiagnosticsViewModel.FromSnapshot(new HardwareSnapshot(
+        "Windows", "Test CPU", 8, 4, 16UL * 1024 * 1024 * 1024,
+        [new GraphicsAdapterSnapshot("Test GPU", 8UL * 1024 * 1024 * 1024, true)]));
 }

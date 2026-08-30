@@ -12,6 +12,14 @@ public static class DiagnosticsReportBuilder
         @"(?m)(/home/)[^/\r\n]+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex WindowsAbsolutePath = new(
+        @"(?<!\S)(?:[a-z]:\\|\\\\)[^\s\""']+",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex LinuxAbsolutePath = new(
+        @"(?<!\S)/(?:[^\s/]+/)*[^\s]+",
+        RegexOptions.Compiled);
+
     public static string Build(
         string productName,
         string version,
@@ -54,9 +62,29 @@ public static class DiagnosticsReportBuilder
         return string.Join(Environment.NewLine, lines);
     }
 
-    public static string RedactPath(string? value) => RedactText(value);
+    public static string RedactPath(string? value)
+    {
+        string redacted = RedactKnownUserPath(value);
+        return string.Equals(redacted, value, StringComparison.Ordinal) &&
+               (WindowsAbsolutePath.IsMatch(value ?? string.Empty) || LinuxAbsolutePath.IsMatch(value ?? string.Empty))
+            ? "<custom path>"
+            : redacted;
+    }
 
     private static string RedactText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "Not available";
+        }
+
+        string redacted = RedactKnownUserPath(value);
+        return LinuxAbsolutePath.Replace(
+            WindowsAbsolutePath.Replace(redacted, "<path>"),
+            "<path>");
+    }
+
+    private static string RedactKnownUserPath(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {

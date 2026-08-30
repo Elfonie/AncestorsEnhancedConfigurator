@@ -103,19 +103,14 @@ public sealed class SafeGameplayDifficultyEditor : IGameplayDifficultyEditor
                 _ => _buildPak(snapshot.Installation.InstallDirectory, settings),
             };
             bool byteExact = pak.AsSpan().SequenceEqual(reconstructed);
-            if (!byteExact && markerVersion >= AecPakOwnershipMarker.CurrentVersion)
+            if (!byteExact)
             {
-                return Unverified("The installed gameplay PAK is not the exact package AEC would generate");
+                return Unverified(markerVersion < AecPakOwnershipMarker.CurrentVersion
+                    ? "The legacy gameplay PAK cannot be reproduced for this verified game context. Remove it manually, then create a current AEC gameplay patch."
+                    : "The installed gameplay PAK is not the exact package AEC would generate");
             }
 
-            // Packages recorded by an older marker format were built by retired PAK builders whose
-            // exact bytes can no longer be reproduced (the builder groups asset mutations since the
-            // current format). Their integrity is still proven by the ownership record's SHA-256,
-            // so they remain active and editable and are rebuilt in the current format on next change.
-            string formatNote = byteExact
-                ? string.Empty
-                : $" (legacy format v{markerVersion} · rebuilt on next change)";
-            return ActiveState(settings, formatNote);
+            return ActiveState(settings);
         }
         catch (Exception exception) when (IsExpected(exception))
         {

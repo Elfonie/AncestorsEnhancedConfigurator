@@ -229,7 +229,7 @@ public sealed class SafeGameplayDifficultyEditorTests
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
-    public void LegacyPackagesBuiltByRetiredBuildersStayActiveThroughTheirRecordedSettings(int markerVersion)
+    public void UnknownLegacyPackagesAreUnverifiedEvenWhenTheirMarkerHashMatches(int markerVersion)
     {
         using var fixture = new GameplayFixture();
         SafeGameplayDifficultyEditor editor = fixture.CreateEditor();
@@ -246,9 +246,8 @@ public sealed class SafeGameplayDifficultyEditorTests
 
         GameplayDifficultyState state = editor.Inspect(fixture.Snapshot);
 
-        Assert.Equal(GameplayDifficultyStateKind.Active, state.Kind);
-        Assert.Equal(new GameplayDifficultySettings(140, 120, 130, 110), state.Settings);
-        Assert.Contains("legacy format", state.Description);
+        Assert.Equal(GameplayDifficultyStateKind.Unverified, state.Kind);
+        Assert.Contains("cannot be reproduced", state.Description, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -273,7 +272,7 @@ public sealed class SafeGameplayDifficultyEditorTests
     }
 
     [Fact]
-    public void ApplyingAChangeToALegacyPackageRebuildsItInTheCurrentFormat()
+    public void ApplyingAChangeToAnUnknownLegacyPackageIsBlocked()
     {
         using var fixture = new GameplayFixture();
         SafeGameplayDifficultyEditor editor = fixture.CreateEditor();
@@ -287,15 +286,10 @@ public sealed class SafeGameplayDifficultyEditorTests
             PakSha256 = hash,
             Settings = new { FoodPercent = 130, WaterPercent = 100, SleepPercent = 100, FallDamagePercent = 100 },
         }));
-        Assert.Contains("legacy format", editor.Inspect(fixture.Snapshot).Description);
+        Assert.Equal(GameplayDifficultyStateKind.Unverified, editor.Inspect(fixture.Snapshot).Kind);
 
-        SettingsChangePlan upgrade = editor.CreatePlan(fixture.Snapshot, new GameplayDifficultySettings(140, 100, 100, 100));
-        Assert.True(editor.Apply(upgrade).Succeeded);
-
-        GameplayDifficultyState upgraded = editor.Inspect(fixture.Snapshot);
-        Assert.Equal(GameplayDifficultyStateKind.Active, upgraded.Kind);
-        Assert.Equal(new GameplayDifficultySettings(140, 100, 100, 100), upgraded.Settings);
-        Assert.DoesNotContain("legacy format", upgraded.Description);
+        Assert.Throws<InvalidOperationException>(() =>
+            editor.CreatePlan(fixture.Snapshot, new GameplayDifficultySettings(140, 100, 100, 100)));
     }
 
     private static void AssertFloatPatch(
