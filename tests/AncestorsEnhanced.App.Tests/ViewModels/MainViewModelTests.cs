@@ -461,10 +461,17 @@ public sealed class MainViewModelTests
         FeatureGroupRowViewModel shadows = Assert.Single(
             viewModel.FeatureGroups,
             group => group.Id == "shadows-lighting");
-        Assert.Equal(17, shadows.Settings.Count);
+        Assert.Equal(18, shadows.Settings.Count);
         Assert.All(shadows.Settings, setting => Assert.True(setting.ShowDescription));
         Assert.Contains(shadows.Settings, setting => setting.Name == "CSM maximum resolution");
         Assert.Contains(shadows.Settings, setting => setting.Name == "Fog history supersamples");
+        Assert.Contains(shadows.Settings, setting => setting.Name == "Light-function quality" && setting.Editor is not null);
+        Assert.Contains(
+            viewModel.FeatureGroups.SelectMany(group => group.Settings),
+            setting => setting.Name == "Render-target pool minimum" && setting.Editor is not null);
+        Assert.Contains(
+            viewModel.FeatureGroups.SelectMany(group => group.Settings),
+            setting => setting.Name == "Fast-blur threshold" && setting.Editor is not null);
 
         viewModel.SearchText = "r.Shadow.MaxResolution";
 
@@ -830,6 +837,17 @@ public sealed class MainViewModelTests
         Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Ultra Setup");
         Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Low VRAM Setup");
         Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Cinematic Tweak");
+    }
+
+    [Fact]
+    public void GraphicsPresetSectionsKeepBaselinesSeparateFromOptionalImageStyles()
+    {
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
+
+        Assert.Equal(5, viewModel.HardwareGraphicsPresets.Count);
+        Assert.All(viewModel.HardwareGraphicsPresets, preset => Assert.True(preset.IsHardwareSetup));
+        Assert.Equal(2, viewModel.ImageStyleGraphicsPresets.Count);
+        Assert.All(viewModel.ImageStyleGraphicsPresets, preset => Assert.False(preset.IsHardwareSetup));
     }
 
     [Fact]

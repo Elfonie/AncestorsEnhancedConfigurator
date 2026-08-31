@@ -210,6 +210,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial bool IsGameplayAdvancedMode { get; set; }
 
     [ObservableProperty]
+    public partial string GameplayAdvancedTab { get; set; } = "survival";
+
+    [ObservableProperty]
     public partial IReadOnlyList<GameplayDifficultyPresetViewModel> GameplayDifficultyPresets { get; set; } = [];
 
     [ObservableProperty]
@@ -376,6 +379,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool IsGameplaySimpleMode => !IsGameplayAdvancedMode;
 
+    public bool IsGameplaySurvivalTab => string.Equals(GameplayAdvancedTab, "survival", StringComparison.Ordinal);
+
+    public bool IsGameplayRecoveryTab => string.Equals(GameplayAdvancedTab, "recovery", StringComparison.Ordinal);
+
+    public bool IsGameplayResearchTab => string.Equals(GameplayAdvancedTab, "research", StringComparison.Ordinal);
+
+    public bool ShowGameplayCoreControls => IsGameplaySimpleMode || IsGameplaySurvivalTab;
+
     public bool HasGameplayDifficultyPresets => GameplayDifficultyPresets.Count > 0;
 
     public bool HasGameplaySimpleControls => GameplaySimpleControls.Count > 0;
@@ -425,9 +436,22 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ? $"{GamePresetName} · {CustomOverrideCount} custom change(s)"
         : "Graphics settings will appear after game detection.";
 
+    public string HomeGameplayTitle => HasGameplayPendingChanges
+        ? "Gameplay changes ready"
+        : GameplayState.Kind switch
+        {
+            GameplayDifficultyStateKind.Active => "Custom gameplay difficulty active",
+            GameplayDifficultyStateKind.GameDefault => "Game-default difficulty",
+            _ => "Gameplay difficulty needs attention",
+        };
+
     public string HomeGameplaySummary => HasGameplayPendingChanges
-        ? GameplayDraftStatus
-        : GameplayState.Description;
+        ? FormatGameplayHomeSummary(CurrentGameplaySettings, "Review the changes before they are applied.")
+        : GameplayState.Kind == GameplayDifficultyStateKind.Active
+            ? FormatGameplayHomeSummary(GameplayState.Settings, "Open Gameplay to review the values.")
+            : GameplayState.Kind == GameplayDifficultyStateKind.GameDefault
+                ? "No AEC gameplay PAK is installed."
+                : GameplayState.Description;
 
     public int ExternalPakCount => _snapshot?.PakFiles.Count(pak =>
         pak.Classification is not PakClassification.BaseGame and not PakClassification.AecOwned) ?? 0;
@@ -467,14 +491,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool ShowDiagnosticsView => IsDiagnosticsView;
 
-    public bool IsGraphicsSectionActive => ShowGraphicsView || IsProfilesView;
+    public bool IsGraphicsSectionActive => ShowGraphicsView;
 
-    public bool IsSettingsSectionActive => IsSettingsView || IsDiagnosticsView;
+    public bool IsSettingsSectionActive => IsSettingsView;
 
     public string PageContextLabel => IsProfilesView
-        ? "Graphics / Profiles"
+        ? "Profiles"
         : IsDiagnosticsView
-            ? "Settings / Diagnostics"
+            ? "Diagnostics"
             : IsSettingsView
                 ? "Settings"
             : IsHomeView
@@ -602,6 +626,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public IReadOnlyList<BuiltInGraphicsPresetViewModel> AdditionalGraphicsTweaks =>
         BuiltInGraphicsPresets.Where(preset => preset.Name is "Ultra Setup" or "Low VRAM Setup").ToArray();
+
+    public IReadOnlyList<BuiltInGraphicsPresetViewModel> HardwareGraphicsPresets =>
+        BuiltInGraphicsPresets.Where(preset => preset.IsHardwareSetup).ToArray();
+
+    public IReadOnlyList<BuiltInGraphicsPresetViewModel> ImageStyleGraphicsPresets =>
+        BuiltInGraphicsPresets.Where(preset => !preset.IsHardwareSetup).ToArray();
 
     public bool IsGameDefaultsGraphicsFilter => GraphicsFilter == "Game defaults";
 
@@ -789,7 +819,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private void ShowGameplaySimple() => IsGameplayAdvancedMode = false;
 
     [RelayCommand]
-    private void ShowGameplayAdvanced() => IsGameplayAdvancedMode = true;
+    private void ShowGameplayAdvanced()
+    {
+        IsGameplayAdvancedMode = true;
+        GameplayAdvancedTab = "survival";
+    }
+
+    [RelayCommand]
+    private void ShowGameplaySurvivalTab() => GameplayAdvancedTab = "survival";
+
+    [RelayCommand]
+    private void ShowGameplayRecoveryTab() => GameplayAdvancedTab = "recovery";
+
+    [RelayCommand]
+    private void ShowGameplayResearchTab() => GameplayAdvancedTab = "research";
 
     [RelayCommand]
     private void ToggleGameplayPresets() => IsGameplayPresetsExpanded = !IsGameplayPresetsExpanded;
@@ -1213,6 +1256,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public void ReportDiagnosticsCopyError() =>
         ShowMessage("Diagnostics could not be copied to the clipboard.", "#E04D42");
 
+    public void ReportExitBlockedWhileOperationRuns() =>
+        ShowMessage("Wait for the current file operation to finish before exiting.", "#D6BC84");
+
     [RelayCommand]
     private void RequestProfileDeletion(UserProfileRowViewModel? profile)
     {
@@ -1400,6 +1446,15 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnIsGameplayAdvancedModeChanged(bool value)
     {
         OnPropertyChanged(nameof(IsGameplaySimpleMode));
+        OnPropertyChanged(nameof(ShowGameplayCoreControls));
+    }
+
+    partial void OnGameplayAdvancedTabChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsGameplaySurvivalTab));
+        OnPropertyChanged(nameof(IsGameplayRecoveryTab));
+        OnPropertyChanged(nameof(IsGameplayResearchTab));
+        OnPropertyChanged(nameof(ShowGameplayCoreControls));
     }
 
     partial void OnIsProfilesViewChanged(bool value)
@@ -2395,7 +2450,36 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ? $"{draft} · pending review"
             : GameplayState.Description;
         OnPropertyChanged(nameof(GameplayDraftStatus));
+        OnPropertyChanged(nameof(HomeGameplayTitle));
         OnPropertyChanged(nameof(HomeGameplaySummary));
+    }
+
+    private static string FormatGameplayHomeSummary(
+        GameplayDifficultySettings settings,
+        string action)
+    {
+        int changedValues = new[]
+        {
+            settings.FoodPercent,
+            settings.WaterPercent,
+            settings.SleepPercent,
+            settings.FallDamagePercent,
+            settings.BleedingPercent,
+            settings.PoisonPercent,
+            settings.EnergyRecoveryPercent,
+            settings.WoundSleepHealingPercent,
+            settings.WoundStaminaPenaltyPercent,
+            settings.PoisonRecoveryPercent,
+            settings.RestDelayPercent,
+            settings.ExhaustionThresholdPercent,
+            settings.ExhaustionPenaltyPercent,
+            settings.WoundRecoveryDurationPercent,
+            settings.PoisonStaminaPenaltyPercent,
+        }.Count(value => value != 100) + (settings.IncludeClan ? 1 : 0);
+
+        return changedValues == 1
+            ? $"1 custom value · {action}"
+            : $"{changedValues} custom values · {action}";
     }
 
     private GameplayDifficultySettings CurrentGameplaySettings => new(
@@ -2456,6 +2540,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanResetGameplay));
         OnPropertyChanged(nameof(CanEditGameplay));
         OnPropertyChanged(nameof(GameplayReviewButtonLabel));
+        OnPropertyChanged(nameof(HomeGameplayTitle));
         OnPropertyChanged(nameof(HomeGameplaySummary));
         OnPropertyChanged(nameof(ShowBottomBar));
     }

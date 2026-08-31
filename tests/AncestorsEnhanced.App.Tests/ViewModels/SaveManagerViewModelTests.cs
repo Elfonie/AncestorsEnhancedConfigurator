@@ -630,6 +630,39 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
+    public void WatchdogStartFailureTurnsOffAndPersistsTheAutoBackupState()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        try
+        {
+            var watchdog = new FakeWatchdog { ThrowOnStart = true };
+            using var viewModel = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog,
+                action => action());
+            viewModel.Activate();
+
+            viewModel.IsWatchdogEnabled = true;
+
+            Assert.True(SpinWait.SpinUntil(() => !viewModel.IsWatchdogEnabled, TimeSpan.FromSeconds(2)));
+            Assert.Contains("could not start", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.True(SpinWait.SpinUntil(() =>
+            {
+                ToolSettings? settings = File.Exists(Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json"))
+                    ? System.Text.Json.JsonSerializer.Deserialize<ToolSettings>(File.ReadAllBytes(Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json")))
+                    : null;
+                return settings is not null && !settings.IsWatchdogEnabled;
+            }, TimeSpan.FromSeconds(2)));
+        }
+        finally
+        {
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WatchdogCheckpointRefreshReloadsTheList()
     {
         var watchdog = new FakeWatchdog();
@@ -663,6 +696,8 @@ public sealed class SaveManagerViewModelTests
 
         public ManualResetEventSlim? ReleaseStop { get; init; }
 
+        public bool ThrowOnStart { get; init; }
+
         public IDisposable BeginSlotMutation(int slotNumber)
         {
             SuppressedSlot = slotNumber;
@@ -678,7 +713,14 @@ public sealed class SaveManagerViewModelTests
             public void Dispose() { }
         }
 
-        public void Start() => Interlocked.Increment(ref _startCount);
+        public void Start()
+        {
+            Interlocked.Increment(ref _startCount);
+            if (ThrowOnStart)
+            {
+                throw new IOException("watcher setup failed");
+            }
+        }
 
         public void StopWatch()
         {

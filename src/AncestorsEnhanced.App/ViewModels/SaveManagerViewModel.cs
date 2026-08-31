@@ -599,11 +599,27 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 Volatile.Read(ref _watchdogDesiredEnabled) == 1;
             if (shouldRun)
             {
-                _watchdog!.Start();
+                try
+                {
+                    _watchdog!.Start();
+                }
+                catch (Exception exception)
+                {
+                    HandleWatchdogStartFailure(exception);
+                    return;
+                }
             }
             else
             {
-                _watchdog!.StopWatch();
+                try
+                {
+                    _watchdog!.StopWatch();
+                }
+                catch (Exception exception)
+                {
+                    ReportStatus("Auto-backup could not stop cleanly: " + exception.Message, "#E04D42");
+                    return;
+                }
             }
 
             int currentVersion = Volatile.Read(ref _watchdogLifecycleVersion);
@@ -613,6 +629,44 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             }
 
             observedVersion = currentVersion;
+        }
+    }
+
+    private void HandleWatchdogStartFailure(Exception exception)
+    {
+        void Update()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            // "Enabled" is a promise that a watcher exists. A startup failure must
+            // therefore correct both the visible toggle and the durable preference.
+            _loadingSettings = true;
+            try
+            {
+                IsWatchdogEnabled = false;
+            }
+            finally
+            {
+                _loadingSettings = false;
+            }
+
+            Volatile.Write(ref _watchdogDesiredEnabled, 0);
+            QueueWatchdogReconciliation();
+            SaveSettings();
+            StatusMessage = "Auto-backup was turned off because it could not start: " + exception.Message;
+            StatusAccent = "#E04D42";
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            Update();
+        }
+        else
+        {
+            _dispatchToUi(Update);
         }
     }
 

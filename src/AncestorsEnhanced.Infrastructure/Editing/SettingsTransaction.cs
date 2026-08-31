@@ -85,9 +85,10 @@ internal sealed class SettingsTransaction(
                 }
                 operationDirectory = SettingsBackupStore.Prepare(plan);
                 List<ConfigurationFileChangePlan> applied = [];
+                ToolChangeBaselineStore.BaselineCapture? baselineCapture = null;
                 try
                 {
-                    ToolChangeBaselineStore.CaptureBeforeApply(plan);
+                    baselineCapture = ToolChangeBaselineStore.CaptureBeforeApply(plan);
                     foreach (ConfigurationFileChangePlan file in plan.Files)
                     {
                         if (file.ResultExists)
@@ -128,7 +129,7 @@ internal sealed class SettingsTransaction(
                     List<string> rollbackFailures = RestoreFilesBestEffort(applied);
                     try
                     {
-                        ToolChangeBaselineStore.RollbackApplied(plan);
+                        ToolChangeBaselineStore.RollbackApplied(plan, baselineCapture);
                     }
                     catch (Exception exception) when (IsExpectedWriteException(exception))
                     {

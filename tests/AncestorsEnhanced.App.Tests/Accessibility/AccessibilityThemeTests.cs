@@ -95,9 +95,40 @@ public sealed class AccessibilityThemeTests
             StatusPresentation.BrushForLegacyAccent("#E04D42", application)).Color);
     }
 
+    [Fact]
+    public void StandardSidebarSubtitleMeetsNormalTextContrastOnItsRaisedSurface()
+    {
+        double contrast = ContrastRatio(
+            Color.Parse(AccessibilityTheme.StandardPalette["MutedTextBrush"]),
+            Color.Parse(AccessibilityTheme.StandardPalette["RaisedSurfaceBrush"]));
+
+        Assert.True(contrast >= 4.5, $"Expected at least 4.5:1 contrast, got {contrast:F2}:1.");
+    }
+
     private static Color ColorOf(Application application, string key)
     {
         var brush = Assert.IsType<SolidColorBrush>(application.Resources[key]);
         return brush.Color;
+    }
+
+    private static double ContrastRatio(Color foreground, Color background)
+    {
+        double foregroundLuminance = Luminance(foreground);
+        double backgroundLuminance = Luminance(background);
+        return (Math.Max(foregroundLuminance, backgroundLuminance) + 0.05) /
+               (Math.Min(foregroundLuminance, backgroundLuminance) + 0.05);
+    }
+
+    private static double Luminance(Color color)
+    {
+        static double Linearize(byte channel)
+        {
+            double normalized = channel / 255d;
+            return normalized <= 0.04045
+                ? normalized / 12.92
+                : Math.Pow((normalized + 0.055) / 1.055, 2.4);
+        }
+
+        return 0.2126 * Linearize(color.R) + 0.7152 * Linearize(color.G) + 0.0722 * Linearize(color.B);
     }
 }

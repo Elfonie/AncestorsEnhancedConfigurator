@@ -9,7 +9,7 @@ internal static class ToolChangeBaselineStore
 {
     private const string ManifestName = "baseline.json";
     private const string FilesDirectoryName = "files";
-    private const int ManifestVersion = 2;
+    private const int ManifestVersion = 3;
     private const int MaximumManifestSize = 1024 * 1024;
     // Keep the reader and writer bound identical.  The old reader-only limit could
     // silently discard a valid baseline after a larger apply operation.
@@ -101,7 +101,7 @@ internal static class ToolChangeBaselineStore
             Store: context.Store);
     }
 
-    public static void CaptureBeforeApply(SettingsChangePlan plan)
+    public static BaselineCapture CaptureBeforeApply(SettingsChangePlan plan)
     {
         string root = GetToolChangesRoot(plan.UserDataDirectory);
         ValidateConfigurationPath(plan.UserDataDirectory, root);
@@ -125,10 +125,11 @@ internal static class ToolChangeBaselineStore
         }
         if (plan.IsToolChangeRemoval)
         {
-            return;
+            return BaselineCapture.Empty;
         }
 
         List<BaselineFile> tracked = [.. manifest.Files];
+        var introducedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int newFiles = plan.Files.Count(file => !tracked.Any(candidate =>
             candidate.Target == file.Target &&
             string.Equals(candidate.FileName, file.FileName, StringComparison.OrdinalIgnoreCase)));
@@ -171,10 +172,13 @@ internal static class ToolChangeBaselineStore
                 file.OriginalSha256,
                 backupName,
                 file.Existed,
-                file.OriginalSha256));
+                file.OriginalSha256,
+                IsProvisional: true));
+            introducedKeys.Add(KeyFor(file.Target, file.FileName));
         }
 
         Write(plan.UserDataDirectory, manifest with { Version = ManifestVersion, Files = tracked });
+        return new BaselineCapture(introducedKeys);
     }
 
     public static void MarkApplied(SettingsChangePlan plan)
@@ -195,12 +199,13 @@ internal static class ToolChangeBaselineStore
             {
                 ToolStateExists = change.ResultExists,
                 ToolStateSha256 = Sha256(change.UpdatedContent),
+                IsProvisional = false,
             };
         }
         Write(plan.UserDataDirectory, manifest with { Version = ManifestVersion, Files = files });
     }
 
-    public static void RollbackApplied(SettingsChangePlan plan)
+    public static void RollbackApplied(SettingsChangePlan plan, BaselineCapture? capture = null)
     {
         BaselineManifest? manifest = Read(plan.UserDataDirectory);
         if (manifest is null)
@@ -217,6 +222,15 @@ internal static class ToolChangeBaselineStore
             {
                 continue;
             }
+
+            if (capture?.IntroducedKeys.Contains(KeyFor(change.Target, change.FileName)) == true ||
+                files[index].IsProvisional)
+            {
+                files.RemoveAll(file => file.Target == change.Target &&
+                    string.Equals(file.FileName, change.FileName, StringComparison.OrdinalIgnoreCase));
+                continue;
+            }
+
             files[index] = files[index] with
             {
                 ToolStateExists = change.Existed,
@@ -274,6 +288,14 @@ internal static class ToolChangeBaselineStore
                 ToolStateSha256 = interrupted.OriginalSha256,
             };
         }
+
+        // Capture happens before target mutation. An interrupted operation may
+        // therefore have durable records for files AEC never successfully owned.
+        // Recovery restored the target state above, so remove those provisional
+        // records instead of carrying false ownership into later sessions.
+        files.RemoveAll(file => file.IsProvisional && operation.Files.Any(interrupted =>
+            interrupted.Target == file.Target &&
+            string.Equals(interrupted.FileName, file.FileName, StringComparison.OrdinalIgnoreCase)));
 
         if (files.All(IsAtOriginalState))
         {
@@ -436,9 +458,12 @@ internal static class ToolChangeBaselineStore
         return $"{(int)target}-{fileName}.before";
     }
 
+    private static string KeyFor(SettingFileTarget target, string fileName) =>
+        $"{(int)target}:{fileName}";
+
     private static bool IsValid(BaselineManifest manifest)
     {
-        if (manifest.Version is not (1 or ManifestVersion) ||
+        if (manifest.Version is not (1 or 2 or ManifestVersion) ||
             string.IsNullOrWhiteSpace(manifest.ContextFingerprint) ||
             manifest.ContextFingerprint.Length > 256 ||
             manifest.Files.Count is < 1 or > MaximumTrackedFiles)
@@ -512,5 +537,11 @@ internal static class ToolChangeBaselineStore
         string OriginalSha256,
         string BackupName,
         bool ToolStateExists,
-        string ToolStateSha256);
+        string ToolStateSha256,
+        bool IsProvisional = false);
+
+    internal sealed record BaselineCapture(IReadOnlySet<string> IntroducedKeys)
+    {
+        public static BaselineCapture Empty { get; } = new(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+    }
 }

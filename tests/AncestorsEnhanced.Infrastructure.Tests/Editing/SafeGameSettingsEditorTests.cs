@@ -317,6 +317,34 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     }
 
     [Fact]
+    public void RollbackRemovesBaselineRecordsIntroducedOnlyByTheFailedApply()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        File.WriteAllText(gameIni, "[/Script/MoviePlayer.MoviePlayerSettings]\nbWaitForMoviesToComplete=True\n");
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        Assert.True(editor.Apply(editor.CreatePlan(snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
+
+        SettingsChangePlan failedPlan = editor.CreatePlan(snapshot,
+            [new SettingChangeRequest(
+                "Skip intro", "Game.ini", "/Script/MoviePlayer.MoviePlayerSettings",
+                "bWaitForMoviesToComplete", "False")]);
+        ToolChangeBaselineStore.BaselineCapture capture = ToolChangeBaselineStore.CaptureBeforeApply(failedPlan);
+        ToolChangeBaselineStore.RollbackApplied(failedPlan, capture);
+
+        File.WriteAllText(gameIni, "user-owned Game.ini content");
+        SettingsChangePlan removal = editor.CreateRemoveToolChangesPlan(snapshot);
+
+        ConfigurationFileChangePlan tracked = Assert.Single(removal.Files);
+        Assert.Equal("Engine.ini", tracked.FileName);
+    }
+
+    [Fact]
     public void RecoveryUsesManifestTimeAfterRemoveToolChanges()
     {
         string userData = CreateUserData();

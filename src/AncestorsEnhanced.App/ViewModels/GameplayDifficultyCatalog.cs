@@ -24,7 +24,7 @@ public static class GameplayDifficultyCatalog
         new("food", "Food required", "24 food portions for a full day · game default", "Higher is harder: each food portion restores a smaller share of the hunger meter. Normal hunger-bar decay still lasts one game day.", true),
         new("water", "Water required", "30 water portions for a full day · game default", "Higher is harder: each drink restores a smaller share of the thirst meter. Normal thirst-bar decay still lasts one game day.", true),
         new("sleep", "Sleep required", "16 sleep portions for a full day · game default", "Higher is harder: each sleep portion restores a smaller share of the fatigue meter. Normal fatigue-bar decay still lasts one game day.", true),
-        new("fall-damage", "Fall damage", "Minor 2.5% · Major 5% · game default", "Higher is harder: scales the verified minor and major fall-damage values as one paired control.", true),
+        new("fall-damage", "Minor & major fall damage", "Minor 2.5% · Major 5% · game default", "Higher is harder: changes only minor and major fall damage. Instant-death falls and fall-height thresholds are unchanged.", true),
         new("bleeding", "Bleeding", "Minor 1% · Major 2% health loss · game default", "Higher is harder: scales the verified minor and major bleeding health-loss values as one paired control.", true),
         new("poison", "Poison", "Minor 1% · Major 2% health loss · game default", "Higher is harder: scales the verified minor and major poisoning health-loss values as one paired control.", true),
     ];

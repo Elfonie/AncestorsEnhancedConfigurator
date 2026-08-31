@@ -83,9 +83,13 @@ public static class EditableSettingsCatalog
             ["r.LightShaftQuality"] = Toggle(defaultValue: true),
             ["r.Tonemapper.GrainQuantization"] = Toggle(defaultValue: true),
             ["r.Tonemapper.Quality"] = Quality(defaultValue: 5, maximum: 5),
+            ["r.RenderTargetPoolMin"] = Choice(
+                "400", ("300", "300 MB"), ("350", "350 MB"), ("400", "400 MB")),
             ["r.AmbientOcclusionRadiusScale"] = Number(1.5m, 0.1m, 5, 0.1m),
             ["r.AmbientOcclusionMaxQuality"] = Number(100, 0, 100, 5),
             ["r.AmbientOcclusionMipLevelFactor"] = Number(0.6m, 0.1m, 2, 0.1m),
+            ["r.FastBlurThreshold"] = Choice(
+                "3", ("0", "0"), ("2", "2"), ("3", "3")),
             ["r.Filter.SizeScale"] = Number(0.8m, 0.1m, 2, 0.05m),
 
             ["r.ShadowQuality"] = Quality(defaultValue: 4, maximum: 5),
@@ -101,6 +105,7 @@ public static class EditableSettingsCatalog
             ["r.DistanceFieldShadowing"] = Toggle(defaultValue: true),
             ["r.DistanceFieldAO"] = Toggle(defaultValue: true),
             ["r.VolumetricFog"] = Toggle(defaultValue: true),
+            ["r.LightFunctionQuality"] = Quality(defaultValue: 1, maximum: 1),
             ["r.Shadow.MaxCSMResolution"] = Choice(
                 "2048", ("512", "512 px"), ("1024", "1024 px"), ("2048", "2048 px"), ("4096", "4096 px")),
             ["r.Shadow.RadiusThreshold"] = Choice(

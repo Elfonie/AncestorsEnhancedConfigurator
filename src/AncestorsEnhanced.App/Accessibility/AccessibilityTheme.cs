@@ -34,7 +34,7 @@ public static class AccessibilityTheme
 
         // Text
         ["PrimaryTextBrush"] = "#E8E4D9",
-        ["MutedTextBrush"] = "#7A877A",
+        ["MutedTextBrush"] = "#7E8B7E",
         ["ControlTextBrush"] = "#C8CFC4",
         ["SecondaryTextBrush"] = "#9CB0BC",
         ["TechnicalTextBrush"] = "#71828D",

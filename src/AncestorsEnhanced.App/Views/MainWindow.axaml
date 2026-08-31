@@ -26,14 +26,14 @@
     <!-- Sidebar navigation -->
     <Border Grid.Column="0"
             x:Name="NavigationPane"
-            Width="176"
-            Padding="14,14"
+            Width="200"
+            Padding="20,22,18,22"
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
-      <StackPanel Grid.Row="0" Spacing="6">
-        <StackPanel Spacing="1" Margin="0,0,0,14">
+      <StackPanel Grid.Row="0" Spacing="5">
+        <StackPanel Spacing="1" Margin="0,0,0,18">
           <TextBlock Text="{Binding ProductName}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
           <TextBlock Text="Configurator" FontSize="12" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
         </StackPanel>
@@ -61,14 +61,26 @@
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
                       Content="Gameplay" />
+        <ToggleButton Classes="nav"
+                      Command="{Binding ShowProfilesCommand}"
+                      IsChecked="{Binding ShowProfilesView, Mode=OneWay}"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Left"
+                      Content="Profiles" />
       </StackPanel>
-      <StackPanel Grid.Row="2" Spacing="6">
+      <StackPanel Grid.Row="2" Spacing="5">
         <ToggleButton Classes="nav"
                       Command="{Binding ShowSettingsCommand}"
                       IsChecked="{Binding IsSettingsSectionActive, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left"
                       Content="Settings" />
+        <ToggleButton Classes="nav"
+                      Command="{Binding ShowDiagnosticsCommand}"
+                      IsChecked="{Binding ShowDiagnosticsView, Mode=OneWay}"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Left"
+                      Content="Diagnostics" />
       </StackPanel>
       </Grid>
     </Border>
@@ -76,7 +88,7 @@
     <!-- Content -->
     <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
     <Border Grid.Row="0" Grid.Column="1"
-            Padding="22,14"
+            Padding="30,18"
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,0,0,1">
@@ -98,9 +110,9 @@
     </Border>
 
     <ScrollViewer Grid.Row="1" Grid.Column="1">
-      <StackPanel Margin="22,18"
-                  Spacing="12"
-                  MaxWidth="1380"
+      <StackPanel Margin="30,26,30,72"
+                  Spacing="16"
+                  MaxWidth="1500"
                   HorizontalAlignment="Stretch">
 
         <StackPanel IsVisible="{Binding ShowHomeView}" Spacing="16">
@@ -140,14 +152,15 @@
             </Grid>
           </Border>
 
-          <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="12">
+          <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="12">
             <Border Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
               <StackPanel Spacing="5"><TextBlock Text="GRAPHICS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding HomeGraphicsSummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" /><Button Content="Change graphics" Command="{Binding ShowGraphicsCommand}" HorizontalAlignment="Left" /></StackPanel>
             </Border>
             <Border Grid.Column="1" Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
               <StackPanel Spacing="5">
                 <TextBlock Text="GAMEPLAY DIFFICULTY" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" />
-                <TextBlock Text="{Binding HomeGameplaySummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding HomeGameplayTitle}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding HomeGameplaySummary}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
                 <TextBlock Text="{Binding ExternalPakHelpText}" IsVisible="{Binding HasExternalPaks}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource GoldTextBrush}" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <Button Content="Adjust difficulty" Command="{Binding ShowGameplayCommand}" />
@@ -155,17 +168,17 @@
                 </StackPanel>
               </StackPanel>
             </Border>
-            <Border Grid.Row="1" Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Border Grid.Column="2" Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
               <StackPanel Spacing="5"><TextBlock Text="SAVES &amp; BACKUPS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding HomeSavesSummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" /><Button Content="Manage saves" Command="{Binding ShowSaveGamesCommand}" HorizontalAlignment="Left" /></StackPanel>
             </Border>
-            <Border Grid.Row="1" Grid.Column="1" Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-              <StackPanel Spacing="5"><TextBlock Text="CURRENT CHANGES" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding PendingSummary}" FontSize="16" FontWeight="SemiBold" /><TextBlock Text="{Binding PendingDetails}" IsVisible="{Binding HasPendingChanges}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" /></StackPanel>
+            <Border Grid.Row="1" Grid.ColumnSpan="3" Padding="14,11" CornerRadius="9" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1" IsVisible="{Binding HasPendingChanges}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14"><StackPanel Spacing="2"><TextBlock Text="CURRENT CHANGES" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding PendingSummary}" FontSize="15" FontWeight="SemiBold" /><TextBlock Text="{Binding PendingDetails}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" /></StackPanel><Button Grid.Column="1" Content="Review changes" Command="{Binding OpenReviewCommand}" VerticalAlignment="Center" /></Grid>
             </Border>
           </Grid>
         </StackPanel>
 
 
-        <StackPanel IsVisible="{Binding ShowGraphicsView}" Spacing="12">
+        <StackPanel IsVisible="{Binding ShowGraphicsView}" Spacing="16">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
           <Border Padding="14,10"
                   CornerRadius="7"
@@ -245,26 +258,47 @@
           <Button Content="Manage profiles" Command="{Binding ShowProfilesCommand}" />
         </StackPanel>
 
-        <Border Classes="SettingCard InteractiveCard" Padding="14,11">
+        <Border Classes="SettingCard InteractiveCard" Padding="16,14">
           <StackPanel Spacing="10">
             <Button Classes="CardHeader" Command="{Binding ToggleGraphicsPresetsCommand}" Padding="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsHitTestVisible="False">
                 <StackPanel Spacing="2">
-                  <TextBlock Text="Graphics setups and styles" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                  <TextBlock Text="Choose one hardware setup for a full quality baseline. Image-style adjustments can be added afterwards." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                  <TextBlock Text="Choose a graphics setup" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                  <TextBlock Text="First choose one performance baseline. Optional image styles can be added afterwards without replacing that baseline." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock Grid.Column="1" Text="{Binding GraphicsPresetsToggleLabel}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
               </Grid>
             </Button>
-            <StackPanel IsVisible="{Binding IsGraphicsPresetsExpanded}" Spacing="8">
-              <Grid>
-                <TextBlock Text="Hardware setups configure every Ancestors quality category plus core texture streaming and anti-aliasing. Do not combine hardware setups; image-style adjustments remain optional. Nothing is written until review." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
-              </Grid>
-              <ItemsControl ItemsSource="{Binding BuiltInGraphicsPresets}">
-                <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <StackPanel IsVisible="{Binding IsGraphicsPresetsExpanded}" Spacing="14">
+              <StackPanel Spacing="2">
+                <TextBlock Text="Performance baseline" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                <TextBlock Text="Pick one. These configure the game-quality baseline, texture streaming and anti-aliasing together." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding HardwareGraphicsPresets}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="220" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
-                    <Border Classes="PresetCard" Padding="12,9" Margin="0,0,8,6" MinHeight="132">
+                    <Border Classes="PresetCard" Padding="14,11" Margin="0,0,10,8" MinHeight="128" Width="210">
+                      <Grid RowDefinitions="*,Auto" RowSpacing="8">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                          <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button Grid.Row="1" Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Spacing="2">
+                <TextBlock Text="Optional image style" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                <TextBlock Text="These only adjust the look. They can be combined with one performance baseline." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding ImageStyleGraphicsPresets}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="220" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
+                    <Border Classes="PresetCard" Padding="14,11" Margin="0,0,10,0" MinHeight="116" Width="210">
                       <Grid RowDefinitions="*,Auto" RowSpacing="8">
                         <StackPanel Spacing="2">
                           <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
@@ -527,7 +561,7 @@
         </Border>
         </StackPanel>
 
-        <StackPanel IsVisible="{Binding ShowSaveGamesView}" Spacing="12">
+        <StackPanel IsVisible="{Binding ShowSaveGamesView}" Spacing="16">
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
               <StackPanel Spacing="2">
@@ -556,28 +590,26 @@
             </Grid>
           </Border>
 
-          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1"
+          <Border Classes="SettingCard" Padding="12,9" CornerRadius="7" BorderThickness="1"
                     IsVisible="{Binding IsSaveManagerAvailable}"
                     IsEnabled="{Binding SaveManager.CanConfigureAutoBackup}">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+            <Grid ColumnDefinitions="Auto,*,Auto,132,Auto" ColumnSpacing="12">
               <ToggleSwitch IsChecked="{Binding SaveManager.IsWatchdogEnabled, Mode=TwoWay}"
                              OffContent="Off" OnContent="On"
                              AutomationProperties.Name="Enable Auto-Backup"
                              VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Spacing="3">
+              <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
                 <TextBlock Text="Enable Auto-Backup" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
                 <TextBlock Text="Creates a checkpoint when the game saves."
                            FontSize="12" Foreground="{DynamicResource LabelTextBrush}" TextWrapping="Wrap" />
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" VerticalAlignment="Center">
-                  <TextBlock Text="Minimum time between auto-backups:" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
-                  <NumericUpDown Value="{Binding SaveManager.CooldownMinutes, Mode=TwoWay}"
-                                 Minimum="1" Maximum="1440" Increment="1"
-                                 IsEnabled="{Binding SaveManager.IsWatchdogEnabled}"
-                                 Width="94" MinWidth="94" HorizontalAlignment="Left"
-                                 ToolTip.Tip="Any whole number from 1 to 1440 minutes." />
-                  <TextBlock Text="min" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
-                </StackPanel>
               </StackPanel>
+              <TextBlock Grid.Column="2" Text="Minimum interval" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
+              <NumericUpDown Grid.Column="3" Value="{Binding SaveManager.CooldownMinutes, Mode=TwoWay}"
+                             Minimum="1" Maximum="1440" Increment="1"
+                             IsEnabled="{Binding SaveManager.IsWatchdogEnabled}"
+                             Width="132" MinWidth="132" HorizontalAlignment="Left"
+                             ToolTip.Tip="Any whole number from 1 to 1440 minutes." />
+              <TextBlock Grid.Column="4" Text="min" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
             </Grid>
           </Border>
 
@@ -712,7 +744,7 @@
             </StackPanel>
           </Border>
         </StackPanel>
-        <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="12">
+        <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="16">
           <Border Classes="SettingCard" Padding="14,11">
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Spacing="3">
@@ -728,7 +760,24 @@
           </Grid>
           </Border>
 
-          <StackPanel IsVisible="{Binding IsGameplaySimpleMode}" Spacing="12">
+          <Border Classes="SettingCard" Padding="14,11">
+            <StackPanel Spacing="2">
+              <TextBlock Text="Simple" IsVisible="{Binding IsGameplaySimpleMode}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
+              <TextBlock Text="Start with a preset, then adjust the six core survival and hazard controls." IsVisible="{Binding IsGameplaySimpleMode}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
+              <TextBlock Text="Advanced" IsVisible="{Binding IsGameplayAdvancedMode}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
+              <TextBlock Text="All core controls stay available here. Use the additional recovery, wound and exhaustion controls only when you need them." IsVisible="{Binding IsGameplayAdvancedMode}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
+            </StackPanel>
+          </Border>
+
+          <Border Padding="4" CornerRadius="7" Background="{DynamicResource RaisedSurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding IsGameplayAdvancedMode}">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton Classes="mode" Command="{Binding ShowGameplaySurvivalTabCommand}" IsChecked="{Binding IsGameplaySurvivalTab, Mode=OneWay}" Content="Survival" />
+              <ToggleButton Classes="mode" Command="{Binding ShowGameplayRecoveryTabCommand}" IsChecked="{Binding IsGameplayRecoveryTab, Mode=OneWay}" Content="Health &amp; recovery" />
+              <ToggleButton Classes="mode" Command="{Binding ShowGameplayResearchTabCommand}" IsChecked="{Binding IsGameplayResearchTab, Mode=OneWay}" Content="Research" />
+            </StackPanel>
+          </Border>
+
+          <StackPanel IsVisible="{Binding IsGameplaySimpleMode}">
             <Border Classes="SettingCard InteractiveCard" Padding="14,11" IsVisible="{Binding HasGameplayDifficultyPresets}">
               <StackPanel Spacing="10">
                 <Button Classes="CardHeader" Command="{Binding ToggleGameplayPresetsCommand}" Padding="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0">
@@ -761,7 +810,7 @@
             </Border>
           </StackPanel>
 
-          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding HasGameplaySimpleControls}">
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding ShowGameplayCoreControls}">
               <StackPanel Spacing="10">
                 <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
@@ -773,7 +822,7 @@
                   </Grid>
                 </Border>
                 <StackPanel Spacing="3">
-                  <TextBlock Text="Simple controls" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                  <TextBlock Text="Core survival controls" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
                   <TextBlock Text="{Binding GameplayControlRangeLabel}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding GameplaySimpleControls}">
@@ -799,7 +848,7 @@
           </Border>
 
           <StackPanel IsVisible="{Binding IsGameplayAdvancedMode}" Spacing="12">
-            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding HasGameplayAdvancedControls}">
+            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding IsGameplayRecoveryTab}">
               <StackPanel Spacing="10">
                 <StackPanel Spacing="3">
                   <TextBlock Text="Recovery &amp; wounds" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
@@ -826,7 +875,7 @@
                 </ItemsControl>
               </StackPanel>
             </Border>
-            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding HasGameplayResearchValues}">
+            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding IsGameplayResearchTab}">
               <StackPanel Spacing="10">
                 <StackPanel Spacing="3">
                   <TextBlock Text="Advanced values" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
@@ -867,7 +916,7 @@
             </StackPanel>
           </Border>
         </StackPanel>
-        <StackPanel IsVisible="{Binding ShowProfilesView}" Spacing="12">
+        <StackPanel IsVisible="{Binding ShowProfilesView}" Spacing="16">
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
               <StackPanel Spacing="3">
@@ -1000,7 +1049,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </StackPanel>
-        <StackPanel IsVisible="{Binding ShowSettingsView}" Spacing="12">
+        <StackPanel IsVisible="{Binding ShowSettingsView}" Spacing="16">
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <StackPanel Spacing="3">
               <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
@@ -1062,7 +1111,7 @@
                             VerticalAlignment="Center" />
               <StackPanel Grid.Column="1" Spacing="3">
                 <TextBlock Text="Enable experimental graphics settings" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
-                <TextBlock Text="Shows rarely useful renderer controls in Graphics › Advanced. They may have little visible effect, need game-specific testing, or trade image quality for performance." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Shows 19 additional renderer controls in Graphics › Advanced; it does not change any value by itself. These controls may have little visible effect, need game-specific testing, or trade image quality for performance." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
               </StackPanel>
             </Grid>
           </Border>
@@ -1105,7 +1154,7 @@
             </StackPanel>
           </Border>
         </StackPanel>
-        <StackPanel IsVisible="{Binding ShowDiagnosticsView}" Spacing="12">
+        <StackPanel IsVisible="{Binding ShowDiagnosticsView}" Spacing="16">
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
               <StackPanel Spacing="3">
@@ -1192,11 +1241,11 @@
 
     <Border Grid.Row="2" Grid.Column="1"
             IsVisible="{Binding ShowBottomBar}"
-            Padding="16,10"
+            Padding="18,12"
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,1,0,0">
-      <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
         <StackPanel Spacing="1" VerticalAlignment="Center">
           <StackPanel IsVisible="{Binding !ShowGameplayView}" Spacing="1">
             <TextBlock Text="{Binding PendingSummary}"
@@ -1223,7 +1272,7 @@
                      FontSize="12"
                      Foreground="{Binding OperationBrush}" />
         </StackPanel>
-        <WrapPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+        <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Button Command="{Binding RestoreGameDefaultsCommand}"
                   IsEnabled="{Binding CanRestoreGameDefaults}"
                   IsVisible="{Binding ShowGraphicsView}"

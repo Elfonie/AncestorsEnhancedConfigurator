@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
@@ -133,10 +134,13 @@ public sealed class SystemHardwareProbe : IHardwareProbe
     {
         try
         {
-            _ = includeDetailedGraphics;
             ProcessorInventory processor = ReadProcessor();
             ulong? installedMemory = ReadInstalledMemory();
             GraphicsAdapterSnapshot[] adapters = ReadGraphicsAdapters();
+            if (includeDetailedGraphics)
+            {
+                adapters = MergeDetailedGraphicsAdapters(adapters, ReadDxDiagGraphicsAdapters());
+            }
             return new(
                 global::System.Environment.OSVersion.VersionString,
                 processor.Name,
@@ -146,7 +150,9 @@ public sealed class SystemHardwareProbe : IHardwareProbe
                 adapters,
                 adapters.Any(adapter => adapter.IsMemoryAuthoritative)
                     ? null
-                    : "Windows did not report dedicated GPU memory through DXGI. No automatic graphics recommendation was made.");
+                    : includeDetailedGraphics
+                        ? "Windows did not report dedicated GPU memory through DXGI or the bounded DxDiag scan. No automatic graphics recommendation was made."
+                        : "Windows did not report dedicated GPU memory through DXGI. You can run the detailed hardware scan for a second, bounded source.");
         }
         catch (Exception exception) when (exception is UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
@@ -298,6 +304,85 @@ public sealed class SystemHardwareProbe : IHardwareProbe
             .OrderBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray()
             ?? [];
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static GraphicsAdapterSnapshot[] ReadDxDiagGraphicsAdapters()
+    {
+        string reportPath = Path.Combine(Path.GetTempPath(), $"aec-dxdiag-{Guid.NewGuid():N}.xml");
+        Process? process = null;
+        try
+        {
+            process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "dxdiag.exe",
+                Arguments = $"/x \"{reportPath}\" /whql:off",
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            });
+            if (process is null || !process.WaitForExit(5000) || process.ExitCode != 0 || !File.Exists(reportPath))
+            {
+                return [];
+            }
+
+            FileInfo report = new(reportPath);
+            if (report.Length is <= 0 or > 8 * 1024 * 1024)
+            {
+                return [];
+            }
+
+            return ParseDxDiagXml(File.ReadAllText(reportPath));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or XmlException)
+        {
+            return [];
+        }
+        finally
+        {
+            if (process is { HasExited: false })
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(500);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+                {
+                }
+            }
+
+            process?.Dispose();
+            try
+            {
+                File.Delete(reportPath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    internal static GraphicsAdapterSnapshot[] MergeDetailedGraphicsAdapters(
+        IReadOnlyList<GraphicsAdapterSnapshot> ordinary,
+        IReadOnlyList<GraphicsAdapterSnapshot> detailed)
+    {
+        var merged = new Dictionary<string, GraphicsAdapterSnapshot>(StringComparer.OrdinalIgnoreCase);
+        foreach (GraphicsAdapterSnapshot adapter in ordinary)
+        {
+            merged[adapter.Name] = adapter;
+        }
+
+        foreach (GraphicsAdapterSnapshot adapter in detailed)
+        {
+            if (!merged.TryGetValue(adapter.Name, out GraphicsAdapterSnapshot? existing) ||
+                (!existing.IsMemoryAuthoritative && adapter.IsMemoryAuthoritative))
+            {
+                merged[adapter.Name] = adapter;
+            }
+        }
+
+        return merged.Values.OrderBy(adapter => adapter.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static ulong? ParseDxDiagMemory(string? value)

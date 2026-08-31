@@ -10,7 +10,7 @@
     <SolidColorBrush x:Key="BorderBrush" Color="#2A332A" />
     <!-- Text colors -->
     <SolidColorBrush x:Key="PrimaryTextBrush" Color="#E8E4D9" />
-    <SolidColorBrush x:Key="MutedTextBrush" Color="#7A877A" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#7E8B7E" />
     <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#1A221A" />
     <SolidColorBrush x:Key="ControlBorderBrush" Color="#3A4A2E" />
     <SolidColorBrush x:Key="ControlTextBrush" Color="#C8CFC4" />

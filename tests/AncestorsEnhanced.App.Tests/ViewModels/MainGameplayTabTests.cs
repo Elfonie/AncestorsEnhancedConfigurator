@@ -44,6 +44,8 @@ public sealed class MainGameplayTabTests
         viewModel.ShowProfilesCommand.Execute(null);
 
         Assert.True(viewModel.ShowProfilesView);
+        Assert.False(viewModel.IsGraphicsSectionActive);
+        Assert.Equal("Profiles", viewModel.PageContextLabel);
         Assert.False(viewModel.ShowGraphicsView);
         Assert.False(viewModel.ShowSaveGamesView);
         Assert.False(viewModel.ShowGameplayView);
@@ -87,6 +89,8 @@ public sealed class MainGameplayTabTests
         viewModel.ShowDiagnosticsCommand.Execute(null);
 
         Assert.True(viewModel.ShowDiagnosticsView);
+        Assert.False(viewModel.IsSettingsSectionActive);
+        Assert.Equal("Diagnostics", viewModel.PageContextLabel);
         Assert.False(viewModel.ShowGraphicsView);
         Assert.False(viewModel.ShowSaveGamesView);
         Assert.False(viewModel.ShowGameplayView);
@@ -141,8 +145,20 @@ public sealed class MainGameplayTabTests
 
         Assert.True(viewModel.IsGameplayAdvancedMode);
         Assert.False(viewModel.IsGameplaySimpleMode);
+        Assert.True(viewModel.IsGameplaySurvivalTab);
+        Assert.True(viewModel.ShowGameplayCoreControls);
         Assert.Equal(9, viewModel.GameplayAdvancedControls.Count);
         Assert.Equal(3, viewModel.GameplayResearchValues.Count);
+
+        viewModel.ShowGameplayRecoveryTabCommand.Execute(null);
+        Assert.True(viewModel.IsGameplayRecoveryTab);
+        Assert.False(viewModel.ShowGameplayCoreControls);
+
+        viewModel.ShowGameplayResearchTabCommand.Execute(null);
+        Assert.True(viewModel.IsGameplayResearchTab);
+
+        viewModel.ShowGameplaySurvivalTabCommand.Execute(null);
+        Assert.True(viewModel.IsGameplaySurvivalTab);
 
         GameplayDifficultyPresetViewModel survival = Assert.Single(viewModel.GameplayDifficultyPresets, preset => preset.Name == "Survival");
         viewModel.SelectGameplayPresetCommand.Execute(survival);
@@ -380,6 +396,8 @@ public sealed class MainGameplayTabTests
         Assert.Equal(1, gameplayEditor.ApplyCalls);
         Assert.False(viewModel.IsReviewingChanges);
         Assert.Equal(120, gameplayEditor.State.Settings.FoodPercent);
+        Assert.Equal("Custom gameplay difficulty active", viewModel.HomeGameplayTitle);
+        Assert.Equal("1 custom value · Open Gameplay to review the values.", viewModel.HomeGameplaySummary);
     }
 
     [Fact]

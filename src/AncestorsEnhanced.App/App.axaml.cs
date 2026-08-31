@@ -222,6 +222,13 @@ public partial class App : Application
             var exitMenuItem = new NativeMenuItem { Header = "Exit" };
             exitMenuItem.Click += (_, _) =>
             {
+                if (viewModel.IsAnyOperationRunning)
+                {
+                    ShowWindow();
+                    viewModel.ReportExitBlockedWhileOperationRuns();
+                    return;
+                }
+
                 exitingFromTray = true;
                 trayIcon.IsVisible = false;
                 window.Close();
@@ -232,6 +239,17 @@ public partial class App : Application
             };
             window.Closing += (_, eventArgs) =>
             {
+                if (viewModel.IsAnyOperationRunning)
+                {
+                    eventArgs.Cancel = true;
+                    exitingFromTray = false;
+                    trayIcon.IsVisible = false;
+                    window.Show();
+                    window.Activate();
+                    viewModel.ReportExitBlockedWhileOperationRuns();
+                    return;
+                }
+
                 if (!exitingFromTray && viewModel.ShouldKeepRunningInTrayOnClose)
                 {
                     eventArgs.Cancel = true;
@@ -239,11 +257,13 @@ public partial class App : Application
                     window.Hide();
                 }
             };
-            window.Opened += async (_, _) =>
+            window.Opened += (_, _) =>
             {
                 windowOpened = true;
                 SetDiscordRichPresence(preferences.DiscordRichPresenceEnabled);
-                await viewModel.InitializeAsync();
+                // Let Avalonia paint the shell before the read-only game and save scan starts.
+                // The scan still completes before any edit action becomes available.
+                Dispatcher.UIThread.Post(async () => await viewModel.InitializeAsync(), DispatcherPriority.Background);
             };
             int retryCount = 0;
             const int MaxAutomaticRetries = 3;
