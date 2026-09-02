@@ -1,5 +1,6 @@
 using AncestorsEnhanced.Core;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Parsing;
@@ -14,15 +15,17 @@ internal sealed class SteamInstallationLocator(
     {
         List<GameInstallationSnapshot> installations = [];
         HashSet<string> visitedLibraries = new(PathComparer);
-        foreach (string steamRoot in environment.GetSteamRootCandidates())
+        foreach (string rawSteamRoot in environment.GetSteamRootCandidates())
         {
+            string steamRoot = ConfigurationFileOperations.ResolvePhysicalPath(rawSteamRoot);
             if (!fileSystem.DirectoryExists(steamRoot))
             {
                 continue;
             }
 
-            foreach (string libraryRoot in GetLibraries(steamRoot, notices))
+            foreach (string rawLibraryRoot in GetLibraries(steamRoot, notices))
             {
+                string libraryRoot = ConfigurationFileOperations.ResolvePhysicalPath(rawLibraryRoot);
                 if (!visitedLibraries.Add(libraryRoot))
                 {
                     continue;
@@ -43,8 +46,9 @@ internal sealed class SteamInstallationLocator(
 
     private IReadOnlyList<string> GetLibraries(string steamRoot, List<InspectionNotice> notices)
     {
-        List<string> libraries = [Path.GetFullPath(steamRoot)];
-        string libraryFile = Path.Combine(steamRoot, "steamapps", "libraryfolders.vdf");
+        string canonicalSteamRoot = ConfigurationFileOperations.ResolvePhysicalPath(steamRoot);
+        List<string> libraries = [canonicalSteamRoot];
+        string libraryFile = Path.Combine(canonicalSteamRoot, "steamapps", "libraryfolders.vdf");
         if (!fileSystem.FileExists(libraryFile))
         {
             notices.Add(new InspectionNotice(
@@ -84,8 +88,8 @@ internal sealed class SteamInstallationLocator(
                 {
                     // Never resolve a relative library path against the process working
                     // directory; resolve it against the Steam root instead.
-                    libraries.Add(Path.GetFullPath(
-                        Path.IsPathRooted(path) ? path : Path.Combine(steamRoot, path)));
+                    string candidatePath = Path.IsPathRooted(path) ? path : Path.Combine(canonicalSteamRoot, path);
+                    libraries.Add(ConfigurationFileOperations.ResolvePhysicalPath(candidatePath));
                 }
             }
         }
@@ -104,8 +108,9 @@ internal sealed class SteamInstallationLocator(
         string libraryRoot,
         List<InspectionNotice> notices)
     {
+        string canonicalLibraryRoot = ConfigurationFileOperations.ResolvePhysicalPath(libraryRoot);
         string manifestPath = Path.Combine(
-            libraryRoot,
+            canonicalLibraryRoot,
             "steamapps",
             $"appmanifest_{AncestorsGameProfile.SteamAppId}.acf");
         if (!fileSystem.FileExists(manifestPath))
@@ -140,8 +145,8 @@ internal sealed class SteamInstallationLocator(
                 return null;
             }
 
-            string installDirectory = Path.GetFullPath(Path.Combine(
-                libraryRoot,
+            string installDirectory = ConfigurationFileOperations.ResolvePhysicalPath(Path.Combine(
+                canonicalLibraryRoot,
                 "steamapps",
                 "common",
                 installName!));
@@ -161,7 +166,7 @@ internal sealed class SteamInstallationLocator(
                 environment.Host == HostKind.Linux
                     ? CompatibilityLayerKind.Proton
                     : CompatibilityLayerKind.None,
-                libraryRoot,
+                canonicalLibraryRoot,
                 installDirectory,
                 appState?.GetString("buildid"),
                 executableExists,

@@ -498,9 +498,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public bool ShowDiagnosticsView => IsDiagnosticsView;
 
+    public bool IsHomeSectionActive => ShowHomeView;
+
     public bool IsGraphicsSectionActive => ShowGraphicsView;
 
-    public bool IsSettingsSectionActive => IsSettingsView;
+    public bool IsSaveGamesSectionActive => ShowSaveGamesView;
+
+    public bool IsGameplaySectionActive => ShowGameplayView;
+
+    public bool IsProfilesSectionActive => ShowProfilesView;
+
+    public bool IsSettingsSectionActive => ShowSettingsView;
+
+    public bool IsDiagnosticsSectionActive => ShowDiagnosticsView;
 
     public string PageContextLabel => IsProfilesView
         ? "Profiles"
@@ -607,6 +617,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsAnyOperationRunning));
         OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
         OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRemoveToolChanges));
+        OnPropertyChanged(nameof(CanEditSettings));
+        OnPropertyChanged(nameof(CanRestoreGameDefaults));
         OnPropertyChanged(nameof(CanReviewGameplay));
         OnPropertyChanged(nameof(CanResetGameplay));
         OnPropertyChanged(nameof(CanEditGameplay));
@@ -1460,6 +1475,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     }
     private void UpdateViewVisibility()
     {
+        CloseReview();
         OnPropertyChanged(nameof(ShowHomeView));
         OnPropertyChanged(nameof(ShowGraphicsView));
         OnPropertyChanged(nameof(ShowSaveGamesView));
@@ -1467,8 +1483,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowProfilesView));
         OnPropertyChanged(nameof(ShowSettingsView));
         OnPropertyChanged(nameof(ShowDiagnosticsView));
+        OnPropertyChanged(nameof(IsHomeSectionActive));
         OnPropertyChanged(nameof(IsGraphicsSectionActive));
+        OnPropertyChanged(nameof(IsSaveGamesSectionActive));
+        OnPropertyChanged(nameof(IsGameplaySectionActive));
+        OnPropertyChanged(nameof(IsProfilesSectionActive));
         OnPropertyChanged(nameof(IsSettingsSectionActive));
+        OnPropertyChanged(nameof(IsDiagnosticsSectionActive));
         OnPropertyChanged(nameof(PageContextLabel));
         OnPropertyChanged(nameof(ShowBottomBar));
     }
@@ -1556,6 +1577,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         _highContrastChanged?.Invoke(value);
     }
+
+    [RelayCommand]
+    private void ToggleHighContrast() => IsHighContrastEnabled = !IsHighContrastEnabled;
 
     partial void OnIsDiscordRichPresenceEnabledChanged(bool value) =>
         _discordRichPresenceChanged?.Invoke(value);
@@ -1996,6 +2020,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+        OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        OnPropertyChanged(nameof(CanStageHardwareRecommendation));
         OnPropertyChanged(nameof(CanReviewGameplay));
         OnPropertyChanged(nameof(CanResetGameplay));
         OnPropertyChanged(nameof(CanEditGameplay));
@@ -2427,6 +2454,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(ShowPendingActions));
+        OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
         OnPropertyChanged(nameof(HasCustomProfileSettings));
         OnPropertyChanged(nameof(CanSaveProfile));
@@ -2611,6 +2639,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanResetGameplay));
         OnPropertyChanged(nameof(CanEditGameplay));
         OnPropertyChanged(nameof(GameplayReviewButtonLabel));
+        OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(HomeGameplayTitle));
         OnPropertyChanged(nameof(HomeGameplaySummary));
         OnPropertyChanged(nameof(ShowBottomBar));

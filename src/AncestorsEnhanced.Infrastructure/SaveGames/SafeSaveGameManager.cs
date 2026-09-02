@@ -284,7 +284,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 Sha256(checkpoint));
             try
             {
-                CompareAndReplace(slotPath, checkpoint, expectedSha256, expectedExists);
+                CompareAndReplace(slotPath, checkpoint, expectedSha256, expectedExists, _userDataDirectory);
             }
             catch
             {
@@ -323,7 +323,8 @@ public sealed class SafeSaveGameManager : ISaveGameManager
             return new SaveGameOperationResult(
                 true,
                 $"Loaded checkpoint for slot {slot + 1}. Start Ancestors to continue.",
-                CommitState: SaveOperationCommitState.Committed);
+                safetyCheckpointId,
+                SaveOperationCommitState.Committed);
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {

@@ -358,12 +358,16 @@ internal static class SettingsBackupStore
                 expectedExistingHashes.Add(file.ResultSha256);
             }
             bool hasSidecar = ValidateInterruptedTargetRecovery(targetPath, expectedExistingHashes);
+            string trustedRoot = file.Target == SettingFileTarget.Pak
+                ? context.InstallDirectory!
+                : context.UserDataDirectory;
             files.Add(new RecoveryFile(
                 file,
                 targetPath,
                 expectedExistingHashes,
                 hasSidecar,
-                RecoveryTargetState.Foreign));
+                RecoveryTargetState.Foreign,
+                trustedRoot));
         }
         return files;
     }
@@ -420,11 +424,12 @@ internal static class SettingsBackupStore
                     recovery.TargetPath,
                     original,
                     file.ResultExists ? file.ResultSha256 : null,
-                    file.ResultExists);
+                    file.ResultExists,
+                    recovery.TrustedRoot);
             }
             else if (file.ResultExists)
             {
-                CompareAndDelete(recovery.TargetPath, file.ResultSha256);
+                CompareAndDelete(recovery.TargetPath, file.ResultSha256, recovery.TrustedRoot);
             }
 
             if (ReadTargetState(recovery.TargetPath, file) != RecoveryTargetState.Original)
@@ -676,4 +681,5 @@ internal sealed record RecoveryFile(
     string TargetPath,
     IReadOnlyCollection<string> ExpectedExistingHashes,
     bool HasSidecar,
-    RecoveryTargetState State);
+    RecoveryTargetState State,
+    string? TrustedRoot = null);

@@ -1,4 +1,5 @@
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Infrastructure.Editing;
 
 namespace AncestorsEnhanced.Infrastructure.Environment;
 
@@ -48,7 +49,7 @@ internal sealed class LinuxHostEnvironment : IHostEnvironment
     {
         try
         {
-            return Path.GetFullPath(path);
+            return ConfigurationFileOperations.ResolvePhysicalPath(path);
         }
         catch (Exception exception) when (
             exception is IOException or ArgumentException or NotSupportedException)

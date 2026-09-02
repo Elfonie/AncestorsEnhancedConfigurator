@@ -1,4 +1,5 @@
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Inspection;
@@ -536,6 +537,84 @@ public sealed class ReadOnlyAncestorsInspectorTests
         Assert.Equal(CompatibilityLayerKind.Proton, gog.CompatibilityLayer);
     }
 
+    [Fact]
+    public void InspectDeduplicatesLinuxSteamSymlinkAliasesAndAllowsSafeMutation()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string realSteam = temporaryDirectory.CreateDirectory("RealSteam");
+        CreateValidInstallation(realSteam);
+        string saved = CreateProtonSaved(realSteam, "steamuser");
+        CreateSteamLibraryList(realSteam, realSteam);
+
+        string aliasRoot1 = Path.Combine(temporaryDirectory.FullPath, "steam_alias_root");
+        string aliasRoot2 = Path.Combine(temporaryDirectory.FullPath, "steam_alias_steam");
+
+        if (!TryCreateLink(aliasRoot1, realSteam))
+        {
+            return; // Link creation unavailable in current test environment
+        }
+
+        List<string> steamRoots = [aliasRoot1, realSteam];
+        if (TryCreateLink(aliasRoot2, realSteam))
+        {
+            steamRoots.Add(aliasRoot2);
+        }
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment(steamRoots, null, HostKind.Linux)).Inspect();
+
+        Assert.NotNull(snapshot.Installation);
+        Assert.DoesNotContain(snapshot.Notices, notice => notice.Code == "game.multiple-installations");
+        Assert.Equal(ConfigurationFileOperations.ResolvePhysicalPath(realSteam), snapshot.Installation.LibraryRoot);
+        string expectedInstall = ConfigurationFileOperations.ResolvePhysicalPath(
+            Path.Combine(realSteam, "steamapps", "common", "Ancestors The Humankind Odyssey"));
+        Assert.Equal(expectedInstall, snapshot.Installation.InstallDirectory);
+        Assert.Equal(ConfigurationFileOperations.ResolvePhysicalPath(saved), snapshot.UserDataDirectory);
+
+        // Verify that a safe mutation through the detected installation succeeds and
+        // does not fail ValidateMutationDirectory due to symlink aliases above the canonical root.
+        string configDir = Path.Combine(snapshot.UserDataDirectory!, "Config", "WindowsNoEditor");
+        Directory.CreateDirectory(configDir);
+        string iniPath = Path.Combine(configDir, "Engine.ini");
+        byte[] content = [1, 2, 3];
+        ConfigurationFileOperations.WriteBytesAtomically(iniPath, content, snapshot.UserDataDirectory!);
+        Assert.Equal(content, File.ReadAllBytes(iniPath));
+    }
+
+    private static bool TryCreateLink(string linkPath, string targetPath)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(linkPath, targetPath);
+            return Directory.Exists(linkPath);
+        }
+        catch
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $"/c mklink /J \"{linkPath}\" \"{targetPath}\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                    });
+                    process?.WaitForExit();
+                    return process?.ExitCode == 0 && Directory.Exists(linkPath);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+    }
+
     private sealed class TemporaryDirectory : IDisposable
     {
         public TemporaryDirectory()
@@ -551,6 +630,23 @@ public sealed class ReadOnlyAncestorsInspectorTests
 
         public void Dispose()
         {
+            try
+            {
+                if (Directory.Exists(FullPath))
+                {
+                    foreach (string entry in Directory.EnumerateDirectories(FullPath, "*", SearchOption.AllDirectories))
+                    {
+                        if (File.GetAttributes(entry).HasFlag(FileAttributes.ReparsePoint))
+                        {
+                            Directory.Delete(entry);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
             Directory.Delete(FullPath, recursive: true);
             GC.SuppressFinalize(this);
         }

@@ -58,6 +58,18 @@ public sealed class DiagnosticsReportBuilderTests
     }
 
     [Fact]
+    public void RedactPathRedactsSteamIdInUserdataPath()
+    {
+        Assert.Equal(
+            @"C:\Program Files (x86)\Steam\userdata\<steamid>\536270\remote\System.sav",
+            DiagnosticsReportBuilder.RedactPath(@"C:\Program Files (x86)\Steam\userdata\123456789\536270\remote\System.sav"));
+
+        Assert.Equal(
+            "/home/<user>/.local/share/Steam/userdata/<steamid>/536270/remote/System.sav",
+            DiagnosticsReportBuilder.RedactPath("/home/myuser/.local/share/Steam/userdata/987654321/536270/remote/System.sav"));
+    }
+
+    [Fact]
     public void BuildRedactsCustomAbsolutePathsFromFieldsAndInspectionNotes()
     {
         string report = DiagnosticsReportBuilder.Build(

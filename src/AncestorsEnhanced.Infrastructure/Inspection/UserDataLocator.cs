@@ -1,5 +1,6 @@
 using AncestorsEnhanced.Core;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 
@@ -15,14 +16,17 @@ internal sealed class UserDataLocator(
     {
         if (installation is { Host: HostKind.Linux })
         {
+            string canonicalLibrary = ConfigurationFileOperations.ResolvePhysicalPath(installation.LibraryRoot);
             string? prefix = installation.Store == StoreKind.Steam
                 ? Path.Combine(
-                    installation.LibraryRoot,
+                    canonicalLibrary,
                     "steamapps",
                     "compatdata",
                     AncestorsGameProfile.SteamAppId,
                     "pfx")
-                : installation.CompatibilityPrefixPath;
+                : (installation.CompatibilityPrefixPath is not null
+                    ? ConfigurationFileOperations.ResolvePhysicalPath(installation.CompatibilityPrefixPath)
+                    : null);
             if (string.IsNullOrWhiteSpace(prefix))
             {
                 notices.Add(new InspectionNotice(
@@ -44,7 +48,7 @@ internal sealed class UserDataLocator(
                     .ToArray();
                 if (candidates.Length == 1)
                 {
-                    return candidates[0];
+                    return ConfigurationFileOperations.ResolvePhysicalPath(candidates[0]);
                 }
 
                 if (candidates.Length > 1)
@@ -73,10 +77,10 @@ internal sealed class UserDataLocator(
             return null;
         }
 
-        string userDataDirectory = Path.Combine(
+        string userDataDirectory = ConfigurationFileOperations.ResolvePhysicalPath(Path.Combine(
             environment.LocalApplicationDataPath,
             "Ancestors",
-            "Saved");
+            "Saved"));
         if (!fileSystem.DirectoryExists(userDataDirectory))
         {
             notices.Add(new InspectionNotice(

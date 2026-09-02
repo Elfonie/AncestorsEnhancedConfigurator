@@ -51,6 +51,17 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     public partial IReadOnlyList<SaveGameSlotViewModel> Slots { get; set; } = [];
 
     [ObservableProperty]
+    public partial SaveGameSlotViewModel? SelectedSlot { get; set; }
+
+    partial void OnSelectedSlotChanged(SaveGameSlotViewModel? value)
+    {
+        foreach (var slot in Slots)
+        {
+            slot.IsSelected = (slot == value);
+        }
+    }
+
+    [ObservableProperty]
     public partial bool IsBusy { get; set; }
 
     [ObservableProperty]
@@ -230,6 +241,11 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 favoriteMetadataChanged: (checkpoint, metadata) => SaveCheckpointMetadata(checkpoint, metadata, requireDurableFavorite: true),
                 existingCheckpoints: existingCheckpointsBySlot.GetValueOrDefault(slot.SlotNumber)))
             .ToArray();
+
+        string? previousSelectedSlotNumber = SelectedSlot?.SlotNumber;
+        SelectedSlot = Slots.FirstOrDefault(s => s.SlotNumber == previousSelectedSlotNumber)
+            ?? Slots.FirstOrDefault(s => s.HasSave)
+            ?? (Slots.Count > 0 ? Slots[0] : null);
 
         RemoveMetadataForMissingCheckpoints(snapshot);
         ApplyCheckpointFilter();
@@ -540,6 +556,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
     {
         void Update()
         {
+            if (_disposed) return;
             StatusMessage = $"Auto-backup watch failed: {message}";
             StatusAccent = "#E04D42";
         }
@@ -918,6 +935,7 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         // Watchdog events arrive on a worker thread; UI state changes run on the UI thread.
         void Refresh()
         {
+            if (_disposed) return;
             Interlocked.Increment(ref _watchdogRefreshVersion);
             if (_watchdogRefreshTask is null || _watchdogRefreshTask.IsCompleted)
             {
@@ -1058,6 +1076,15 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
         if (staleKeys.Length > 0)
         {
             SaveSettings();
+        }
+    }
+
+    [RelayCommand]
+    public void SelectSlot(SaveGameSlotViewModel? slot)
+    {
+        if (slot is not null)
+        {
+            SelectedSlot = slot;
         }
     }
 

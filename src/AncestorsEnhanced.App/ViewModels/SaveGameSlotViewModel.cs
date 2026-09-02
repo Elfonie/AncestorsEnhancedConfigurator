@@ -1,5 +1,6 @@
 using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace AncestorsEnhanced.App.ViewModels;
@@ -12,6 +13,9 @@ public partial class SaveGameSlotViewModel : ViewModelBase
     private readonly Func<bool> _canMutate;
     private readonly bool _exists;
     private bool _showAllCheckpoints;
+
+    [ObservableProperty]
+    public partial bool IsSelected { get; set; }
 
     public SaveGameSlotViewModel(
         SaveGameSlotSnapshot slot,

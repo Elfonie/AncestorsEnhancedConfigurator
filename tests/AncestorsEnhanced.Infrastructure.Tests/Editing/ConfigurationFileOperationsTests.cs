@@ -185,4 +185,157 @@ public sealed class ConfigurationFileOperationsTests
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    [Fact]
+    public void ResolvePhysicalPathNormalizesOrdinaryAndNonExistentPaths()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "ordinary-folder", "file.txt");
+        string resolved = ConfigurationFileOperations.ResolvePhysicalPath(path);
+        Assert.Equal(Path.GetFullPath(path), resolved);
+    }
+
+    [Fact]
+    public void ResolvePhysicalPathResolvesSymlinkOrJunction()
+    {
+        string baseDir = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), $"aec-res-test-{Guid.NewGuid():N}")).FullName;
+        try
+        {
+            string targetDir = Directory.CreateDirectory(Path.Combine(baseDir, "target")).FullName;
+            string subDir = Directory.CreateDirectory(Path.Combine(targetDir, "sub")).FullName;
+            string linkDir = Path.Combine(baseDir, "link");
+
+            if (!TryCreateLink(linkDir, targetDir))
+            {
+                return; // Symlinks/junctions not supported in current test context
+            }
+
+            string resolvedLink = ConfigurationFileOperations.ResolvePhysicalPath(linkDir);
+            Assert.Equal(Path.GetFullPath(targetDir), resolvedLink);
+
+            string resolvedSub = ConfigurationFileOperations.ResolvePhysicalPath(Path.Combine(linkDir, "sub"));
+            Assert.Equal(Path.GetFullPath(subDir), resolvedSub);
+        }
+        finally
+        {
+            TryDeleteDirectoryTree(baseDir);
+        }
+    }
+
+    [Fact]
+    public void ValidateMutationDirectoryAllowsWritingWhenParentIsSymlinkAboveTrustedRoot()
+    {
+        string baseDir = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), $"aec-parent-link-{Guid.NewGuid():N}")).FullName;
+        try
+        {
+            string realRoot = Directory.CreateDirectory(Path.Combine(baseDir, "realRoot")).FullName;
+            string gameDir = Directory.CreateDirectory(Path.Combine(realRoot, "game")).FullName;
+            string linkRoot = Path.Combine(baseDir, "linkRoot");
+
+            if (!TryCreateLink(linkRoot, realRoot))
+            {
+                return;
+            }
+
+            // A path that went through linkRoot points into the game
+            string targetThroughLink = Path.Combine(linkRoot, "game", "config.ini");
+            byte[] content = [10, 20, 30];
+
+            // Writing with trustedRoot = gameDir should succeed because gameDir is canonical
+            // and the parent symlink (linkRoot) is above the trusted root.
+            ConfigurationFileOperations.WriteBytesAtomically(
+                targetThroughLink,
+                content,
+                trustedRoot: gameDir);
+
+            Assert.True(File.Exists(Path.Combine(gameDir, "config.ini")));
+            Assert.Equal(content, File.ReadAllBytes(Path.Combine(gameDir, "config.ini")));
+        }
+        finally
+        {
+            TryDeleteDirectoryTree(baseDir);
+        }
+    }
+
+    [Fact]
+    public void ValidateMutationDirectoryRejectsEscapeFromTrustedRoot()
+    {
+        string baseDir = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(), $"aec-escape-test-{Guid.NewGuid():N}")).FullName;
+        try
+        {
+            string trustedRoot = Directory.CreateDirectory(Path.Combine(baseDir, "trusted")).FullName;
+            string outside = Directory.CreateDirectory(Path.Combine(baseDir, "outside")).FullName;
+            string targetFile = Path.Combine(outside, "escape.ini");
+
+            Assert.Throws<InvalidOperationException>(() =>
+                ConfigurationFileOperations.WriteBytesAtomically(
+                    targetFile,
+                    [1, 2, 3],
+                    trustedRoot: trustedRoot));
+        }
+        finally
+        {
+            TryDeleteDirectoryTree(baseDir);
+        }
+    }
+
+    private static bool TryCreateLink(string linkPath, string targetPath)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(linkPath, targetPath);
+            return Directory.Exists(linkPath);
+        }
+        catch
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $"/c mklink /J \"{linkPath}\" \"{targetPath}\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                    });
+                    process?.WaitForExit();
+                    return process?.ExitCode == 0 && Directory.Exists(linkPath);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    private static void TryDeleteDirectoryTree(string directory)
+    {
+        try
+        {
+            if (!Directory.Exists(directory))
+            {
+                return;
+            }
+
+            // Remove any junction/symlink children first to prevent deleting targets
+            foreach (string entry in Directory.EnumerateDirectories(directory, "*", SearchOption.AllDirectories))
+            {
+                if (File.GetAttributes(entry).HasFlag(FileAttributes.ReparsePoint))
+                {
+                    Directory.Delete(entry);
+                }
+            }
+
+            Directory.Delete(directory, recursive: true);
+        }
+        catch
+        {
+        }
+    }
 }

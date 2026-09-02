@@ -164,7 +164,7 @@ public partial class MainWindow : Window
                 viewModel.ReportProfileFileError("import");
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception)
         {
             viewModel.ReportProfileFileError("import");
         }
@@ -211,7 +211,7 @@ public partial class MainWindow : Window
             await stream.WriteAsync(content);
             await stream.FlushAsync();
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception)
         {
             viewModel.ReportProfileFileError("export");
         }
@@ -237,7 +237,7 @@ public partial class MainWindow : Window
         {
             await Clipboard.SetTextAsync(viewModel.CreateDiagnosticsReport());
         }
-        catch (Exception exception) when (exception is InvalidOperationException or NotSupportedException or System.Runtime.InteropServices.ExternalException or TimeoutException)
+        catch (Exception)
         {
             viewModel.ReportDiagnosticsCopyError();
         }

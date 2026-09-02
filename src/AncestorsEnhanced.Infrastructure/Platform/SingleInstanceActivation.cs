@@ -30,7 +30,15 @@ public sealed class SingleInstanceActivationListener : IDisposable
 
     public void Start()
     {
-        StartAsync().GetAwaiter().GetResult();
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            StartAsync(cts.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            // Do not block application startup if pipe initialization timed out.
+        }
     }
 
     /// <summary>

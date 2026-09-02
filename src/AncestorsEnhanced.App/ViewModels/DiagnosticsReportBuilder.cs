@@ -20,6 +20,10 @@ public static class DiagnosticsReportBuilder
         @"(?<!\S)/(?:[^\s/]+/)*[^\s]+",
         RegexOptions.Compiled);
 
+    private static readonly Regex SteamUserDataDirectory = new(
+        @"(?i)([\\/]userdata[\\/])\d+([\\/])",
+        RegexOptions.Compiled);
+
     public static string Build(
         string productName,
         string version,
@@ -100,6 +104,8 @@ public static class DiagnosticsReportBuilder
                 OperatingSystem.IsWindows() ? "%USERPROFILE%" : "%HOME%",
                 StringComparison.OrdinalIgnoreCase);
         }
+
+        redacted = SteamUserDataDirectory.Replace(redacted, "$1<steamid>$2");
 
         return LinuxHomeDirectory.Replace(
             WindowsUserDirectory.Replace(redacted, "$1<user>"),

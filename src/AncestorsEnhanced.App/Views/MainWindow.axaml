@@ -32,55 +32,83 @@
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*,Auto">
-      <StackPanel Grid.Row="0" Spacing="5">
+      <StackPanel Grid.Row="0" Spacing="4">
         <StackPanel Spacing="1" Margin="0,0,0,18">
           <TextBlock Text="{Binding ProductName}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
-          <TextBlock Text="Configurator" FontSize="12" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
+          <TextBlock Text="Enhanced Configurator" FontSize="11" Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" />
         </StackPanel>
         <ToggleButton Classes="nav"
                       Command="{Binding ShowHomeCommand}"
-                      IsChecked="{Binding ShowHomeView, Mode=OneWay}"
+                      IsChecked="{Binding IsHomeSectionActive, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                      Content="Home" />
+                      HorizontalContentAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <PathIcon Data="{StaticResource IconHome}" Width="15" Height="15" />
+            <TextBlock Text="Home" VerticalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="nav"
                       Command="{Binding ShowGraphicsCommand}"
                       IsChecked="{Binding IsGraphicsSectionActive, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                       Content="Graphics" />
+                      HorizontalContentAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <PathIcon Data="{StaticResource IconGraphics}" Width="15" Height="15" />
+            <TextBlock Text="Graphics" VerticalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="nav"
                       Command="{Binding ShowSaveGamesCommand}"
-                      IsChecked="{Binding ShowSaveGamesView, Mode=OneWay}"
+                      IsChecked="{Binding IsSaveGamesSectionActive, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                       Content="Saves" />
+                      HorizontalContentAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <PathIcon Data="{StaticResource IconSaves}" Width="15" Height="15" />
+            <TextBlock Text="Saves" VerticalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="nav"
                       Command="{Binding ShowGameplayCommand}"
-                      IsChecked="{Binding ShowGameplayView, Mode=OneWay}"
+                      IsChecked="{Binding IsGameplaySectionActive, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                      Content="Gameplay" />
+                      HorizontalContentAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <PathIcon Data="{StaticResource IconGameplay}" Width="15" Height="15" />
+            <TextBlock Text="Gameplay" VerticalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="nav"
                       Command="{Binding ShowProfilesCommand}"
-                      IsChecked="{Binding ShowProfilesView, Mode=OneWay}"
+                      IsChecked="{Binding IsProfilesSectionActive, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                      Content="Profiles" />
+                      HorizontalContentAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <PathIcon Data="{StaticResource IconProfiles}" Width="15" Height="15" />
+            <TextBlock Text="Profiles" VerticalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
       </StackPanel>
-      <StackPanel Grid.Row="2" Spacing="5">
+      <StackPanel Grid.Row="2" Spacing="4">
         <ToggleButton Classes="nav"
                       Command="{Binding ShowSettingsCommand}"
                       IsChecked="{Binding IsSettingsSectionActive, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                      Content="Settings" />
+                      HorizontalContentAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <PathIcon Data="{StaticResource IconSettings}" Width="15" Height="15" />
+            <TextBlock Text="Settings" VerticalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="nav"
                       Command="{Binding ShowDiagnosticsCommand}"
-                      IsChecked="{Binding ShowDiagnosticsView, Mode=OneWay}"
+                      IsChecked="{Binding IsDiagnosticsSectionActive, Mode=OneWay}"
                       HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                      Content="Diagnostics" />
+                      HorizontalContentAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <PathIcon Data="{StaticResource IconDiagnostics}" Width="15" Height="15" />
+            <TextBlock Text="Diagnostics" VerticalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
       </StackPanel>
       </Grid>
     </Border>
@@ -92,20 +120,40 @@
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,0,0,1">
-      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="20">
-        <StackPanel Spacing="1">
+      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16">
+        <StackPanel Spacing="2">
           <TextBlock Text="{Binding PageContextLabel}"
                      x:Name="PageContextTitle"
-                     FontSize="23"
-                     FontWeight="SemiBold"
+                     FontSize="22"
+                     FontWeight="Bold"
                      Foreground="{DynamicResource PrimaryTextBrush}" />
+          <TextBlock Text="{Binding InstallationDetails}"
+                     FontSize="11.5"
+                     Foreground="{DynamicResource MutedTextBrush}" />
         </StackPanel>
-        <Button Grid.Column="1"
-                x:Name="ReloadGameDataButton"
-                Content="Reload game data"
-                Command="{Binding RefreshCommand}"
-                IsEnabled="{Binding !IsAnyOperationRunning}"
-                VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <Border Classes="StatusPill">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Ellipse Width="8" Height="8" Fill="{Binding DetectionBrush}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding DetectionStatus}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+          </Border>
+          <Button Command="{Binding ToggleHighContrastCommand}"
+                  ToolTip.Tip="Toggle High Contrast Mode"
+                  Padding="8,6"
+                  VerticalAlignment="Center">
+            <PathIcon Data="{StaticResource IconContrast}" Width="14" Height="14" />
+          </Button>
+          <Button x:Name="ReloadGameDataButton"
+                  Command="{Binding RefreshCommand}"
+                  IsEnabled="{Binding !IsAnyOperationRunning}"
+                  Padding="12,6">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+              <PathIcon Data="{StaticResource IconRefresh}" Width="13" Height="13" />
+              <TextBlock Text="Reload" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
       </Grid>
     </Border>
 
@@ -153,23 +201,38 @@
           </Border>
 
           <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="12">
-            <Border Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-              <StackPanel Spacing="5"><TextBlock Text="GRAPHICS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding HomeGraphicsSummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" /><Button Content="Change graphics" Command="{Binding ShowGraphicsCommand}" HorizontalAlignment="Left" /></StackPanel>
+            <!-- Graphics KPI Card -->
+            <Border Classes="KpiCard">
+              <StackPanel Spacing="6">
+                <TextBlock Text="GRAPHICS CONFIGURATION" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource LabelTextBrush}" />
+                <TextBlock Text="{Binding HomeGraphicsSummary}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Performance baselines and visual quality overrides" FontSize="11.5" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                <Button Content="Change graphics →" Command="{Binding ShowGraphicsCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" />
+              </StackPanel>
             </Border>
-            <Border Grid.Column="1" Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-              <StackPanel Spacing="5">
-                <TextBlock Text="GAMEPLAY DIFFICULTY" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" />
-                <TextBlock Text="{Binding HomeGameplayTitle}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
-                <TextBlock Text="{Binding HomeGameplaySummary}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
-                <TextBlock Text="{Binding ExternalPakHelpText}" IsVisible="{Binding HasExternalPaks}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource GoldTextBrush}" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="Adjust difficulty" Command="{Binding ShowGameplayCommand}" />
+
+            <!-- Gameplay Difficulty KPI Card -->
+            <Border Grid.Column="1" Classes="KpiCard">
+              <StackPanel Spacing="6">
+                <TextBlock Text="GAMEPLAY DIFFICULTY" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource LabelTextBrush}" />
+                <TextBlock Text="{Binding HomeGameplayTitle}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding HomeGameplaySummary}" FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
+                <TextBlock Text="{Binding ExternalPakHelpText}" IsVisible="{Binding HasExternalPaks}" FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource GoldTextBrush}" />
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+                  <Button Content="Adjust difficulty →" Command="{Binding ShowGameplayCommand}" />
                   <Button Content="Open game PAK folder" Command="{Binding OpenGamePakFolderCommand}" IsVisible="{Binding CanOpenGamePakFolder}" />
                 </StackPanel>
               </StackPanel>
             </Border>
-            <Border Grid.Column="2" Padding="16" CornerRadius="9" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-              <StackPanel Spacing="5"><TextBlock Text="SAVES &amp; BACKUPS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding HomeSavesSummary}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" /><Button Content="Manage saves" Command="{Binding ShowSaveGamesCommand}" HorizontalAlignment="Left" /></StackPanel>
+
+            <!-- Saves & Checkpoints KPI Card -->
+            <Border Grid.Column="2" Classes="KpiCard">
+              <StackPanel Spacing="6">
+                <TextBlock Text="SAVES &amp; CHECKPOINTS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource LabelTextBrush}" />
+                <TextBlock Text="{Binding HomeSavesSummary}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Automatic watchdog protection &amp; slot timelines" FontSize="11.5" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                <Button Content="Manage saves →" Command="{Binding ShowSaveGamesCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" />
+              </StackPanel>
             </Border>
             <Border Grid.Row="1" Grid.ColumnSpan="3" Padding="14,11" CornerRadius="9" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1" IsVisible="{Binding HasPendingChanges}">
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14"><StackPanel Spacing="2"><TextBlock Text="CURRENT CHANGES" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" /><TextBlock Text="{Binding PendingSummary}" FontSize="15" FontWeight="SemiBold" /><TextBlock Text="{Binding PendingDetails}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" /></StackPanel><Button Grid.Column="1" Content="Review changes" Command="{Binding OpenReviewCommand}" VerticalAlignment="Center" /></Grid>
@@ -231,6 +294,7 @@
             </StackPanel>
             <Grid IsVisible="{Binding IsAdvancedMode}" ColumnDefinitions="*,Auto" ColumnSpacing="10">
               <TextBox Text="{Binding SearchText, Mode=TwoWay}"
+                       Classes="clearButton"
                        PlaceholderText="Search settings…"
                        VerticalAlignment="Center" />
               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
@@ -278,15 +342,15 @@
                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="220" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
-                    <Border Classes="PresetCard" Padding="14,11" Margin="0,0,10,8" MinHeight="128" Width="210">
+                    <Border Classes="PresetTile" Padding="14,12" Margin="0,0,10,8" MinHeight="130" Width="215">
                       <Grid RowDefinitions="*,Auto" RowSpacing="8">
-                        <StackPanel Spacing="2">
-                          <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
-                          <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                        <StackPanel Spacing="3">
+                          <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource BodyTextBrush}" />
+                          <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="7">
-                          <Button Content="Preview changes" Command="{Binding $parent[Window].DataContext.PreviewBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" />
-                          <Button Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" />
+                          <Button Content="Preview" Command="{Binding $parent[Window].DataContext.PreviewBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" Padding="9,5" />
+                          <Button Classes="PrimaryAction" Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" Padding="9,5" />
                         </StackPanel>
                       </Grid>
                     </Border>
@@ -301,15 +365,15 @@
                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="220" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
-                    <Border Classes="PresetCard" Padding="14,11" Margin="0,0,10,0" MinHeight="116" Width="210">
+                    <Border Classes="PresetTile" Padding="14,12" Margin="0,0,10,0" MinHeight="120" Width="215">
                       <Grid RowDefinitions="*,Auto" RowSpacing="8">
-                        <StackPanel Spacing="2">
-                          <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
-                          <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                        <StackPanel Spacing="3">
+                          <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource BodyTextBrush}" />
+                          <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                         </StackPanel>
                         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="7">
-                          <Button Content="Preview changes" Command="{Binding $parent[Window].DataContext.PreviewBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" />
-                          <Button Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" />
+                          <Button Content="Preview" Command="{Binding $parent[Window].DataContext.PreviewBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" Padding="9,5" />
+                          <Button Classes="PrimaryAction" Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" Padding="9,5" />
                         </StackPanel>
                       </Grid>
                     </Border>
@@ -669,79 +733,136 @@
             <TextBlock Text="{Binding SaveManager.CloudWarning}" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource GoldTextBrush}" FontSize="12" />
           </Expander>
 
-          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-            <Grid ColumnDefinitions="*,180" ColumnSpacing="10">
-              <TextBox PlaceholderText="Search checkpoint name, note or origin"
-                       Text="{Binding SaveManager.CheckpointSearchText}" />
-              <ComboBox Grid.Column="1" ItemsSource="{Binding SaveManager.CheckpointOriginFilters}"
-                        SelectedItem="{Binding SaveManager.CheckpointOriginFilter, Mode=TwoWay}" />
-            </Grid>
-          </Border>
-
-          <ItemsControl ItemsSource="{Binding SaveManager.Slots}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:SaveGameSlotViewModel">
-                <Border Margin="0,0,0,8" Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
-                  <StackPanel Spacing="9">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                      <StackPanel Spacing="1">
-                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
-                        <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" />
-                        <TextBlock Text="{Binding Status}" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding CheckpointCount}" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" />
-                      </StackPanel>
-                      <Button Grid.Column="1" Command="{Binding CreateCheckpointCommand}" IsEnabled="{Binding CanSaveCheckpoint}" Content="Save checkpoint" VerticalAlignment="Center" />
-                    </Grid>
-                    <ItemsControl ItemsSource="{Binding VisibleCheckpoints}">
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
-                          <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                            <StackPanel Spacing="0">
-                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="14">
-                              <StackPanel Spacing="1">
-                                <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
-                                <TextBlock Text="{Binding CreatedLabel}" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" />
-                                <TextBlock Text="{Binding OriginLabel}" FontSize="12" Foreground="{DynamicResource AccentBrush}" />
-                                <TextBlock Text="{Binding SizeLabel}" FontSize="12" Foreground="{DynamicResource TechnicalTextBrush}" />
-                                <TextBlock Text="{Binding Note}" IsVisible="{Binding HasNote}" FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+          <!-- 2-Column Slot Picker & Checkpoint Timeline -->
+          <Grid ColumnDefinitions="270,*" ColumnSpacing="18">
+            <!-- Left: Save Game Slots -->
+            <Border Classes="SettingCard" Padding="12">
+              <StackPanel Spacing="8">
+                <TextBlock Text="SAVE GAME SLOTS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource LabelTextBrush}" Margin="2,2,2,4" />
+                <ItemsControl ItemsSource="{Binding SaveManager.Slots}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SaveGameSlotViewModel">
+                      <Button Classes="Ghost"
+                              Command="{Binding $parent[Window].DataContext.SaveManager.SelectSlotCommand}"
+                              CommandParameter="{Binding}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch"
+                              Padding="0" Margin="0,0,0,8">
+                        <Border Classes="PresetTile"
+                                Classes.Selected="{Binding IsSelected}"
+                                Padding="12,10">
+                          <StackPanel Spacing="3">
+                            <Grid ColumnDefinitions="*,Auto">
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Width="3" Height="14" CornerRadius="1.5"
+                                        Background="{DynamicResource AccentBrush}"
+                                        IsVisible="{Binding IsSelected}"
+                                        VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Title}" FontWeight="Bold" Foreground="{DynamicResource BodyTextBrush}" VerticalAlignment="Center" />
                               </StackPanel>
-                              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                <ToggleButton Content="★" ToolTip.Tip="Favorite" IsChecked="{Binding IsFavorite, Mode=TwoWay}" />
-                                <Button Command="{Binding OpenRestoreConfirmCommand}" IsEnabled="{Binding CanRestore}" Content="Restore" Padding="12,6" IsVisible="{Binding !IsRestoreConfirmVisible}" />
-                                <Button IsVisible="{Binding IsRestoreConfirmVisible}" IsEnabled="{Binding CanRestore}" Classes="PrimaryAction" Content="Confirm restore" Padding="12,6" Command="{Binding LoadCommand}" />
-                                <Button IsVisible="{Binding IsRestoreConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelRestoreConfirmCommand}" />
-                                <Expander Header="More" FontSize="12">
-                                  <StackPanel Spacing="5" Margin="0,6,0,0">
-                                    <Button Content="Edit name / note" Command="{Binding ToggleMetadataEditorCommand}" />
-                                    <Button Classes="Ghost" Content="Delete" Foreground="{DynamicResource GoldTextBrush}" Command="{Binding OpenDeleteConfirmCommand}" IsEnabled="{Binding CanDelete}" IsVisible="{Binding !IsDeleteConfirmVisible}" />
-                                    <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="DangerAction" Content="Yes, delete it" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanDelete}" />
-                                    <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="Ghost" Content="Cancel" Command="{Binding CancelDeleteConfirmCommand}" />
-                                  </StackPanel>
-                                </Expander>
-                              </StackPanel>
+                              <TextBlock Grid.Column="1" Text="{Binding CheckpointCount}" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
                             </Grid>
-                            <StackPanel IsVisible="{Binding IsMetadataEditorVisible}" Spacing="6" Margin="0,8,0,0">
-                              <TextBox PlaceholderText="Checkpoint name optional" Text="{Binding Title}" MaxLength="80" />
-                              <TextBox PlaceholderText="Note optional" Text="{Binding Note}" MaxLength="400" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="52" />
-                            </StackPanel>
-                            </StackPanel>
-                          </Border>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Button Content="{Binding ShowAllLabel}"
-                            Command="{Binding ShowOlderCommand}"
-                            IsVisible="{Binding HasHiddenCheckpoints}"
-                            HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource OrangeAccentBrush}" FontSize="12" />
-                    <Button Content="Show less"
-                            Command="{Binding ShowRecentCommand}"
-                            IsVisible="{Binding HasExpandedCheckpoints}"
-                            HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource OrangeAccentBrush}" FontSize="12" />
+                            <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" />
+                            <TextBlock Text="{Binding Status}" FontSize="11.5" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                          </StackPanel>
+                        </Border>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <!-- Right: Selected Slot Details & Timeline -->
+            <StackPanel Spacing="12">
+              <!-- Selected Slot Header -->
+              <Border Classes="SettingCard" Padding="16,12" DataContext="{Binding SaveManager.SelectedSlot}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource HeadingTextBrush}" />
+                    <TextBlock Text="{Binding Status}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                   </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+                  <Button Grid.Column="1" Classes="PrimaryAction"
+                          Command="{Binding CreateCheckpointCommand}"
+                          IsEnabled="{Binding CanSaveCheckpoint}"
+                          Content="Create checkpoint"
+                          VerticalAlignment="Center" />
+                </Grid>
+              </Border>
+
+              <!-- Empty Slot Notice -->
+              <Border Classes="SettingCard" Padding="18,16" IsVisible="{Binding !SaveManager.SelectedSlot.HasSave}">
+                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                  <TextBlock Text="Empty Slot" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource BodyTextBrush}" HorizontalAlignment="Center" />
+                  <TextBlock Text="No active lineage save data exists in this slot yet. Start a new game in Ancestors or switch to another slot on the left."
+                             FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="480" />
+                </StackPanel>
+              </Border>
+
+              <!-- Search & Filters -->
+              <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding SaveManager.SelectedSlot.HasSave}">
+                <Grid ColumnDefinitions="*,180" ColumnSpacing="10">
+                  <TextBox PlaceholderText="Search checkpoint name, note or origin"
+                           Classes="clearButton"
+                           Text="{Binding SaveManager.CheckpointSearchText}" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding SaveManager.CheckpointOriginFilters}"
+                            SelectedItem="{Binding SaveManager.CheckpointOriginFilter, Mode=TwoWay}" />
+                </Grid>
+              </Border>
+
+              <!-- Checkpoints list for SelectedSlot -->
+              <ItemsControl ItemsSource="{Binding SaveManager.SelectedSlot.VisibleCheckpoints}" IsVisible="{Binding SaveManager.SelectedSlot.HasSave}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
+                    <Border Margin="0,0,0,6" Classes="SettingCard" Padding="12,10">
+                      <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" FontSize="13.5" Foreground="{DynamicResource BodyTextBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <Border Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="5,1">
+                                <TextBlock Text="{Binding OriginLabel}" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
+                              </Border>
+                              <TextBlock Text="{Binding CreatedLabel}" FontSize="11.5" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
+                              <TextBlock Text="{Binding SizeLabel}" FontSize="11.5" Foreground="{DynamicResource TechnicalTextBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding Note}" IsVisible="{Binding HasNote}" FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <ToggleButton Classes="Favorite" Content="★" ToolTip.Tip="Pin as favorite (prevents automatic pruning)" IsChecked="{Binding IsFavorite, Mode=TwoWay}" />
+                            <Button Command="{Binding OpenRestoreConfirmCommand}" IsEnabled="{Binding CanRestore}" Content="Restore" Padding="12,6" IsVisible="{Binding !IsRestoreConfirmVisible}" />
+                            <Button IsVisible="{Binding IsRestoreConfirmVisible}" IsEnabled="{Binding CanRestore}" Classes="PrimaryAction" Content="Confirm restore" Padding="12,6" Command="{Binding LoadCommand}" />
+                            <Button IsVisible="{Binding IsRestoreConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelRestoreConfirmCommand}" />
+                            <Expander Header="More" FontSize="12">
+                              <StackPanel Spacing="5" Margin="0,6,0,0">
+                                <Button Content="Edit name / note" Command="{Binding ToggleMetadataEditorCommand}" />
+                                <Button Classes="Ghost" Content="Delete" Foreground="{DynamicResource GoldTextBrush}" Command="{Binding OpenDeleteConfirmCommand}" IsEnabled="{Binding CanDelete}" IsVisible="{Binding !IsDeleteConfirmVisible}" />
+                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="DangerAction" Content="Yes, delete it" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanDelete}" />
+                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="Ghost" Content="Cancel" Command="{Binding CancelDeleteConfirmCommand}" />
+                              </StackPanel>
+                            </Expander>
+                          </StackPanel>
+                        </Grid>
+                        <StackPanel IsVisible="{Binding IsMetadataEditorVisible}" Spacing="6" Margin="0,8,0,0">
+                          <TextBox PlaceholderText="Checkpoint name optional" Text="{Binding Title}" MaxLength="80" />
+                          <TextBox PlaceholderText="Note optional" Text="{Binding Note}" MaxLength="400" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="52" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Button Content="{Binding SaveManager.SelectedSlot.ShowAllLabel}"
+                      Command="{Binding SaveManager.SelectedSlot.ShowOlderCommand}"
+                      IsVisible="{Binding SaveManager.SelectedSlot.HasHiddenCheckpoints}"
+                      HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource OrangeAccentBrush}" FontSize="12" />
+              <Button Content="Show less"
+                      Command="{Binding SaveManager.SelectedSlot.ShowRecentCommand}"
+                      IsVisible="{Binding SaveManager.SelectedSlot.HasExpandedCheckpoints}"
+                      HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource OrangeAccentBrush}" FontSize="12" />
+            </StackPanel>
+          </Grid>
           <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding SaveManager.BackupHealthBrush}" BorderThickness="1">
             <StackPanel Spacing="3">
               <TextBlock Text="Backup health" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
@@ -873,11 +994,15 @@
                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
                             <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                           </StackPanel>
-                          <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                            <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" TextAlignment="Right" />
-                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="118" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
-                            <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" HorizontalAlignment="Right" />
-                            <Button Command="{Binding ResetToDefaultCommand}" Content="Reset to 100%" Padding="8,4" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <StackPanel Spacing="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                              <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" TextAlignment="Right" />
+                              <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" HorizontalAlignment="Right" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="112" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
+                            <Button Classes="InlineReset" Command="{Binding ResetToDefaultCommand}" ToolTip.Tip="Reset to 100%" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}">
+                              <PathIcon Data="{StaticResource IconReset}" Width="12" Height="12" />
+                            </Button>
                           </StackPanel>
                         </Grid>
                       </Border>
@@ -903,11 +1028,15 @@
                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
                             <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                           </StackPanel>
-                          <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                            <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" TextAlignment="Right" />
-                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="118" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
-                            <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" HorizontalAlignment="Right" />
-                            <Button Command="{Binding ResetToDefaultCommand}" Content="Reset to 100%" Padding="8,4" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <StackPanel Spacing="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                              <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" TextAlignment="Right" />
+                              <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" HorizontalAlignment="Right" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="112" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
+                            <Button Classes="InlineReset" Command="{Binding ResetToDefaultCommand}" ToolTip.Tip="Reset to 100%" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}">
+                              <PathIcon Data="{StaticResource IconReset}" Width="12" Height="12" />
+                            </Button>
                           </StackPanel>
                         </Grid>
                       </Border>
@@ -1053,23 +1182,29 @@
           <ItemsControl ItemsSource="{Binding UserProfiles}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:UserProfileRowViewModel">
-                <Border Classes="SettingCard" Padding="14,11" Margin="0,0,0,8">
-                  <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
-                    <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Contents}" FontSize="12" Foreground="{DynamicResource AccentBrush}" />
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,0,0">
-                      <Button Classes="PrimaryAction" Content="Load profile" Click="LoadStoredProfileClick" />
-                      <Expander Header="More" FontSize="12">
-                        <StackPanel Spacing="5" Margin="0,6,0,0">
-                          <Button Content="Rename" Command="{Binding $parent[Window].DataContext.RequestProfileRenameCommand}" CommandParameter="{Binding}" />
-                          <Button Content="Duplicate" Command="{Binding $parent[Window].DataContext.DuplicateProfileCommand}" CommandParameter="{Binding}" />
-                          <Button Content="Compare" Command="{Binding $parent[Window].DataContext.CompareProfileCommand}" CommandParameter="{Binding}" />
-                          <Button Content="Export" Click="ExportProfileClick" />
-                          <Button Classes="DangerAction" Content="Delete" Command="{Binding $parent[Window].DataContext.RequestProfileDeletionCommand}" CommandParameter="{Binding}" />
-                        </StackPanel>
-                      </Expander>
-                    </StackPanel>
+                <Border Classes="SettingCard" Padding="16,13" Margin="0,0,0,8">
+                  <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                      <StackPanel Spacing="3">
+                        <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource HeadingTextBrush}" />
+                        <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                        <Border Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" Margin="0,2,0,0">
+                          <TextBlock Text="{Binding Contents}" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
+                        </Border>
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" VerticalAlignment="Center">
+                        <Button Classes="PrimaryAction" Content="Load profile" Click="LoadStoredProfileClick" />
+                        <Button Content="Compare" Command="{Binding $parent[Window].DataContext.CompareProfileCommand}" CommandParameter="{Binding}" />
+                        <Expander Header="More" FontSize="12">
+                          <StackPanel Spacing="5" Margin="0,6,0,0">
+                            <Button Content="Rename" Command="{Binding $parent[Window].DataContext.RequestProfileRenameCommand}" CommandParameter="{Binding}" />
+                            <Button Content="Duplicate" Command="{Binding $parent[Window].DataContext.DuplicateProfileCommand}" CommandParameter="{Binding}" />
+                            <Button Content="Export" Click="ExportProfileClick" />
+                            <Button Classes="DangerAction" Content="Delete" Command="{Binding $parent[Window].DataContext.RequestProfileDeletionCommand}" CommandParameter="{Binding}" />
+                          </StackPanel>
+                        </Expander>
+                      </StackPanel>
+                    </Grid>
                     <Border Margin="0,8,0,0" Padding="12,9" CornerRadius="6"
                             Background="{DynamicResource WarningSurfaceBrush}"
                             BorderBrush="{DynamicResource WarningBorderBrush}"
@@ -1282,26 +1417,40 @@
 
     <Border Grid.Row="2" Grid.Column="1"
             IsVisible="{Binding ShowBottomBar}"
-            Padding="18,12"
+            Padding="20,14"
             Background="{DynamicResource RaisedSurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,1,0,0">
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
-        <StackPanel Spacing="1" VerticalAlignment="Center">
-          <StackPanel IsVisible="{Binding !ShowGameplayView}" Spacing="1">
-            <TextBlock Text="{Binding PendingSummary}"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource BodyTextBrush}" />
+        <StackPanel Spacing="2" VerticalAlignment="Center">
+          <StackPanel IsVisible="{Binding !ShowGameplayView}" Spacing="2">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Border Classes="StatusPill" Padding="8,2" IsVisible="{Binding HasPendingChanges}" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}">
+                <TextBlock Text="Pending" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource OrangeAccentBrush}" />
+              </Border>
+              <TextBlock Text="{Binding PendingSummary}"
+                         FontWeight="Bold"
+                         FontSize="13.5"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource BodyTextBrush}" />
+            </StackPanel>
             <TextBlock Text="{Binding PendingDetails}"
                        IsVisible="{Binding HasPendingChanges}"
                        TextWrapping="Wrap"
                        FontSize="12"
                        Foreground="{DynamicResource GoldTextBrush}" />
           </StackPanel>
-          <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="1">
-            <TextBlock Text="{Binding GameplayDraftStatus}"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource BodyTextBrush}" />
+          <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="2">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Border Classes="StatusPill" Padding="8,2" IsVisible="{Binding HasGameplayPendingChanges}" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}">
+                <TextBlock Text="Draft" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource OrangeAccentBrush}" />
+              </Border>
+              <TextBlock Text="{Binding GameplayDraftStatus}"
+                         FontWeight="Bold"
+                         FontSize="13.5"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource BodyTextBrush}" />
+            </StackPanel>
             <TextBlock Text="{Binding GameplayState.Description}"
                        IsVisible="{Binding HasGameplayPendingChanges}"
                        TextWrapping="Wrap"
@@ -1426,6 +1575,9 @@
           IsVisible="{Binding IsOnboardingVisible}"
           Focusable="True"
           AutomationProperties.Name="Welcome to Ancestors Enhanced">
+      <Grid.KeyBindings>
+        <KeyBinding Gesture="Escape" Command="{Binding SkipOnboardingCommand}" />
+      </Grid.KeyBindings>
       <Border Background="{DynamicResource ModalOverlayBrush}" />
       <Border x:Name="OnboardingDialog"
               MaxWidth="650" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
