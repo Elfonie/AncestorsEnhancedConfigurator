@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace AncestorsEnhanced.App.ViewModels;
 
@@ -63,4 +64,7 @@ public sealed partial class GameplayDifficultyControlViewModel : ViewModelBase
             MultiplierPercent = value;
         }
     }
+
+    [RelayCommand]
+    private void ResetToDefault() => MultiplierPercent = 100;
 }

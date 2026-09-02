@@ -26,7 +26,9 @@ public sealed record FeatureSettingRowViewModel(
 
     public bool HasInspectionFailure => string.Equals(Value, "Not verified", StringComparison.Ordinal);
 
-    public string ValueLabel => Editor is { ShowOverrideToggle: false }
+    public string ValueLabel => Editor?.HasChanges == true
+        ? "Pending change"
+        : Editor is { ShowOverrideToggle: false }
         ? "Current game value"
         : Editor?.HasCurrentOverride == true
         ? "Custom override"

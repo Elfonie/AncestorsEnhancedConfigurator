@@ -284,7 +284,10 @@
                           <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
                           <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button Grid.Row="1" Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="7">
+                          <Button Content="Preview changes" Command="{Binding $parent[Window].DataContext.PreviewBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" />
+                          <Button Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" />
+                        </StackPanel>
                       </Grid>
                     </Border>
                   </DataTemplate>
@@ -304,12 +307,33 @@
                           <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
                           <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button Grid.Row="1" Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="7">
+                          <Button Content="Preview changes" Command="{Binding $parent[Window].DataContext.PreviewBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" />
+                          <Button Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" />
+                        </StackPanel>
                       </Grid>
                     </Border>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+              <Border IsVisible="{Binding HasGraphicsPresetPreview}" Padding="12,10" CornerRadius="7" Background="{DynamicResource AppBackgroundBrush}" BorderBrush="{DynamicResource OliveBorderBrush}" BorderThickness="1">
+                <StackPanel Spacing="7">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding GraphicsPresetPreviewTitle}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                    <TextBlock Text="{Binding GraphicsPresetPreviewSummary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ItemsControl ItemsSource="{Binding GraphicsPresetPreviewValues}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="190" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:GraphicsPresetPreviewValueViewModel">
+                        <Border Padding="8,6" Margin="0,0,7,5" Width="180" CornerRadius="5" Background="{DynamicResource EditorSurfaceBrush}" BorderBrush="{DynamicResource EditorBorderBrush}" BorderThickness="1">
+                          <StackPanel Spacing="1"><TextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" /><TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" /></StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
             </StackPanel>
           </StackPanel>
         </Border>
@@ -333,7 +357,12 @@
                     <Grid ColumnDefinitions="4,*,Auto,22" ColumnSpacing="12" IsHitTestVisible="False">
                       <Border Background="{Binding AccentBrush}" CornerRadius="2" />
                       <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                        <TextBlock Text="{Binding Category}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                          <TextBlock Text="{Binding Category}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LabelTextBrush}" />
+                          <Border IsVisible="{Binding HasChangedSettings}" Padding="6,1" CornerRadius="7" Background="{DynamicResource ControlHoverBrush}" BorderBrush="{DynamicResource OliveBorderBrush}" BorderThickness="1">
+                            <TextBlock Text="{Binding ChangeBadge}" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
+                          </Border>
+                        </StackPanel>
                         <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
                         <TextBlock Text="{Binding Description}" IsVisible="{Binding ShowDescription}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource LabelTextBrush}" />
                       </StackPanel>
@@ -392,6 +421,15 @@
                                          HorizontalAlignment="Right"
                                          FontSize="11"
                                          Foreground="{DynamicResource TechnicalTextBrush}" />
+                              <TextBlock IsVisible="{Binding Editor.HasChanges}"
+                                         HorizontalAlignment="Right"
+                                         TextAlignment="Right"
+                                         TextWrapping="Wrap"
+                                         MaxWidth="180"
+                                         FontSize="11"
+                                         Foreground="{DynamicResource GoldTextBrush}">
+                                <Run Text="{Binding Value}" /><Run Text=" → " /><Run Text="{Binding Editor.DesiredSummary}" />
+                              </TextBlock>
                               <TextBlock Text="Experimental"
                                          IsVisible="{Binding IsExperimental}"
                                          HorizontalAlignment="Right"
@@ -399,6 +437,7 @@
                                          FontWeight="SemiBold"
                                          Foreground="{DynamicResource GoldTextBrush}" />
                               <TextBlock Text="{Binding Value}"
+                                         IsVisible="{Binding !Editor.HasChanges}"
                                          HorizontalAlignment="Right"
                                          TextAlignment="Right"
                                          TextWrapping="Wrap"
@@ -838,6 +877,7 @@
                             <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" TextAlignment="Right" />
                             <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="118" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
                             <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" HorizontalAlignment="Right" />
+                            <Button Command="{Binding ResetToDefaultCommand}" Content="Reset to 100%" Padding="8,4" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
                           </StackPanel>
                         </Grid>
                       </Border>
@@ -867,6 +907,7 @@
                             <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" TextAlignment="Right" />
                             <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="118" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
                             <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" HorizontalAlignment="Right" />
+                            <Button Command="{Binding ResetToDefaultCommand}" Content="Reset to 100%" Padding="8,4" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
                           </StackPanel>
                         </Grid>
                       </Border>

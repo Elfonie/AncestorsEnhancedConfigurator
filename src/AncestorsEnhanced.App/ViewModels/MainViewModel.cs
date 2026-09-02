@@ -142,6 +142,13 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial bool IsGraphicsPresetsExpanded { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGraphicsPresetPreview))]
+    [NotifyPropertyChangedFor(nameof(GraphicsPresetPreviewTitle))]
+    [NotifyPropertyChangedFor(nameof(GraphicsPresetPreviewSummary))]
+    [NotifyPropertyChangedFor(nameof(GraphicsPresetPreviewValues))]
+    public partial BuiltInGraphicsPresetViewModel? GraphicsPresetPreview { get; set; }
+
+    [ObservableProperty]
     public partial string ViewModeTitle { get; set; } = "Simple";
 
     [ObservableProperty]
@@ -637,6 +644,24 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     public string GraphicsPresetsToggleLabel => IsGraphicsPresetsExpanded ? "Hide presets" : "Show presets";
 
+    public bool HasGraphicsPresetPreview => GraphicsPresetPreview is not null;
+
+    public string GraphicsPresetPreviewTitle => GraphicsPresetPreview is null
+        ? string.Empty
+        : $"{GraphicsPresetPreview.DisplayName} preview";
+
+    public string GraphicsPresetPreviewSummary => GraphicsPresetPreview is null
+        ? string.Empty
+        : $"This will stage {GraphicsPresetPreview.Profile.Graphics.Count} listed setting(s) for review. Nothing is written yet.";
+
+    public IReadOnlyList<GraphicsPresetPreviewValueViewModel> GraphicsPresetPreviewValues =>
+        GraphicsPresetPreview?.Profile.Graphics
+            .Take(6)
+            .Select(setting => new GraphicsPresetPreviewValueViewModel(
+                DisplayNameForPresetKey(setting.Key),
+                DisplayValueForPresetSetting(setting.Key, setting.Value)))
+            .ToArray() ?? [];
+
     public string GameplayPresetsToggleLabel => IsGameplayPresetsExpanded ? "Hide presets" : "Show presets";
 
     public bool HasNoSearchResults =>
@@ -738,6 +763,10 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private void ToggleGraphicsPresets() => IsGraphicsPresetsExpanded = !IsGraphicsPresetsExpanded;
 
     [RelayCommand]
+    private void PreviewBuiltInGraphicsPreset(BuiltInGraphicsPresetViewModel? preset) =>
+        GraphicsPresetPreview = preset;
+
+    [RelayCommand]
     private void ShowAllGraphics() => GraphicsFilter = "All";
 
     [RelayCommand]
@@ -753,6 +782,48 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             LoadBuiltInTweakForReview(preset.Profile);
         }
+    }
+
+    private string DisplayNameForPresetKey(string key) =>
+        _allFeatureGroups.SelectMany(group => group.Settings)
+            .FirstOrDefault(setting => string.Equals(setting.TechnicalKey, key, StringComparison.OrdinalIgnoreCase))?.Name
+        ?? key switch
+        {
+            SystemSaveSettingKeys.ViewDistanceQuality => "View distance",
+            SystemSaveSettingKeys.PostProcessingQuality => "Post-processing",
+            SystemSaveSettingKeys.ShadowQuality => "Shadows",
+            SystemSaveSettingKeys.TextureQuality => "Texture quality",
+            SystemSaveSettingKeys.VisualEffectsQuality => "Visual effects",
+            SystemSaveSettingKeys.FoliageQuality => "Foliage quality",
+            "r.MaxAnisotropy" => "Texture filtering",
+            "r.Streaming.PoolSize" => "Texture memory budget",
+            "r.Streaming.LimitPoolSizeToVRAM" => "Limit texture memory to VRAM",
+            "r.PostProcessAAQuality" => "Anti-aliasing",
+            "r.ViewDistanceScale" => "View distance",
+            "r.SSR.Quality" => "Screen-space reflections",
+            "r.Shadow.MaxResolution" => "Shadow resolution",
+            "foliage.DensityScale" => "Foliage density",
+            "grass.DensityScale" => "Grass density",
+            "r.MotionBlurQuality" => "Motion blur",
+            "r.DepthOfFieldQuality" => "Depth of field",
+            "r.SceneColorFringeQuality" => "Chromatic aberration",
+            "r.Tonemapper.Sharpen" => "Image sharpness",
+            "mod.VignettePercent" => "Vignette",
+            "r.BloomQuality" => "Bloom",
+            "r.VolumetricFog" => "Volumetric fog",
+            _ => key,
+        };
+
+    private string DisplayValueForPresetSetting(string key, string value)
+    {
+        SettingEditorViewModel? editor = _editors.Values.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, key, StringComparison.OrdinalIgnoreCase));
+        return editor?.FormatValue(value) ?? value switch
+        {
+            "0" => "Off",
+            "1" => "On",
+            _ => value,
+        };
     }
 
     [RelayCommand]

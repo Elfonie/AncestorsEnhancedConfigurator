@@ -9,6 +9,20 @@ namespace AncestorsEnhanced.App.Tests.ViewModels;
 public sealed class MainGameplayTabTests
 {
     [Fact]
+    public void GameplayControlCanReturnToTheHundredPercentDefaultInOneClick()
+    {
+        var control = new GameplayDifficultyControlViewModel("food", "Food required", "24 / day", "Test", true)
+        {
+            MultiplierPercent = 140,
+        };
+
+        control.ResetToDefaultCommand.Execute(null);
+
+        Assert.Equal(100, control.MultiplierPercent);
+        Assert.Equal("100% of game default", control.DraftValue);
+    }
+
+    [Fact]
     public void GameplayNavigationIsIndependentOfGraphicsAndSaves()
     {
         var viewModel = new MainViewModel(

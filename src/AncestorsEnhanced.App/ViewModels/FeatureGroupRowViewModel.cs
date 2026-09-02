@@ -7,6 +7,7 @@ namespace AncestorsEnhanced.App.ViewModels;
 public partial class FeatureGroupRowViewModel : ViewModelBase, IDisposable
 {
     private bool _hasResettableChanges;
+    private int _changedSettingCount;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Chevron))]
     public partial bool IsExpanded { get; set; }
@@ -65,6 +66,10 @@ public partial class FeatureGroupRowViewModel : ViewModelBase, IDisposable
 
     public bool HasResettableChanges => _hasResettableChanges;
 
+    public bool HasChangedSettings => _changedSettingCount > 0;
+
+    public string ChangeBadge => _changedSettingCount == 1 ? "1 changed" : $"{_changedSettingCount} changed";
+
     public string Chevron => IsExpanded ? "⌃" : "⌄";
 
     [RelayCommand]
@@ -74,11 +79,19 @@ public partial class FeatureGroupRowViewModel : ViewModelBase, IDisposable
 
     private void RefreshResettableChanges()
     {
-        bool value = Settings.Any(setting => setting.Editor is { } editor && (editor.HasActiveOverride || editor.HasChanges));
+        int changedCount = Settings.Count(setting => setting.Editor is { } editor && (editor.HasActiveOverride || editor.HasChanges));
+        bool value = changedCount > 0;
         if (_hasResettableChanges != value)
         {
             _hasResettableChanges = value;
             OnPropertyChanged(nameof(HasResettableChanges));
+        }
+
+        if (_changedSettingCount != changedCount)
+        {
+            _changedSettingCount = changedCount;
+            OnPropertyChanged(nameof(HasChangedSettings));
+            OnPropertyChanged(nameof(ChangeBadge));
         }
     }
 

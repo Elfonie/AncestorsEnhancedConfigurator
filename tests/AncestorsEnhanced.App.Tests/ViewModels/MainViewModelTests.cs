@@ -851,6 +851,22 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void GraphicsPresetPreviewShowsOnlyTheValuesThatWouldBeStaged()
+    {
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
+        BuiltInGraphicsPresetViewModel preset = Assert.Single(viewModel.BuiltInGraphicsPresets,
+            candidate => candidate.Name == "High Quality Setup");
+
+        viewModel.PreviewBuiltInGraphicsPresetCommand.Execute(preset);
+
+        Assert.True(viewModel.HasGraphicsPresetPreview);
+        Assert.Contains("High Quality", viewModel.GraphicsPresetPreviewTitle, StringComparison.Ordinal);
+        Assert.Contains("stage", viewModel.GraphicsPresetPreviewSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEmpty(viewModel.GraphicsPresetPreviewValues);
+        Assert.Contains(viewModel.GraphicsPresetPreviewValues, value => value.Name == "Texture quality");
+    }
+
+    [Fact]
     public void HardwareSetupsCoverEveryNativeQualityCategoryAndCoreMemoryControls()
     {
         var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
