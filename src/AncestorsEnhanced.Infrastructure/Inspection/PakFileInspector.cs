@@ -64,46 +64,54 @@ internal sealed class PakFileInspector(IReadOnlyFileSystem fileSystem)
             return PakClassification.BaseGame;
         }
 
-        if (vignette is { IsEditable: true, ActivePatchPath: not null } &&
-            string.Equals(
-                Path.GetFullPath(vignette.ActivePatchPath),
-                Path.GetFullPath(file.FullPath),
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+        if (string.Equals(name, VignettePakEditor.OwnPatchName, StringComparison.OrdinalIgnoreCase))
         {
-            // VignettePakEditor has verified the stock asset and reconstructed the
-            // complete deterministic package. This is content proof, not a name check.
-            return PakClassification.AecOwned;
+            if (vignette is { IsEditable: true, ActivePatchPath: not null } &&
+                string.Equals(
+                    Path.GetFullPath(vignette.ActivePatchPath),
+                    Path.GetFullPath(file.FullPath),
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            {
+                // VignettePakEditor has verified the stock asset and reconstructed the
+                // complete deterministic package. This is content proof, not a name check.
+                return PakClassification.AecOwned;
+            }
+
+            // A file named AncestorsEnhanced-Vignette_P.pak that cannot be cryptographically
+            // verified via VignettePakEditor content reconstruction is an unverified / conflicting patch.
+            // AEC vignette packages never use sidecar markers.
+            return PakClassification.PatchStyle;
         }
 
-        // AEC ownership is proven by a sidecar hash written when AEC creates the
-        // package. A matching filename alone is never enough, since users and
-        // other mods can place identically named files in the Paks directory.
-        bool isKnownAecTarget =
-            string.Equals(name, GameplayPakBuilder.OwnPatchName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(name, VignettePakEditor.OwnPatchName, StringComparison.OrdinalIgnoreCase);
-        string marker = file.FullPath + ".aec-owned.sha256";
-        if (isKnownAecTarget && fileSystem.FileExists(marker))
+        // Gameplay PAK ownership is proven by a structured AEC JSON marker written
+        // when AEC creates the package. A matching filename alone or a bare hash
+        // is never enough, since users and other mods can place identically named
+        // files or spoofed sidecars in the Paks directory.
+        if (string.Equals(name, GameplayPakBuilder.OwnPatchName, StringComparison.OrdinalIgnoreCase))
         {
-            try
+            string marker = file.FullPath + ".aec-owned.sha256";
+            if (fileSystem.FileExists(marker))
             {
-                string markerText = fileSystem.ReadAllText(marker);
-                if (!AecPakOwnershipMarker.TryReadExpectedSha256(markerText, out string expected))
+                try
                 {
-                    return name.EndsWith("_P.pak", StringComparison.OrdinalIgnoreCase)
-                        ? PakClassification.PatchStyle
-                        : PakClassification.Unclassified;
+                    string markerText = fileSystem.ReadAllText(marker);
+                    if (AecPakOwnershipMarker.TryReadExpectedSha256(markerText, out string expected))
+                    {
+                        using Stream pak = fileSystem.OpenRead(file.FullPath);
+                        string actual = Convert.ToHexString(SHA256.HashData(pak));
+                        if (string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return PakClassification.AecOwned;
+                        }
+                    }
                 }
-                using Stream pak = fileSystem.OpenRead(file.FullPath);
-                string actual = Convert.ToHexString(SHA256.HashData(pak));
-                if (string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or CryptographicException)
                 {
-                    return PakClassification.AecOwned;
+                    // Unverifiable ownership remains PatchStyle below.
                 }
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or CryptographicException)
-            {
-                // Unverifiable ownership remains PatchStyle below.
-            }
+
+            return PakClassification.PatchStyle;
         }
 
         return name.EndsWith("_P.pak", StringComparison.OrdinalIgnoreCase)

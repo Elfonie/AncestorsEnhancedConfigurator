@@ -33,17 +33,18 @@ internal static class AecPakOwnershipMarker
             return false;
         }
 
-        string trimmed = text.Trim();
-        if (IsSha256(trimmed))
-        {
-            sha256 = trimmed.ToUpperInvariant();
-            return true;
-        }
-
         try
         {
-            Marker? marker = JsonSerializer.Deserialize<Marker>(trimmed, JsonOptions);
-            if (marker is null || !IsSupportedVersion(marker.Version) || !IsSha256(marker.PakSha256))
+            Marker? marker = JsonSerializer.Deserialize<Marker>(text.Trim(), JsonOptions);
+            if (marker is null || !IsSupportedVersion(marker.Version) ||
+                !string.Equals(marker.Component, "gameplay", StringComparison.Ordinal) ||
+                !IsSha256(marker.PakSha256) || marker.Settings is null)
+            {
+                return false;
+            }
+
+            marker.Settings.Validate();
+            if (marker.Settings.IsGameDefault)
             {
                 return false;
             }
@@ -51,7 +52,8 @@ internal static class AecPakOwnershipMarker
             sha256 = marker.PakSha256.ToUpperInvariant();
             return true;
         }
-        catch (JsonException)
+        catch (Exception exception) when (
+            exception is JsonException or ArgumentException or NotSupportedException)
         {
             return false;
         }

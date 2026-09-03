@@ -1,8 +1,10 @@
+using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
 using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 using AncestorsEnhanced.Infrastructure.Inspection;
+using AncestorsEnhanced.Infrastructure.Paks;
 
 namespace AncestorsEnhanced.Infrastructure.Tests.Inspection;
 
@@ -46,7 +48,7 @@ public sealed class ReadOnlyAncestorsInspectorTests
     }
 
     [Fact]
-    public void InspectClassifiesExactAecPackageNamesAsOwned()
+    public void InspectClassifiesValidAecGameplayPackageAsOwned()
     {
         using TemporaryDirectory temporaryDirectory = new();
         string steamRoot = temporaryDirectory.CreateDirectory("Steam");
@@ -54,18 +56,65 @@ public sealed class ReadOnlyAncestorsInspectorTests
         CreateValidInstallation(steamRoot);
         string paks = Path.Combine(
             steamRoot, "steamapps", "common", "Ancestors The Humankind Odyssey", "Ancestors", "Content", "Paks");
-        foreach (string name in new[] { "AncestorsEnhanced-Vignette_P.pak", "AncestorsEnhanced-Gameplay_P.pak" })
-        {
-            string path = Path.Combine(paks, name);
-            File.WriteAllBytes(path, [1]);
-            File.WriteAllText(path + ".aec-owned.sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData([1])));
-        }
+
+        string path = Path.Combine(paks, "AncestorsEnhanced-Gameplay_P.pak");
+        byte[] payload = [1, 2, 3, 4];
+        File.WriteAllBytes(path, payload);
+        byte[] marker = AecPakOwnershipMarker.CreateGameplay(
+            payload,
+            new GameplayDifficultySettings(120, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, false));
+        File.WriteAllBytes(path + ".aec-owned.sha256", marker);
 
         GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
             new PhysicalReadOnlyFileSystem(),
             new TestHostEnvironment(steamRoot, localAppData)).Inspect();
 
-        Assert.Equal(2, snapshot.PakFiles.Count(pak => pak.Classification == PakClassification.AecOwned));
+        PakFileSnapshot owned = Assert.Single(snapshot.PakFiles, pak => pak.Name == "AncestorsEnhanced-Gameplay_P.pak");
+        Assert.Equal(PakClassification.AecOwned, owned.Classification);
+    }
+
+    [Fact]
+    public void InspectRejectsSpoofedVignettePackageWithSidecar()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        string localAppData = temporaryDirectory.CreateDirectory("LocalAppData");
+        CreateValidInstallation(steamRoot);
+        string paks = Path.Combine(
+            steamRoot, "steamapps", "common", "Ancestors The Humankind Odyssey", "Ancestors", "Content", "Paks");
+
+        string path = Path.Combine(paks, "AncestorsEnhanced-Vignette_P.pak");
+        File.WriteAllBytes(path, [1]);
+        File.WriteAllText(path + ".aec-owned.sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData([1])));
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment(steamRoot, localAppData)).Inspect();
+
+        PakFileSnapshot spoofed = Assert.Single(snapshot.PakFiles, pak => pak.Name == "AncestorsEnhanced-Vignette_P.pak");
+        Assert.Equal(PakClassification.PatchStyle, spoofed.Classification);
+    }
+
+    [Fact]
+    public void InspectRejectsGameplayPackageWithBareHashSidecar()
+    {
+        using TemporaryDirectory temporaryDirectory = new();
+        string steamRoot = temporaryDirectory.CreateDirectory("Steam");
+        string localAppData = temporaryDirectory.CreateDirectory("LocalAppData");
+        CreateValidInstallation(steamRoot);
+        string paks = Path.Combine(
+            steamRoot, "steamapps", "common", "Ancestors The Humankind Odyssey", "Ancestors", "Content", "Paks");
+
+        string path = Path.Combine(paks, "AncestorsEnhanced-Gameplay_P.pak");
+        File.WriteAllBytes(path, [1]);
+        File.WriteAllText(path + ".aec-owned.sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData([1])));
+
+        GameInspectionSnapshot snapshot = new ReadOnlyAncestorsInspector(
+            new PhysicalReadOnlyFileSystem(),
+            new TestHostEnvironment(steamRoot, localAppData)).Inspect();
+
+        PakFileSnapshot spoofed = Assert.Single(snapshot.PakFiles, pak => pak.Name == "AncestorsEnhanced-Gameplay_P.pak");
+        Assert.Equal(PakClassification.PatchStyle, spoofed.Classification);
     }
 
     [Fact]

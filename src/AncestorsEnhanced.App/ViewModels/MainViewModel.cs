@@ -92,12 +92,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     public partial IReadOnlyList<BuiltInGraphicsPresetViewModel> BuiltInGraphicsPresets { get; set; } =
     [
-        new("Clear Image", "Remove blur and reduce vignette", CreateBuiltInProfile("Clear Image", [
+        new("Clear Image", "Remove blur and remove vignette completely", CreateBuiltInProfile("Clear Image", [
             new ProfileSetting("r.MotionBlurQuality", "0"),
             new ProfileSetting("r.DepthOfFieldQuality", "0"),
             new ProfileSetting("r.SceneColorFringeQuality", "0"),
             new ProfileSetting("r.Tonemapper.Sharpen", "0.4"),
-            new ProfileSetting("mod.VignettePercent", "50")])),
+            new ProfileSetting("mod.VignettePercent", "0")])),
         new("Performance Setup", "Complete baseline for constrained hardware", CreateHardwareBaselineProfile("Performance Setup", GameGraphicsQuality.Medium, [
             new ProfileSetting("r.PostProcessAAQuality", "3"),
             new ProfileSetting("r.MaxAnisotropy", "16"),
@@ -124,9 +124,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             new ProfileSetting("foliage.DensityScale", "1.5"),
             new ProfileSetting("grass.DensityScale", "1.5"),
             new ProfileSetting("r.SSR.Quality", "3"),
-            new ProfileSetting("r.Shadow.MaxResolution", "4096")])),
+            new ProfileSetting("r.Shadow.MaxResolution", "4096"),
+            new ProfileSetting("r.Shadow.DistanceScale", "1.0"),
+            new ProfileSetting("r.Tonemapper.Sharpen", "0.4")])),
         new("Low VRAM Setup", "Complete baseline that protects limited graphics memory", CreateHardwareBaselineProfile("Low VRAM Setup", GameGraphicsQuality.Low, [
-            new ProfileSetting("r.PostProcessAAQuality", "0"),
+            new ProfileSetting("r.PostProcessAAQuality", "2"),
             new ProfileSetting("r.MaxAnisotropy", "16"),
             new ProfileSetting("r.Streaming.PoolSize", "1024"),
             new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1")])),
@@ -543,7 +545,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool HasHardwareScanMessage => !string.IsNullOrWhiteSpace(HardwareScanMessage);
 
     public bool CanShowHardwareScanAction =>
-        !CanStageHardwareRecommendation &&
         CanRunDetailedHardwareDetection;
 
     public string OnboardingTitle => OnboardingStep switch

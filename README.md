@@ -110,7 +110,7 @@ Advanced adds nine independently editable controls:
 
 Researched values that lack a verified asset-backed edit target or a proven consumer (minor wound base recovery time, minor poison stamina penalty, and stamina regained on a consumed portion) are excluded from the configurator.
 
-Game default, Explorer, Survival, Hardcore, and Custom are working starting points. Presets change only the six Simple controls and leave Advanced controls at game default.
+Game default, Explorer, Survival, Hardcore, and Custom provide starting presets. Presets configure the six Simple controls and leave Advanced controls at game default (subject to the runtime verification gate below).
 
 AEC verifies stock asset SHA-256 values and expected bytes, creates a deterministic PAK v5, reads it back, and installs it together with a content-bound ownership marker through the backed-up transaction system. After restart, AEC accepts an installed gameplay PAK only when the marker, package hash, asset definitions, and encoded percentages agree. Game default removes only an exactly verified AEC-owned package. An external or unverified same-name PAK blocks editing.
 

@@ -292,6 +292,34 @@ public sealed class SafeGameplayDifficultyEditorTests
             editor.CreatePlan(fixture.Snapshot, new GameplayDifficultySettings(140, 100, 100, 100)));
     }
 
+    [Fact]
+    public void UnverifiedOrSpoofedVignettePakBlocksGameplayPlanAsExternalConflict()
+    {
+        using var fixture = new GameplayFixture();
+        SafeGameplayDifficultyEditor editor = fixture.CreateEditor();
+
+        string spoofedVignettePath = Path.Combine(fixture.InstallDirectory, "Ancestors", "Content", "Paks", "AncestorsEnhanced-Vignette_P.pak");
+        File.WriteAllBytes(spoofedVignettePath, [1, 2, 3]);
+        File.WriteAllText(spoofedVignettePath + ".aec-owned.sha256", Convert.ToHexString(SHA256.HashData([1, 2, 3])));
+
+        PakFileSnapshot spoofedPak = new(
+            "AncestorsEnhanced-Vignette_P.pak",
+            spoofedVignettePath,
+            3,
+            DateTimeOffset.UtcNow,
+            PakClassification.PatchStyle);
+
+        GameInspectionSnapshot snapshotWithSpoofed = fixture.Snapshot with
+        {
+            PakFiles = [spoofedPak]
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            editor.CreatePlan(snapshotWithSpoofed, new GameplayDifficultySettings(130, 100, 100, 100)));
+
+        Assert.Contains("AncestorsEnhanced-Vignette_P.pak is an external PAK", exception.Message);
+    }
+
     private static void AssertFloatPatch(
         GameplayAssetPatch patch,
         string id,
