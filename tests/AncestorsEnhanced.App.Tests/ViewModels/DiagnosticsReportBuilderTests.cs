@@ -110,6 +110,17 @@ public sealed class DiagnosticsReportBuilderTests
         Assert.Contains("See https://github.com/Elfonie/AncestorsEnhancedConfigurator for details", report, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BuildRedactsWindowsForwardSlashPaths()
+    {
+        Assert.Equal(
+            @"D:/Users/<user>/Ancestors",
+            DiagnosticsReportBuilder.RedactPath("D:/Users/ForwardUser/Ancestors"));
+        Assert.Equal(
+            "<custom path>",
+            DiagnosticsReportBuilder.RedactPath("D:/CustomFolder/Game"));
+    }
+
     private static HardwareDiagnosticsViewModel TestHardware() => HardwareDiagnosticsViewModel.FromSnapshot(new HardwareSnapshot(
         "Windows", "Test CPU", 8, 4, 16UL * 1024 * 1024 * 1024,
         [new GraphicsAdapterSnapshot("Test GPU", 8UL * 1024 * 1024 * 1024, true)]));

@@ -949,7 +949,7 @@
                             <TextBlock Text="{Binding Summary}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
                             <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                           </StackPanel>
-                          <Button Grid.Row="1" Content="Use preset" Command="{Binding $parent[Window].DataContext.SelectGameplayPresetCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left" />
+                          <Button Grid.Row="1" Content="Use preset" Command="{Binding $parent[Window].DataContext.SelectGameplayPresetCommand}" CommandParameter="{Binding}" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" HorizontalAlignment="Left" />
                         </Grid>
                       </Border>
                     </DataTemplate>
@@ -1444,6 +1444,10 @@
                   IsVisible="{Binding ShowGameplayView}"
                   Content="Restore game default"
                   ToolTip.Tip="Removes the AEC gameplay difficulty PAK and restores unmodded game behavior." />
+          <Button Command="{Binding DiscardGameplayChangesCommand}"
+                  IsEnabled="{Binding CanDiscardGameplayDraft}"
+                  IsVisible="{Binding ShowGameplayPendingActions}"
+                  Content="Discard" />
           <Button Command="{Binding OpenGameplayReviewCommand}"
                   Classes="PrimaryAction"
                   IsEnabled="{Binding CanReviewGameplay}"

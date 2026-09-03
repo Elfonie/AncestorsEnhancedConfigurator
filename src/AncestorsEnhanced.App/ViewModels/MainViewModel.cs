@@ -600,7 +600,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool CanRemoveToolChanges =>
         HasRemovableToolChanges && !HasPendingChanges && !IsReviewingChanges && !IsAnyOperationRunning;
 
-    public bool ShowPendingActions => HasPendingChanges && !IsReviewingChanges;
+    public bool ShowPendingActions => !ShowGameplayView && HasPendingChanges && !IsReviewingChanges;
+
+    public bool ShowGameplayPendingActions => ShowGameplayView && HasGameplayPendingChanges && !IsReviewingChanges;
+
+    public bool CanDiscardGameplayDraft => HasGameplayPendingChanges && !IsReviewingChanges && !IsAnyOperationRunning;
 
     public bool ShowReviewActions => IsReviewingChanges;
 
@@ -948,7 +952,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private void SelectGameplayPreset(GameplayDifficultyPresetViewModel? preset)
     {
-        if (preset is null)
+        if (preset is null || !CanEditGameplay)
         {
             return;
         }
@@ -966,6 +970,18 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         SetGameplayDraftStatus(preset.Name);
+    }
+
+    [RelayCommand]
+    private void DiscardGameplayChanges()
+    {
+        if (!CanDiscardGameplayDraft)
+        {
+            return;
+        }
+
+        ApplyGameplaySettingsToControls(GameplayState.Settings);
+        SetGameplayDraftStatus("Game default");
     }
 
     [RelayCommand]
@@ -1514,6 +1530,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsDiagnosticsSectionActive));
         OnPropertyChanged(nameof(PageContextLabel));
         OnPropertyChanged(nameof(ShowBottomBar));
+        OnPropertyChanged(nameof(ShowPendingActions));
+        OnPropertyChanged(nameof(ShowGameplayPendingActions));
     }
 
     [RelayCommand]
@@ -2681,6 +2699,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanEditGameplay));
         OnPropertyChanged(nameof(GameplayReviewButtonLabel));
         OnPropertyChanged(nameof(ShowBottomBar));
+        OnPropertyChanged(nameof(ShowGameplayPendingActions));
+        OnPropertyChanged(nameof(CanDiscardGameplayDraft));
         OnPropertyChanged(nameof(HomeGameplayTitle));
         OnPropertyChanged(nameof(HomeGameplaySummary));
     }

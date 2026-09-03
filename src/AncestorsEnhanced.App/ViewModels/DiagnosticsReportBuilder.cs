@@ -5,7 +5,7 @@ namespace AncestorsEnhanced.App.ViewModels;
 public static class DiagnosticsReportBuilder
 {
     private static readonly Regex WindowsUserDirectory = new(
-        @"(?i)([a-z]:\\users\\)[^\\\r\n]+",
+        @"(?i)([a-z]:[\\/]users[\\/])[^\\/\r\n]+",
         RegexOptions.Compiled);
 
     private static readonly Regex LinuxHomeDirectory = new(
@@ -13,7 +13,7 @@ public static class DiagnosticsReportBuilder
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex WindowsAbsolutePath = new(
-        @"(?<=^|[\s'""`\(\[\{<])(?:[a-z]:\\|\\\\)[^\s'""`\)\]\}>,;]+",
+        @"(?<=^|[\s'""`\(\[\{<])(?:[a-z]:[\\/]|\\\\|//)[^\s'""`\)\]\}>,;]+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex LinuxAbsolutePath = new(
