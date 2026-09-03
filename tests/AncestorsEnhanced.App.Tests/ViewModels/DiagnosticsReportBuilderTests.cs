@@ -86,6 +86,30 @@ public sealed class DiagnosticsReportBuilderTests
         Assert.Contains("<path>", report, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BuildRedactsQuotedAndParenthesizedCustomPathsWhilePreservingUrls()
+    {
+        string report = DiagnosticsReportBuilder.Build(
+            "AEC", "1.0.0", "Ready", "Detected",
+            @"D:\PrivateDiskName\Games\Ancestors",
+            "/mnt/private-volume/SteamLibrary/Ancestors",
+            @"D:\PrivateDiskName\Games\Ancestors\System.sav",
+            "Read successfully", "Windows", TestHardware(), [], [],
+            [
+                new NoticeRowViewModel("Warning", "Failed to open 'D:\\PrivateDiskName\\Games\\Ancestors'"),
+                new NoticeRowViewModel("Warning", "Error at \"D:\\PrivateDiskName\\Games\\Ancestors\""),
+                new NoticeRowViewModel("Warning", "Error at (/mnt/private-volume/SteamLibrary/Ancestors)"),
+                new NoticeRowViewModel("Info", "See https://github.com/Elfonie/AncestorsEnhancedConfigurator for details"),
+            ]);
+
+        Assert.DoesNotContain("PrivateDiskName", report, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("private-volume", report, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Failed to open '<path>'", report, StringComparison.Ordinal);
+        Assert.Contains("Error at \"<path>\"", report, StringComparison.Ordinal);
+        Assert.Contains("Error at (<path>)", report, StringComparison.Ordinal);
+        Assert.Contains("See https://github.com/Elfonie/AncestorsEnhancedConfigurator for details", report, StringComparison.Ordinal);
+    }
+
     private static HardwareDiagnosticsViewModel TestHardware() => HardwareDiagnosticsViewModel.FromSnapshot(new HardwareSnapshot(
         "Windows", "Test CPU", 8, 4, 16UL * 1024 * 1024 * 1024,
         [new GraphicsAdapterSnapshot("Test GPU", 8UL * 1024 * 1024 * 1024, true)]));

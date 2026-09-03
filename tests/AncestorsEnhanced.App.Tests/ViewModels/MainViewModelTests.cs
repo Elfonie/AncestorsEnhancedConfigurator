@@ -513,6 +513,60 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public async Task DisablingExperimentalGraphicsResetsExperimentalDraftsWhileRetainingNormalDrafts()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            experimentalGraphicsSettingsEnabled: true);
+        await viewModel.InitializeAsync();
+        viewModel.ShowAdvancedCommand.Execute(null);
+
+        // 1. Stage an experimental setting
+        FeatureGroupRowViewModel shadows = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "shadows-lighting");
+        FeatureSettingRowViewModel experimentalSetting = Assert.Single(
+            shadows.Settings,
+            setting => setting.Name == "Fog history supersamples");
+        Assert.NotNull(experimentalSetting.Editor);
+        experimentalSetting.Editor.UseCustomValue = true;
+        experimentalSetting.Editor.SelectedChoice = experimentalSetting.Editor.Choices[^1];
+        Assert.True(experimentalSetting.Editor.HasChanges);
+
+        // 2. Stage a normal setting
+        FeatureGroupRowViewModel imageClarity = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "image-clarity");
+        FeatureSettingRowViewModel normalSetting = Assert.Single(
+            imageClarity.Settings,
+            setting => setting.Name == "Image sharpening");
+        Assert.NotNull(normalSetting.Editor);
+        normalSetting.Editor.UseCustomValue = true;
+        normalSetting.Editor.NumberValue = 1.8m;
+        Assert.True(normalSetting.Editor.HasChanges);
+
+        // Both settings must be in PendingChanges
+        Assert.Equal(2, viewModel.PendingChanges.Count);
+
+        // 3. Disable experimental graphics
+        viewModel.IsExperimentalGraphicsSettingsEnabled = false;
+
+        // Experimental draft must be gone, normal draft must be retained
+        Assert.False(experimentalSetting.Editor.HasChanges);
+        Assert.True(normalSetting.Editor.HasChanges);
+
+        PendingChangeRowViewModel remaining = Assert.Single(viewModel.PendingChanges);
+        Assert.Equal("Image sharpening", remaining.Name);
+
+        // 4. Review must contain only the normal setting
+        viewModel.OpenReviewCommand.Execute(null);
+        Assert.True(viewModel.IsReviewingChanges);
+        ChangeReviewRowViewModel reviewChange = Assert.Single(viewModel.ReviewChanges);
+        Assert.Equal("Image sharpening", reviewChange.Name);
+    }
+
+    [Fact]
     public async Task GroupSummaryOnlyIncludesValuesVisibleInTheCurrentMode()
     {
         GameInspectionSnapshot snapshot = CreateSnapshot() with

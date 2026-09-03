@@ -729,6 +729,28 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         PendingChanges.Take(3).Select(change => $"{change.Name}: {change.DesiredValue}")) +
         (PendingChanges.Count > 3 ? $" · +{PendingChanges.Count - 3} more" : string.Empty);
 
+    public string GameplayPendingDetails
+    {
+        get
+        {
+            if (!HasGameplayPendingChanges) return string.Empty;
+            var diffs = new List<string>();
+            foreach (GameplayDifficultyControlViewModel control in GameplaySimpleControls.Concat(GameplayAdvancedControls))
+            {
+                if (control.MultiplierPercent != 100)
+                {
+                    diffs.Add($"{control.Name}: {control.MultiplierPercent}%");
+                }
+            }
+            if (IncludeClanInGameplayPatch != GameplayState.Settings.IncludeClan)
+            {
+                diffs.Add(IncludeClanInGameplayPatch ? "Include Clan: Yes" : "Include Clan: No");
+            }
+            if (diffs.Count == 0) return "No custom changes";
+            return string.Join(" · ", diffs.Take(3)) + (diffs.Count > 3 ? $" · +{diffs.Count - 3} more" : string.Empty);
+        }
+    }
+
     public int SettingCount => Settings.Count;
 
     public async Task InitializeAsync()
@@ -1635,6 +1657,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnIsExperimentalGraphicsSettingsEnabledChanged(bool value)
     {
         _experimentalGraphicsSettingsChanged?.Invoke(value);
+        if (!value)
+        {
+            foreach ((string id, SettingEditorViewModel editor) in _editors)
+            {
+                if (SettingDefinitionCatalog.IsExperimental(id) && editor.HasChanges)
+                {
+                    editor.Reset();
+                }
+            }
+
+            CloseReview();
+            UpdatePendingChanges();
+        }
+
         ApplyViewMode();
     }
 
@@ -2547,7 +2583,11 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         GameplayDraftStatus = HasGameplayPendingChanges
             ? $"{draft} · pending review"
-            : GameplayState.Description;
+            : (GameplayState.Kind == GameplayDifficultyStateKind.Active
+                ? "AEC gameplay PAK active"
+                : (GameplayState.Kind == GameplayDifficultyStateKind.Unverified
+                    ? GameplayState.Description
+                    : draft));
         OnPropertyChanged(nameof(GameplayDraftStatus));
         OnPropertyChanged(nameof(HomeGameplayTitle));
         OnPropertyChanged(nameof(HomeGameplaySummary));
@@ -2635,6 +2675,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private void NotifyGameplayStateChanged()
     {
         OnPropertyChanged(nameof(HasGameplayPendingChanges));
+        OnPropertyChanged(nameof(GameplayPendingDetails));
         OnPropertyChanged(nameof(CanReviewGameplay));
         OnPropertyChanged(nameof(CanResetGameplay));
         OnPropertyChanged(nameof(CanEditGameplay));
@@ -2642,7 +2683,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(HomeGameplayTitle));
         OnPropertyChanged(nameof(HomeGameplaySummary));
-        OnPropertyChanged(nameof(ShowBottomBar));
     }
 
     private void NotifyGameplayRangeChanged()

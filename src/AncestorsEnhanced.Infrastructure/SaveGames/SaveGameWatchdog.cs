@@ -128,7 +128,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         }
     }
 
-    public void StopWatch()
+    public static readonly TimeSpan DefaultShutdownTimeout = TimeSpan.FromSeconds(5);
+
+    public void StopWatch() => StopWatch(DefaultShutdownTimeout);
+
+    public bool StopWatch(TimeSpan timeout)
     {
         lock (_lifecycleGate)
         {
@@ -156,11 +160,13 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
             }
 
             Task[] tasks = snapshot.Select(worker => worker.Task).ToArray();
+            bool completedCleanly = true;
             if (tasks.Length > 0)
             {
                 try
                 {
-                    Task.WaitAll(tasks);
+                    int timeoutMilliseconds = (int)Math.Clamp(timeout.TotalMilliseconds, 1, int.MaxValue);
+                    completedCleanly = Task.WaitAll(tasks, timeoutMilliseconds);
                 }
                 catch (AggregateException)
                 {
@@ -176,6 +182,20 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                         _running.Remove(slot);
                     }
                 }
+            }
+
+            if (!completedCleanly)
+            {
+                PublishWatcherError($"Auto-backup workers did not finish within the shutdown timeout of {timeout.TotalSeconds:0.##} seconds.");
+                lock (_gate)
+                {
+                    _pending.Clear();
+                    _lastBackupTicks.Clear();
+                    _retryAttempts.Clear();
+                    _activeMutations.Clear();
+                }
+
+                return false;
             }
 
             int[] flushSlots;
@@ -213,6 +233,8 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     PublishWatcherError($"Final auto-backup failed for slot {slot + 1}: {exception.Message}");
                 }
             }
+
+            return true;
         }
     }
 
@@ -491,6 +513,14 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 }
 
                 SaveGameOperationResult result = _createCheckpoint(slot);
+                lock (_gate)
+                {
+                    if (_stopped || _disposed || generation != _generation)
+                    {
+                        return;
+                    }
+                }
+
                 if (result.Succeeded)
                 {
                     retrying = false;
@@ -521,12 +551,20 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 }
             }
         }
-        catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             // StopWatch deliberately interrupts debounce/cooldown waits.
         }
         catch (Exception exception)
         {
+            lock (_gate)
+            {
+                if (_stopped || _disposed)
+                {
+                    return;
+                }
+            }
+
             PublishWatcherError($"Auto-backup failed for slot {slot + 1}: {exception.Message}");
         }
         finally
@@ -552,6 +590,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     {
         lock (_gate)
         {
+            if (_stopped || _disposed)
+            {
+                return null;
+            }
+
             if (!result.IsTransientFailure)
             {
                 _retryAttempts.Remove(slot);
@@ -652,6 +695,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     private void PublishCheckpointCreated(string slot)
     {
+        lock (_gate)
+        {
+            if (_stopped || _disposed) return;
+        }
+
         foreach (EventHandler<string> handler in CheckpointCreated?.GetInvocationList().Cast<EventHandler<string>>() ?? [])
         {
             ThreadPool.QueueUserWorkItem(_ =>
@@ -664,6 +712,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     private void PublishWatcherError(string message)
     {
+        lock (_gate)
+        {
+            if (_disposed) return;
+        }
+
         foreach (EventHandler<string> handler in WatcherError?.GetInvocationList().Cast<EventHandler<string>>() ?? [])
         {
             ThreadPool.QueueUserWorkItem(_ =>

@@ -13,11 +13,11 @@ public static class DiagnosticsReportBuilder
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex WindowsAbsolutePath = new(
-        @"(?<!\S)(?:[a-z]:\\|\\\\)[^\s\""']+",
+        @"(?<=^|[\s'""`\(\[\{<])(?:[a-z]:\\|\\\\)[^\s'""`\)\]\}>,;]+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex LinuxAbsolutePath = new(
-        @"(?<!\S)/(?:[^\s/]+/)*[^\s]+",
+        @"(?<=^|[\s'""`\(\[\{<])/(?:[^\s'""`\)\]\}>,;/]+/)*[^\s'""`\)\]\}>,;/]+",
         RegexOptions.Compiled);
 
     private static readonly Regex SteamUserDataDirectory = new(

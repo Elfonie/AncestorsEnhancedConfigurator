@@ -355,6 +355,42 @@ public sealed class SaveGameWatchdogTests : IDisposable
         Assert.False(watchdog.IsRunning);
     }
 
+    [Fact]
+    public void StopWatchTimesOutWhenWorkerHangs()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1, 2, 3));
+
+        var workerStarted = new ManualResetEventSlim();
+        var workerCanFinish = new ManualResetEventSlim();
+
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ =>
+            {
+                workerStarted.Set();
+                workerCanFinish.Wait(TimeSpan.FromSeconds(10));
+                return new SaveGameOperationResult(true, "Checkpoint saved.", "cp-1");
+            })
+        {
+            Cooldown = TimeSpan.Zero,
+        };
+
+        watchdog.Start();
+        watchdog.BeginSlotMutation(0).Dispose();
+
+        Assert.True(workerStarted.Wait(TimeSpan.FromSeconds(5)));
+
+        // StopWatch with 200ms timeout must return false instead of hanging indefinitely
+        bool completed = watchdog.StopWatch(TimeSpan.FromMilliseconds(200));
+
+        Assert.False(completed);
+        Assert.False(watchdog.IsRunning);
+
+        workerCanFinish.Set();
+    }
+
     private string CreateUserData()
     {
         string userData = Path.Combine(_temporaryDirectory, "Saved");

@@ -13,65 +13,65 @@ public static class AccessibilityTheme
     private static readonly IReadOnlyDictionary<string, string> StandardColors = new Dictionary<string, string>
     {
         // Surfaces
-        ["AppBackgroundBrush"] = "#070907",
-        ["SurfaceBrush"] = "#121612",
-        ["RaisedSurfaceBrush"] = "#191F19",
-        ["BorderBrush"] = "#2A332A",
-        ["ControlBackgroundBrush"] = "#1A221A",
-        ["ControlBorderBrush"] = "#3A4A2E",
-        ["ControlHoverBrush"] = "#253025",
-        ["InfoSurfaceBrush"] = "#17242B",
-        ["InfoBorderBrush"] = "#344A56",
-        ["WarningSurfaceBrush"] = "#211C18",
-        ["WarningBorderBrush"] = "#765536",
-        ["ReviewSurfaceBrush"] = "#10191F",
-        ["ReviewBorderBrush"] = "#3B7598",
-        ["PrimaryActionBrush"] = "#9B3A12",
-        ["PrimaryActionBorderBrush"] = "#C7591C",
-        ["PrimaryActionHoverBrush"] = "#B54816",
-        ["DangerBrush"] = "#8E2F29",
+        ["AppBackgroundBrush"] = "#0A0E0B",
+        ["SurfaceBrush"] = "#111713",
+        ["RaisedSurfaceBrush"] = "#161F19",
+        ["BorderBrush"] = "#233027",
+        ["ControlBackgroundBrush"] = "#1C261F",
+        ["ControlBorderBrush"] = "#28362B",
+        ["ControlHoverBrush"] = "#223026",
+        ["InfoSurfaceBrush"] = "#111C18",
+        ["InfoBorderBrush"] = "#2B4435",
+        ["WarningSurfaceBrush"] = "#241C12",
+        ["WarningBorderBrush"] = "#765830",
+        ["ReviewSurfaceBrush"] = "#141C16",
+        ["ReviewBorderBrush"] = "#3D5943",
+        ["PrimaryActionBrush"] = "#8B481A",
+        ["PrimaryActionBorderBrush"] = "#D8792C",
+        ["PrimaryActionHoverBrush"] = "#A65720",
+        ["DangerBrush"] = "#3A1917",
         ["DangerBorderBrush"] = "#C44A41",
 
         // Text
-        ["PrimaryTextBrush"] = "#E8E4D9",
-        ["MutedTextBrush"] = "#7E8B7E",
-        ["ControlTextBrush"] = "#C8CFC4",
-        ["SecondaryTextBrush"] = "#9CB0BC",
-        ["TechnicalTextBrush"] = "#71828D",
+        ["PrimaryTextBrush"] = "#F0F5EE",
+        ["MutedTextBrush"] = "#768D7B",
+        ["ControlTextBrush"] = "#C8D6C5",
+        ["SecondaryTextBrush"] = "#A1B5A5",
+        ["TechnicalTextBrush"] = "#768D7B",
         ["SuccessTextBrush"] = "#B4D941",
-        ["ErrorTextBrush"] = "#E04D42",
+        ["ErrorTextBrush"] = "#EF5350",
         ["AccentBrush"] = "#B4D941",
-        ["AccentHoverBrush"] = "#9ABF31",
+        ["AccentHoverBrush"] = "#C4E84F",
         ["FocusBrush"] = "#B4D941",
-        ["FocusGlowBrush"] = "#66B4D941",
-        ["InfoTextBrush"] = "#B8D7E5",
+        ["FocusGlowBrush"] = "#4DB4D941",
+        ["InfoTextBrush"] = "#A5D6B4",
         ["WarningTextBrush"] = "#E8D5B5",
-        ["ReviewTextBrush"] = "#DCEEFF",
+        ["ReviewTextBrush"] = "#F0F5EE",
 
-        // Page-level tokens previously hardcoded in MainWindow.axaml
-        ["HeadingTextBrush"] = "#EBF0F3",
-        ["BodyTextBrush"] = "#E6ECEF",
-        ["LabelTextBrush"] = "#82939D",
-        ["MidTextBrush"] = "#8B9AA4",
-        ["OrangeAccentBrush"] = "#FF5A00",
-        ["GoldTextBrush"] = "#D6BC84",
-        ["PrimaryActionTextBrush"] = "#FFF3EA",
-        ["DangerTextBrush"] = "#FFFFFF",
+        // Page-level tokens
+        ["HeadingTextBrush"] = "#F0F5EE",
+        ["BodyTextBrush"] = "#E4EBE2",
+        ["LabelTextBrush"] = "#869D8B",
+        ["MidTextBrush"] = "#869D8B",
+        ["OrangeAccentBrush"] = "#FF9800",
+        ["GoldTextBrush"] = "#E2B45C",
+        ["PrimaryActionTextBrush"] = "#FFFFFF",
+        ["DangerTextBrush"] = "#EF5350",
 
-        // Page-level surfaces/borders previously hardcoded in MainWindow.axaml
-        ["EditorSurfaceBrush"] = "#182127",
-        ["EditorBorderBrush"] = "#2A363E",
-        ["OliveBorderBrush"] = "#4A5A23",
+        // Page-level surfaces/borders
+        ["EditorSurfaceBrush"] = "#161F19",
+        ["EditorBorderBrush"] = "#28362B",
+        ["OliveBorderBrush"] = "#3B5226",
         ["CloudWarningBorderBrush"] = "#3B3120",
-        ["OnboardingPanelBrush"] = "#15232C",
-        ["ModalOverlayBrush"] = "#E60C1115",
+        ["OnboardingPanelBrush"] = "#161F19",
+        ["ModalOverlayBrush"] = "#E60A0E0B",
         ["DialogScrimBrush"] = "#1A000000",
         ["ToggleSwitchCurtainFillOn"] = "#B4D941",
-        ["ToggleSwitchCurtainFillOnPointerOver"] = "#9ABF31",
+        ["ToggleSwitchCurtainFillOnPointerOver"] = "#C4E84F",
         ["ToggleSwitchCurtainStrokeOn"] = "#B4D941",
-        ["ToggleSwitchCurtainStrokeOnPointerOver"] = "#9ABF31",
-        ["ToggleSwitchKnobFillOn"] = "#070907",
-        ["ToggleSwitchKnobFillOnPointerOver"] = "#070907",
+        ["ToggleSwitchCurtainStrokeOnPointerOver"] = "#C4E84F",
+        ["ToggleSwitchKnobFillOn"] = "#0A0E0B",
+        ["ToggleSwitchKnobFillOnPointerOver"] = "#0A0E0B",
     };
 
     private static readonly IReadOnlyDictionary<string, string> HighContrastColors = new Dictionary<string, string>
@@ -153,12 +153,23 @@ public static class AccessibilityTheme
                 new GradientStop(Color.Parse("#1E2720"), 1),
             },
         },
+        ["BrandGradientBrush"] = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(Color.Parse("#223026"), 0),
+                new GradientStop(Color.Parse("#162217"), 1),
+            },
+        },
     };
 
     private static readonly IReadOnlyDictionary<string, IBrush> HighContrastBrushes = new Dictionary<string, IBrush>
     {
         // Solid dark blue keeps yellow accent nav text readable at high contrast.
         ["NavActiveBackgroundBrush"] = new SolidColorBrush(Color.Parse("#003A8C")),
+        ["BrandGradientBrush"] = new SolidColorBrush(Color.Parse("#000000")),
     };
 
     internal static IReadOnlyDictionary<string, string> StandardPalette => StandardColors;

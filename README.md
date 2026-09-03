@@ -108,7 +108,7 @@ Advanced adds nine independently editable controls:
 - Major wound recovery duration
 - Major poison maximum-stamina penalty
 
-Three researched values remain display-only because the exact build does not provide a verified asset-backed edit target or a proven consumer: minor wound base recovery time, minor poison stamina penalty, and stamina regained on a consumed portion.
+Researched values that lack a verified asset-backed edit target or a proven consumer (minor wound base recovery time, minor poison stamina penalty, and stamina regained on a consumed portion) are excluded from the configurator.
 
 Game default, Explorer, Survival, Hardcore, and Custom are working starting points. Presets change only the six Simple controls and leave Advanced controls at game default.
 

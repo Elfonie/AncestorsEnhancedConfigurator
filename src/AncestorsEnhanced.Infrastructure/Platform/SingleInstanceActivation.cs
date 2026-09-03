@@ -16,6 +16,7 @@ public sealed class SingleInstanceActivationListener : IDisposable
     private readonly Action _activate;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly object _startGate = new();
+    private NamedPipeServerStream? _activeServer;
     private Task? _listenerTask;
     private TaskCompletionSource? _ready;
     private bool _disposed;
@@ -90,14 +91,26 @@ public sealed class SingleInstanceActivationListener : IDisposable
         bool hasSignalledReady = false;
         while (!_cancellation.IsCancellationRequested)
         {
+            NamedPipeServerStream? server = null;
             try
             {
-                await using var server = new NamedPipeServerStream(
+                server = new NamedPipeServerStream(
                     _pipeName,
                     PipeDirection.In,
                     maxNumberOfServerInstances: 1,
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous);
+                lock (_startGate)
+                {
+                    if (_disposed)
+                    {
+                        server.Dispose();
+                        break;
+                    }
+
+                    _activeServer = server;
+                }
+
                 if (!hasSignalledReady)
                 {
                     // The server must be constructed before another process is
@@ -122,6 +135,14 @@ public sealed class SingleInstanceActivationListener : IDisposable
             {
                 break;
             }
+            catch (ObjectDisposedException) when (_cancellation.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (IOException) when (_cancellation.IsCancellationRequested)
+            {
+                break;
+            }
             catch (OperationCanceledException)
             {
                 // A connected client that never writes is discarded after the
@@ -142,6 +163,18 @@ public sealed class SingleInstanceActivationListener : IDisposable
                 }
                 break;
             }
+            finally
+            {
+                lock (_startGate)
+                {
+                    if (ReferenceEquals(_activeServer, server))
+                    {
+                        _activeServer = null;
+                    }
+                }
+
+                server?.Dispose();
+            }
         }
 
         if (!hasSignalledReady)
@@ -152,14 +185,40 @@ public sealed class SingleInstanceActivationListener : IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
+        Task? listenerTask;
+        lock (_startGate)
         {
-            return;
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _cancellation.Cancel();
+            try
+            {
+                _activeServer?.Dispose();
+            }
+            catch
+            {
+            }
+
+            _activeServer = null;
+            _ready?.TrySetCanceled();
+            listenerTask = _listenerTask;
         }
 
-        _disposed = true;
-        _cancellation.Cancel();
-        _ready?.TrySetCanceled();
+        if (listenerTask is not null)
+        {
+            try
+            {
+                listenerTask.Wait(TimeSpan.FromSeconds(3));
+            }
+            catch
+            {
+            }
+        }
+
         _cancellation.Dispose();
     }
 }

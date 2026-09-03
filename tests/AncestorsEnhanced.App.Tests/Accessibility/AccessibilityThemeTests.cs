@@ -29,8 +29,8 @@ public sealed class AccessibilityThemeTests
         AccessibilityTheme.Apply(application, true);
         AccessibilityTheme.Apply(application, false);
 
-        Assert.Equal(Color.Parse("#FFE8E4D9"), ColorOf(application, "PrimaryTextBrush"));
-        Assert.Equal(Color.Parse("#FF070907"), ColorOf(application, "AppBackgroundBrush"));
+        Assert.Equal(Color.Parse(AccessibilityTheme.StandardPalette["PrimaryTextBrush"]), ColorOf(application, "PrimaryTextBrush"));
+        Assert.Equal(Color.Parse(AccessibilityTheme.StandardPalette["AppBackgroundBrush"]), ColorOf(application, "AppBackgroundBrush"));
     }
 
     [Fact]
