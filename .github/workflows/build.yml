@@ -2,7 +2,7 @@ name: build-and-test
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
   pull_request:
   workflow_dispatch:
 
@@ -37,8 +37,15 @@ jobs:
       - name: Build
         run: dotnet build AncestorsEnhanced.slnx -c Release --no-restore
 
-      - name: Test
-        run: dotnet test AncestorsEnhanced.slnx -c Release --no-build --no-restore
+      - name: Test with coverage
+        run: dotnet test AncestorsEnhanced.slnx -c Release --no-build --no-restore --collect:"XPlat Code Coverage" --results-directory TestResults
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: AncestorsEnhanced-coverage-${{ matrix.rid }}
+          path: TestResults/**/coverage.cobertura.xml
+          if-no-files-found: error
 
       - name: Package vulnerability gate
         shell: pwsh
@@ -61,7 +68,11 @@ jobs:
           }
 
       - name: Publish
-        run: dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -c Release -r ${{ matrix.rid }} --no-restore -p:PublishSingleFile=true -p:SelfContained=true -p:DebugType=None -p:DebugSymbols=false -o artifacts/${{ matrix.rid }}
+        # Folder publish (no single-file bundle): the release zip provides the
+        # compression, and antivirus scanners can inspect every managed and
+        # native file individually instead of treating one compressed,
+        # self-extracting executable as a packed payload.
+        run: dotnet publish src/AncestorsEnhanced.App/AncestorsEnhanced.App.csproj -c Release -r ${{ matrix.rid }} --no-restore -p:PublishSingleFile=false -p:SelfContained=true -p:DebugType=None -p:DebugSymbols=false -o artifacts/${{ matrix.rid }}
 
       - name: Prepare portable package
         shell: pwsh
@@ -86,7 +97,7 @@ jobs:
           $stderr = Join-Path $env:RUNNER_TEMP 'ancestors-version-error.txt'
           $process = Start-Process ./artifacts/win-x64/AncestorsEnhanced.App.exe -ArgumentList '--version' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           $output = (Get-Content -Raw $stdout).Trim()
-          if ($process.ExitCode -ne 0 -or $output -ne 'Ancestors Enhanced Configurator 0.9.0') { throw "Windows publish smoke test failed: $output" }
+          if ($process.ExitCode -ne 0 -or $output -ne 'Ancestors Enhanced Configurator 1.0.0') { throw "Windows publish smoke test failed: $output" }
 
       - name: Smoke test Linux artifact
         if: runner.os == 'Linux'
@@ -94,13 +105,13 @@ jobs:
         run: |
           chmod +x ./artifacts/linux-x64/AncestorsEnhanced.App
           output="$(./artifacts/linux-x64/AncestorsEnhanced.App --version)"
-          test "$output" = "Ancestors Enhanced Configurator 0.9.0"
+          test "$output" = "Ancestors Enhanced Configurator 1.0.0"
 
       - name: Create Windows archive
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $archive = 'artifacts/AncestorsEnhanced-0.9.0-win-x64.zip'
+          $archive = 'artifacts/AncestorsEnhanced-1.0.0-win-x64.zip'
           Compress-Archive -Path 'artifacts/win-x64/*' -DestinationPath $archive
           "$(Get-FileHash -Algorithm SHA256 -LiteralPath $archive | Select-Object -ExpandProperty Hash)  $(Split-Path -Leaf $archive)" |
             Set-Content -Encoding ascii "$archive.sha256"
@@ -109,7 +120,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          archive="AncestorsEnhanced-0.9.0-linux-x64.zip"
+          archive="AncestorsEnhanced-1.0.0-linux-x64.zip"
           (cd artifacts/linux-x64 && zip -q -r "../$archive" .)
           (cd artifacts && sha256sum "$archive" > "$archive.sha256")
 
@@ -118,29 +129,29 @@ jobs:
         shell: pwsh
         run: |
           $destination = Join-Path $env:RUNNER_TEMP 'ancestors-package'
-          Expand-Archive -LiteralPath artifacts/AncestorsEnhanced-0.9.0-win-x64.zip -DestinationPath $destination
+          Expand-Archive -LiteralPath artifacts/AncestorsEnhanced-1.0.0-win-x64.zip -DestinationPath $destination
           if (Get-ChildItem -LiteralPath $destination -Filter '*.pdb' -File -Recurse) { throw 'Windows archive contains debug symbols.' }
           $stdout = Join-Path $env:RUNNER_TEMP 'ancestors-package-version.txt'
           $process = Start-Process (Join-Path $destination 'AncestorsEnhanced.App.exe') -ArgumentList '--version' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $stdout
           $output = (Get-Content -Raw $stdout).Trim()
-          if ($process.ExitCode -ne 0 -or $output -ne 'Ancestors Enhanced Configurator 0.9.0') { throw "Windows archive smoke test failed: $output" }
+          if ($process.ExitCode -ne 0 -or $output -ne 'Ancestors Enhanced Configurator 1.0.0') { throw "Windows archive smoke test failed: $output" }
 
       - name: Verify Linux archive
         if: runner.os == 'Linux'
         shell: bash
         run: |
           destination="$RUNNER_TEMP/ancestors-package"
-          unzip -q artifacts/AncestorsEnhanced-0.9.0-linux-x64.zip -d "$destination"
+          unzip -q artifacts/AncestorsEnhanced-1.0.0-linux-x64.zip -d "$destination"
           test -x "$destination/AncestorsEnhanced.App"
           test -z "$(find "$destination" -name '*.pdb' -print -quit)"
           output="$("$destination/AncestorsEnhanced.App" --version)"
-          test "$output" = "Ancestors Enhanced Configurator 0.9.0"
+          test "$output" = "Ancestors Enhanced Configurator 1.0.0"
 
       - name: Upload publish artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: AncestorsEnhanced-${{ matrix.rid }}
           path: |
-            artifacts/AncestorsEnhanced-0.9.0-${{ matrix.rid }}.zip
-            artifacts/AncestorsEnhanced-0.9.0-${{ matrix.rid }}.zip.sha256
+            artifacts/AncestorsEnhanced-1.0.0-${{ matrix.rid }}.zip
+            artifacts/AncestorsEnhanced-1.0.0-${{ matrix.rid }}.zip.sha256
           if-no-files-found: error

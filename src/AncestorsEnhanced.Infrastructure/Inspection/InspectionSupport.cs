@@ -57,7 +57,8 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
         StoreKind store,
         string installDirectory,
         string? buildId,
-        CompatibilityLayerKind compatibilityLayer)
+        CompatibilityLayerKind compatibilityLayer,
+        string? compatibilityPrefixPath = null)
     {
         string fullInstall = Path.GetFullPath(installDirectory);
         string executable = GetExecutablePath(fullInstall);
@@ -76,7 +77,25 @@ internal sealed class GameInstallationFactory(IReadOnlyFileSystem fileSystem)
             buildId,
             true,
             signature.Signature,
-            signature.Failed);
+            signature.Failed,
+            NormalizePrefixOrNull(compatibilityPrefixPath));
+    }
+
+    private static string? NormalizePrefixOrNull(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Path.GetFullPath(path);
+        }
+        catch (Exception exception) when (InspectionErrors.IsExpected(exception))
+        {
+            return null;
+        }
     }
 
     public static (string? Signature, bool Failed) ReadContentSignature(string installDirectory)

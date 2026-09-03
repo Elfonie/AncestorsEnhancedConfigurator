@@ -34,17 +34,18 @@ public sealed class ReadOnlyAncestorsInspector : IReadOnlyGameInspector
         List<InspectionNotice> notices = [];
         GameInstallationSnapshot? installation = _installations.Find(notices);
         string? userDataDirectory = _userData.Find(installation, notices);
+        VignetteModSnapshot? vignette = installation is null
+            ? null
+            : VignettePakEditor.Inspect(installation.InstallDirectory);
         return new GameInspectionSnapshot(
             _environment.UtcNow,
             installation,
             userDataDirectory,
             _iniFiles.Read(userDataDirectory, notices),
             _systemSave.Read(userDataDirectory),
-            _pakFiles.Read(installation, notices),
+            _pakFiles.Read(installation, notices, vignette),
             notices,
-            installation is null
-                ? null
-                : VignettePakEditor.Inspect(installation.InstallDirectory));
+            vignette);
     }
 
     private static IHostEnvironment CreateHostEnvironment()

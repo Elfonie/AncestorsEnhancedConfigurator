@@ -1,4 +1,5 @@
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Infrastructure.Editing;
 using AncestorsEnhanced.Infrastructure.Environment;
 using AncestorsEnhanced.Infrastructure.FileSystem;
 
@@ -31,15 +32,20 @@ internal sealed class InstallationLocator
         installations.AddRange(_heroic.Find(notices));
 
         // Deduplicate identical installations reported by more than one store locator
-        // (e.g. the same Epic install also listed through Heroic) before choosing one
+        // or through different filesystem symlink aliases before choosing one.
         // The explicit store preference above wins for duplicate paths.
         List<GameInstallationSnapshot> unique = [];
         var seen = new HashSet<string>(PathComparer);
         foreach (GameInstallationSnapshot candidate in installations)
         {
-            if (seen.Add(candidate.InstallDirectory))
+            string canonicalInstall = ConfigurationFileOperations.ResolvePhysicalPath(candidate.InstallDirectory);
+            if (seen.Add(canonicalInstall))
             {
-                unique.Add(candidate);
+                unique.Add(candidate with
+                {
+                    InstallDirectory = canonicalInstall,
+                    LibraryRoot = ConfigurationFileOperations.ResolvePhysicalPath(candidate.LibraryRoot)
+                });
             }
         }
 

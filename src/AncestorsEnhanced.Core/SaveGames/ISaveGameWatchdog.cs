@@ -10,6 +10,8 @@ public interface ISaveGameWatchdog
 
     void StopWatch();
 
+    bool StopWatch(TimeSpan timeout) => true;
+
     /// <summary>Marks a restore/write operation so filesystem events are reconciled afterwards.</summary>
     IDisposable BeginSlotMutation(int slotNumber);
 

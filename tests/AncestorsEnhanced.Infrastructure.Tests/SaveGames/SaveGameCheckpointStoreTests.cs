@@ -168,6 +168,28 @@ public sealed class SaveGameCheckpointStoreTests : IDisposable
     }
 
     [Fact]
+    public void RetentionKeepsFavoritedCheckpointPinned()
+    {
+        string userData = CreateUserData();
+        int sequence = 0;
+        var store = new SaveGameCheckpointStore(
+            () => FixedTime,
+            maxCheckpointsPerSlot: 2,
+            newCheckpointId: _ => $"20260801-12000{sequence++}-000-{new string((char)('a' + sequence), 32)}");
+
+        string favorite = store.Create(userData, 0, TestSaveFactory.Create(1, 2, 3));
+        File.WriteAllText(
+            Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json"),
+            $$"""{ "CheckpointMetadata": { "0:{{favorite}}": { "IsFavorite": true } } }""");
+        _ = store.Create(userData, 0, TestSaveFactory.Create(4, 5, 6));
+        _ = store.Create(userData, 0, TestSaveFactory.Create(7, 8, 9));
+
+        IReadOnlyList<SaveGameCheckpoint> remaining = SaveGameCheckpointStore.ListCheckpoints(userData, 0);
+        Assert.Equal(2, remaining.Count);
+        Assert.Contains(remaining, checkpoint => checkpoint.Id == favorite);
+    }
+
+    [Fact]
     public void ListingUsesMetadataWhileRestoreStillValidatesTheStoredSave()
     {
         string userData = CreateUserData();

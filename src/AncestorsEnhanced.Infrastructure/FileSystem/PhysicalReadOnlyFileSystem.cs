@@ -10,6 +10,8 @@ internal sealed class PhysicalReadOnlyFileSystem : IReadOnlyFileSystem
 
     public byte[] ReadAllBytes(string path) => File.ReadAllBytes(path);
 
+    public Stream OpenRead(string path) => File.OpenRead(path);
+
     public ReadOnlyFileMetadata GetFileMetadata(string path)
     {
         FileInfo file = new(path);

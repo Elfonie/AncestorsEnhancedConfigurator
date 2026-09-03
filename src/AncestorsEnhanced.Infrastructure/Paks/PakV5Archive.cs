@@ -70,7 +70,7 @@ internal static class PakV5Archive
         {
             throw new ArgumentException("At least one named PAK entry is required.", nameof(files));
         }
-        if (files.Select(file => file.FileName).Distinct(StringComparer.Ordinal).Count() != files.Count)
+        if (files.Select(file => file.FileName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != files.Count)
         {
             throw new ArgumentException("PAK entry names must be unique.", nameof(files));
         }
@@ -175,7 +175,7 @@ internal static class PakV5Archive
         ValidateBlockLayout(entry, located.IndexOffset);
 
         using var result = new MemoryStream((int)entry.UncompressedSize);
-        using var compressedContent = new MemoryStream((int)entry.Size);
+        using var compressedPayload = new MemoryStream((int)entry.Size);
         long written = 0;
         foreach (PakBlock block in entry.Blocks)
         {
@@ -183,19 +183,22 @@ internal static class PakV5Archive
             long length = checked(block.End - block.Start);
             stream.Position = start;
             byte[] compressed = ReadExact(stream, length);
-            compressedContent.Write(compressed);
+            compressedPayload.Write(compressed);
             using var compressedStream = new MemoryStream(compressed, writable: false);
             using var zlib = new ZLibStream(compressedStream, CompressionMode.Decompress);
             // Never decompress past the declared uncompressed size.
             written += CopyBounded(zlib, result, entry.UncompressedSize - written);
         }
 
-        VerifyHash(compressedContent.ToArray(), entry.Hash, "compressed PAK entry");
         if (result.Length != entry.UncompressedSize || written != entry.UncompressedSize)
         {
             throw new InvalidDataException("The decompressed PAK entry has an unexpected size.");
         }
 
+        // UE4 PAK v5 stores the entry SHA-1 over the concatenated compressed
+        // blocks. The payload must be authenticated before the decompressed
+        // asset is accepted; hashing the result instead rejects valid stock PAKs.
+        VerifyHash(compressedPayload.ToArray(), entry.Hash, "compressed PAK entry");
         return result.ToArray();
     }
 
@@ -277,7 +280,9 @@ internal static class PakV5Archive
             throw new InvalidDataException("The PAK file count is invalid.");
         }
 
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        // Unreal's mount lookup is case-insensitive.  Treat casing-only duplicates
+        // and lookups the same way so a conflicting override cannot be missed.
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         PakEntry? match = null;
         for (int indexNumber = 0; indexNumber < count; indexNumber++)
         {
@@ -287,7 +292,7 @@ internal static class PakV5Archive
             {
                 throw new InvalidDataException($"The PAK index contains duplicate path {name}.");
             }
-            if (string.Equals(name, fileName, StringComparison.Ordinal))
+            if (string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase))
             {
                 match = entry;
             }

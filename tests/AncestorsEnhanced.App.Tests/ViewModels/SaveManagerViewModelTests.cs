@@ -70,11 +70,31 @@ public sealed class SaveManagerViewModelTests
         Assert.Equal("#B4D941", viewModel.StatusAccent);
     }
 
+    [Fact]
+    public void BackupHealthSummarizesReadableSlotsAndFlagsInspectionProblems()
+    {
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", [])),
+            "user-data");
+        var readable = new SaveGameSlotSnapshot(
+            "0", "Savegame0.sav", "path-0", true, 42, DateTimeOffset.UnixEpoch,
+            [new SaveGameCheckpoint("cp-1", DateTimeOffset.UnixEpoch, "0", 42, "hash", "Manual")]);
+        var broken = new SaveGameSlotSnapshot(
+            "1", "Savegame1.sav", "path-1", true, null, null, [], "Unreadable save");
+
+        viewModel.Refresh(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", [readable, broken]));
+
+        Assert.True(viewModel.HasBackupHealthWarning);
+        Assert.Contains("1 readable save slot", viewModel.BackupHealthSummary, StringComparison.Ordinal);
+        Assert.Contains("1 checkpoint", viewModel.BackupHealthSummary, StringComparison.Ordinal);
+        Assert.Contains("1 slot(s) need attention", viewModel.BackupHealthSummary, StringComparison.Ordinal);
+    }
+
     [Theory]
-    [InlineData("Cheat:MaxNeuronalEnergy", "Max Neuronal Energy cheat")]
-    [InlineData("Cheat:MaxNeeds", "Max Stamina and Energy cheat")]
-    [InlineData("Cheat:HealClan", "Heal Current Ape cheat")]
-    public void LegacyCheatOriginsRemainReadable(string origin, string expected)
+    [InlineData("Cheat:MaxNeuronalEnergy")]
+    [InlineData("Cheat:MaxNeeds")]
+    [InlineData("Cheat:HealClan")]
+    public void LegacyModifiedCheckpointOriginsRemainReadable(string origin)
     {
         var checkpoint = new SaveGameCheckpoint(
             "checkpoint",
@@ -89,7 +109,109 @@ public sealed class SaveManagerViewModelTests
             () => Task.CompletedTask,
             () => true);
 
-        Assert.Equal(expected, viewModel.OriginLabel);
+        Assert.Equal("Legacy modified checkpoint", viewModel.OriginLabel);
+    }
+
+    [Fact]
+    public void CheckpointMetadataIsReportedWithoutChangingTheCheckpoint()
+    {
+        var checkpoint = new SaveGameCheckpoint(
+            "checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");
+        CheckpointMetadata? saved = null;
+        var viewModel = new SaveGameCheckpointViewModel(
+            checkpoint,
+            () => Task.CompletedTask,
+            () => Task.CompletedTask,
+            () => true,
+            metadataChanged: metadata => saved = metadata);
+
+        viewModel.Title = "Before evolution";
+        viewModel.Note = "Keep this safe";
+        viewModel.IsFavorite = true;
+
+        Assert.Equal("Before evolution", viewModel.DisplayTitle);
+        Assert.True(viewModel.HasNote);
+        Assert.Equal("Before evolution", saved!.Title);
+        Assert.Equal("Keep this safe", saved.Note);
+        Assert.True(saved.IsFavorite);
+        Assert.Equal("checkpoint", checkpoint.Id);
+    }
+
+    [Fact]
+    public void FavoriteRevertsWhenItsDurableRetentionPinCannotBeSaved()
+    {
+        var checkpoint = new SaveGameCheckpoint(
+            "checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");
+        var viewModel = new SaveGameCheckpointViewModel(
+            checkpoint,
+            () => Task.CompletedTask,
+            () => Task.CompletedTask,
+            () => true,
+            favoriteMetadataChanged: _ => false);
+
+        viewModel.IsFavorite = true;
+
+        Assert.False(viewModel.IsFavorite);
+    }
+
+    [Fact]
+    public void SaveManagerDoesNotPresentAFavoriteWhenItsSettingsDirectoryIsUnavailable()
+    {
+        string unavailableDirectory = Path.Combine(Path.GetTempPath(), "aec-missing-" + Guid.NewGuid().ToString("N"));
+        var checkpoint = new SaveGameCheckpoint("checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");
+        var slot = new SaveGameSlotSnapshot("0", "Savegame0.sav", "path", true, 1, DateTimeOffset.UnixEpoch, [checkpoint]);
+        using var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, unavailableDirectory, [slot])),
+            unavailableDirectory);
+        viewModel.Refresh(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, unavailableDirectory, [slot]));
+
+        viewModel.Slots[0].Checkpoints[0].IsFavorite = true;
+
+        Assert.False(viewModel.Slots[0].Checkpoints[0].IsFavorite);
+    }
+
+    [Fact]
+    public void CheckpointMetadataIsNotReportedDuringViewModelConstruction()
+    {
+        var checkpoint = new SaveGameCheckpoint("checkpoint", DateTimeOffset.UnixEpoch, "0", 1, "hash", "Manual");
+        int notifications = 0;
+
+        _ = new SaveGameCheckpointViewModel(
+            checkpoint,
+            () => Task.CompletedTask,
+            () => Task.CompletedTask,
+            () => true,
+            metadata: new CheckpointMetadata("Pinned", "Keep", true),
+            metadataChanged: _ => notifications++);
+
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
+    public void CheckpointFiltersSearchMetadataAndOrigin()
+    {
+        var checkpoints = new[]
+        {
+            new SaveGameCheckpoint("manual", DateTimeOffset.UnixEpoch, "0", 1, "manual", "Manual"),
+            new SaveGameCheckpoint("auto", DateTimeOffset.UnixEpoch, "0", 1, "auto", "AutoBackup"),
+        };
+        var slot = new SaveGameSlotSnapshot("0", "Savegame0.sav", "path-0", true, 1, DateTimeOffset.UnixEpoch, checkpoints);
+        var viewModel = new SaveGameSlotViewModel(
+            slot,
+            () => Task.CompletedTask,
+            _ => () => Task.CompletedTask,
+            _ => () => Task.CompletedTask,
+            metadataProvider: checkpoint => checkpoint.Id == "manual"
+                ? new CheckpointMetadata("Before evolution", "Important", false)
+                : null);
+
+        viewModel.SetCheckpointFilter("evolution", "All");
+        Assert.Single(viewModel.VisibleCheckpoints);
+        Assert.Equal("manual", viewModel.VisibleCheckpoints[0].Id);
+
+        viewModel.SetCheckpointFilter("", "AutoBackup");
+        Assert.Single(viewModel.VisibleCheckpoints);
+        Assert.Equal("auto", viewModel.VisibleCheckpoints[0].Id);
     }
 
     [Fact]
@@ -102,7 +224,8 @@ public sealed class SaveManagerViewModelTests
                 new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())));
 
         Assert.False(viewModel.IsSaveGamesView);
-        Assert.True(viewModel.ShowGraphicsView);
+        Assert.True(viewModel.ShowHomeView);
+        Assert.False(viewModel.ShowGraphicsView);
         Assert.False(viewModel.ShowSaveGamesView);
 
         viewModel.ShowSaveGamesCommand.Execute(null);
@@ -114,6 +237,12 @@ public sealed class SaveManagerViewModelTests
         viewModel.ShowGraphicsCommand.Execute(null);
 
         Assert.False(viewModel.IsSaveGamesView);
+        Assert.True(viewModel.ShowGraphicsView);
+
+        viewModel.ShowHomeCommand.Execute(null);
+
+        Assert.True(viewModel.ShowHomeView);
+        Assert.False(viewModel.ShowGraphicsView);
     }
 
     [Fact]
@@ -285,6 +414,29 @@ public sealed class SaveManagerViewModelTests
         Assert.All(viewModel.Slots[0].Checkpoints, checkpoint => Assert.False(checkpoint.CanRestore));
     }
 
+    [Fact]
+    public void RefreshReusesUnchangedCheckpointViewModelsAndKeepsMetadataEditingState()
+    {
+        var checkpoint = new SaveGameCheckpoint("cp-1", DateTimeOffset.UnixEpoch, "0", 1, "checkpoint", "Manual");
+        var snapshot = new SaveGamesSnapshot(
+            DateTimeOffset.UnixEpoch,
+            "user-data",
+            [new SaveGameSlotSnapshot("0", "Savegame0.sav", "path-0", true, 42, DateTimeOffset.UnixEpoch, [checkpoint])]);
+        var viewModel = new SaveManagerViewModel(new FakeSaveGameManager(snapshot), "user-data", watchdog: null);
+
+        viewModel.Refresh(snapshot);
+        SaveGameCheckpointViewModel original = Assert.Single(viewModel.Slots[0].Checkpoints);
+        original.ToggleMetadataEditorCommand.Execute(null);
+        original.Title = "Keep me";
+
+        viewModel.Refresh(snapshot);
+
+        SaveGameCheckpointViewModel refreshed = Assert.Single(viewModel.Slots[0].Checkpoints);
+        Assert.Same(original, refreshed);
+        Assert.True(refreshed.IsMetadataEditorVisible);
+        Assert.Equal("Keep me", refreshed.Title);
+    }
+
     private static string TempUserData() =>
         Path.Combine(Path.GetTempPath(), "aec-sm-" + Guid.NewGuid().ToString("N"));
 
@@ -407,20 +559,109 @@ public sealed class SaveManagerViewModelTests
     }
 
     [Fact]
-    public void TogglingWatchdogStartsAndStopsIt()
+    public void TogglingWatchdogReconcilesToTheLatestRequestedState()
     {
         var watchdog = new FakeWatchdog();
         var viewModel = new SaveManagerViewModel(new FakeSaveGameManager(
             new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())), "user-data-tmp", watchdog);
 
         Assert.False(watchdog.StartCount > 0);
+        viewModel.Activate();
         viewModel.IsWatchdogEnabled = true;
-        Assert.Equal(1, watchdog.StartCount);
+        Assert.True(SpinWait.SpinUntil(() => watchdog.StartCount == 1, TimeSpan.FromSeconds(2)));
         Assert.Equal(0, watchdog.StopCount);
 
         viewModel.IsWatchdogEnabled = false;
         Assert.Equal(1, watchdog.StartCount);
-        Assert.Equal(1, watchdog.StopCount);
+        Assert.True(SpinWait.SpinUntil(() => watchdog.StopCount == 1, TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public void LoadingEnabledSettingsDoesNotQueueAStopAfterActivate()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        try
+        {
+            File.WriteAllText(Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json"),
+                "{\"IsWatchdogEnabled\":true,\"WatchdogIntervalMinutes\":5,\"KeepRunningInTrayWhenClosing\":true}");
+            var watchdog = new FakeWatchdog();
+            using var viewModel = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog);
+
+            viewModel.Activate();
+
+            Assert.True(SpinWait.SpinUntil(() => watchdog.StartCount == 1, TimeSpan.FromSeconds(2)));
+            Assert.False(SpinWait.SpinUntil(() => watchdog.StopCount > 0, TimeSpan.FromMilliseconds(250)));
+        }
+        finally
+        {
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void OffThenOnReconcilesToEnabledEvenWhenThePreviousStopIsBlocked()
+    {
+        using var stopEntered = new ManualResetEventSlim();
+        using var releaseStop = new ManualResetEventSlim();
+        var watchdog = new FakeWatchdog
+        {
+            StopEntered = stopEntered,
+            ReleaseStop = releaseStop,
+        };
+        using var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, "user-data", Slots())),
+            "user-data-tmp",
+            watchdog);
+        viewModel.Activate();
+        viewModel.IsWatchdogEnabled = true;
+        Assert.True(SpinWait.SpinUntil(() => watchdog.StartCount == 1, TimeSpan.FromSeconds(2)));
+
+        viewModel.IsWatchdogEnabled = false;
+        Assert.True(stopEntered.Wait(TimeSpan.FromSeconds(2)));
+        viewModel.IsWatchdogEnabled = true;
+        releaseStop.Set();
+
+        Assert.True(SpinWait.SpinUntil(() => watchdog.StartCount >= 2, TimeSpan.FromSeconds(2)));
+        Assert.True(watchdog.IsRunning);
+    }
+
+    [Fact]
+    public void WatchdogStartFailureTurnsOffAndPersistsTheAutoBackupState()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        try
+        {
+            var watchdog = new FakeWatchdog { ThrowOnStart = true };
+            using var viewModel = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog,
+                action => action());
+            viewModel.Activate();
+
+            viewModel.IsWatchdogEnabled = true;
+
+            Assert.True(SpinWait.SpinUntil(
+                () => !viewModel.IsWatchdogEnabled && viewModel.StatusMessage.Contains("could not start", StringComparison.OrdinalIgnoreCase),
+                TimeSpan.FromSeconds(5)));
+            Assert.Contains("could not start", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.True(SpinWait.SpinUntil(() =>
+            {
+                ToolSettings? settings = File.Exists(Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json"))
+                    ? System.Text.Json.JsonSerializer.Deserialize<ToolSettings>(File.ReadAllBytes(Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json")))
+                    : null;
+                return settings is not null && !settings.IsWatchdogEnabled;
+            }, TimeSpan.FromSeconds(2)));
+        }
+        finally
+        {
+            Directory.Delete(userData, recursive: true);
+        }
     }
 
     [Fact]
@@ -442,13 +683,22 @@ public sealed class SaveManagerViewModelTests
 
     private sealed class FakeWatchdog : ISaveGameWatchdog
     {
-        public int StartCount { get; set; }
-        public int StopCount { get; set; }
+        private int _startCount;
+        private int _stopCount;
+
+        public int StartCount => Volatile.Read(ref _startCount);
+        public int StopCount => Volatile.Read(ref _stopCount);
         public bool IsRunning => StartCount > StopCount;
 
         public TimeSpan Cooldown { get; set; } = TimeSpan.FromMinutes(5);
 
         public int SuppressedSlot { get; private set; } = -1;
+
+        public ManualResetEventSlim? StopEntered { get; init; }
+
+        public ManualResetEventSlim? ReleaseStop { get; init; }
+
+        public bool ThrowOnStart { get; init; }
 
         public IDisposable BeginSlotMutation(int slotNumber)
         {
@@ -465,9 +715,21 @@ public sealed class SaveManagerViewModelTests
             public void Dispose() { }
         }
 
-        public void Start() => StartCount++;
+        public void Start()
+        {
+            Interlocked.Increment(ref _startCount);
+            if (ThrowOnStart)
+            {
+                throw new IOException("watcher setup failed");
+            }
+        }
 
-        public void StopWatch() => StopCount++;
+        public void StopWatch()
+        {
+            StopEntered?.Set();
+            _ = ReleaseStop?.Wait(TimeSpan.FromSeconds(10));
+            Interlocked.Increment(ref _stopCount);
+        }
 
         public void RaiseCheckpoint(string slotNumber) =>
             CheckpointCreated?.Invoke(this, slotNumber);
@@ -613,6 +875,36 @@ public sealed class SaveManagerViewModelTests
             ToolSettings settings = System.Text.Json.JsonSerializer.Deserialize<ToolSettings>(
                 File.ReadAllBytes(settingsPath))!;
             Assert.Equal(10, settings.WatchdogIntervalMinutes);
+            Assert.True(settings.KeepRunningInTrayWhenClosing);
+        }
+        finally
+        {
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TrayClosePreferenceIsSavedAndLoaded()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        try
+        {
+            using (var viewModel = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog: null))
+            {
+                Assert.True(viewModel.KeepRunningInTrayWhenClosing);
+                viewModel.KeepRunningInTrayWhenClosing = false;
+            }
+
+            using var reloaded = new SaveManagerViewModel(
+                new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+                userData,
+                watchdog: null);
+
+            Assert.False(reloaded.KeepRunningInTrayWhenClosing);
         }
         finally
         {
@@ -680,6 +972,124 @@ public sealed class SaveManagerViewModelTests
         finally
         {
             viewModel.Dispose();
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void OversizedToolSettingsAreRejectedSafely()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        string settingsPath = Path.Combine(userData, "AncestorsEnhanced_ToolSettings.json");
+        // Write 2 MiB file
+        File.WriteAllBytes(settingsPath, new byte[2 * 1024 * 1024]);
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+            userData,
+            watchdog: null);
+        try
+        {
+            Assert.True(viewModel.HasToolSettingsWarning);
+            Assert.Contains("exceeds the maximum allowed size", viewModel.ToolSettingsWarning);
+        }
+        finally
+        {
+            viewModel.Dispose();
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task QueuedGameProcessRefreshDoesNotOverlapASlowProbe()
+    {
+        string userData = TempUserData();
+        Directory.CreateDirectory(userData);
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var completed = new ManualResetEventSlim();
+        int probes = 0;
+        var viewModel = new SaveManagerViewModel(
+            new FakeSaveGameManager(new SaveGamesSnapshot(DateTimeOffset.UnixEpoch, userData, Slots())),
+            userData,
+            watchdog: null,
+            dispatchToUi: action => action(),
+            mutationGate: null,
+            gameRunningProbe: () =>
+            {
+                Interlocked.Increment(ref probes);
+                started.Set();
+                release.Wait(TimeSpan.FromSeconds(5));
+                completed.Set();
+                return true;
+            });
+        try
+        {
+            viewModel.QueueGameRunningStateRefresh();
+            Assert.True(started.Wait(TimeSpan.FromSeconds(5)));
+            viewModel.QueueGameRunningStateRefresh();
+
+            await Task.Delay(100);
+            Assert.Equal(1, Volatile.Read(ref probes));
+
+            release.Set();
+            Assert.True(await Task.Run(() => completed.Wait(TimeSpan.FromSeconds(5))));
+            await WaitUntilAsync(() => viewModel.IsGameRunning, TimeSpan.FromSeconds(5), "Game state was not refreshed.");
+        }
+        finally
+        {
+            release.Set();
+            viewModel.Dispose();
+            Directory.Delete(userData, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RefreshPreservesMetadataWhenSlotHasError()
+    {
+        string userData = Path.Combine(Path.GetTempPath(), "aec-vm-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(userData);
+        try
+        {
+            var initialSlot = new SaveGameSlotSnapshot(
+                "0",
+                "Savegame0.sav",
+                Path.Combine(userData, "Savegame0.sav"),
+                Exists: true,
+                100,
+                DateTimeOffset.UtcNow,
+                [new SaveGameCheckpoint("cp-1", DateTimeOffset.UtcNow, "0", 100, "hash1", "Manual")]);
+
+            var initialSnapshot = new SaveGamesSnapshot(DateTimeOffset.UtcNow, userData, [initialSlot]);
+            var manager = new FakeSaveGameManager(initialSnapshot);
+            var viewModel = new SaveManagerViewModel(manager, userData);
+            viewModel.Refresh(initialSnapshot);
+
+            viewModel.Slots[0].Checkpoints[0].Title = "Important Checkpoint";
+            viewModel.Slots[0].Checkpoints[0].IsFavorite = true;
+
+            // Simulate slot 0 having a read error on next inspect
+            var erroredSlot = new SaveGameSlotSnapshot(
+                "0",
+                "Savegame0.sav",
+                Path.Combine(userData, "Savegame0.sav"),
+                Exists: false,
+                null,
+                null,
+                [],
+                "Transient sharing violation");
+
+            var erroredSnapshot = new SaveGamesSnapshot(DateTimeOffset.UtcNow, userData, [erroredSlot]);
+            viewModel.Refresh(erroredSnapshot);
+
+            // Now simulate slot 0 being successfully read again on subsequent refresh
+            viewModel.Refresh(initialSnapshot);
+
+            Assert.Equal("Important Checkpoint", viewModel.Slots[0].Checkpoints[0].Title);
+            Assert.True(viewModel.Slots[0].Checkpoints[0].IsFavorite);
+        }
+        finally
+        {
             Directory.Delete(userData, recursive: true);
         }
     }

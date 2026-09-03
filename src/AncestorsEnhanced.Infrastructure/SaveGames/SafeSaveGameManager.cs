@@ -247,7 +247,15 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                         true,
                         $"Slot {slot + 1} already matches this checkpoint; no save file was changed.");
                 }
-                safetyCheckpointId = _store.Create(_userDataDirectory, slot, current, "PreRestore");
+                // The selected source remains transactionally necessary until the
+                // restore reaches a terminal state. PreRestore publication may run
+                // retention, so it must not evict that source under cap pressure.
+                safetyCheckpointId = _store.Create(
+                    _userDataDirectory,
+                    slot,
+                    current,
+                    "PreRestore",
+                    new HashSet<string>(StringComparer.Ordinal) { checkpointId });
             }
 
             // The atomic replace is the commit point. After it, the save has already
@@ -276,7 +284,7 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 Sha256(checkpoint));
             try
             {
-                CompareAndReplace(slotPath, checkpoint, expectedSha256, expectedExists);
+                CompareAndReplace(slotPath, checkpoint, expectedSha256, expectedExists, _userDataDirectory);
             }
             catch
             {
@@ -308,13 +316,15 @@ public sealed class SafeSaveGameManager : ISaveGameManager
                 return new SaveGameOperationResult(
                     true,
                     $"The save was loaded, but its timestamp could not be updated: {warning.Message}",
-                    CommitState: SaveOperationCommitState.CommittedWithWarning);
+                    safetyCheckpointId,
+                    SaveOperationCommitState.CommittedWithWarning);
             }
 
             return new SaveGameOperationResult(
                 true,
                 $"Loaded checkpoint for slot {slot + 1}. Start Ancestors to continue.",
-                CommitState: SaveOperationCommitState.Committed);
+                safetyCheckpointId,
+                SaveOperationCommitState.Committed);
         }
         catch (Exception exception) when (IsExpectedException(exception))
         {

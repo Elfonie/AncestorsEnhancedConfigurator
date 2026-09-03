@@ -204,6 +204,42 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
     }
 
     [Fact]
+    public void RecoverySkipsAnIncompleteLegacyPreparationAndRecoversANewerOperation()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        const string engineOriginal = "[SystemSettings]\nr.ViewDistanceScale=1.0\n";
+        const string gameOriginal = "[/Script/MoviePlayer.MoviePlayerSettings]\nbWaitForMoviesToComplete=True\n";
+        File.WriteAllText(engineIni, engineOriginal);
+        File.WriteAllText(gameIni, gameOriginal);
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        SettingsChangePlan incomplete = editor.CreatePlan(snapshot,
+            [Change("distance", "View distance", "r.ViewDistanceScale", "1.2")]);
+        string incompleteDirectory = SettingsBackupStore.Prepare(incomplete);
+        // Simulate a journal written by the older manifest-first implementation.
+        File.Delete(Path.Combine(incompleteDirectory, "Engine.ini.before"));
+
+        SettingsChangePlan healthy = editor.CreatePlan(snapshot,
+        [
+            new SettingChangeRequest(
+                "Skip intro", "Game.ini", "/Script/MoviePlayer.MoviePlayerSettings",
+                "bWaitForMoviesToComplete", "False"),
+        ]);
+        string healthyDirectory = SettingsBackupStore.Prepare(healthy);
+        File.WriteAllBytes(healthy.Files[0].FullPath, healthy.Files[0].UpdatedContent);
+
+        bool recovered = editor.RecoverInterruptedChanges(snapshot);
+
+        Assert.True(recovered);
+        Assert.Equal(gameOriginal, File.ReadAllText(gameIni));
+        Assert.True(File.Exists(Path.Combine(healthyDirectory, "aborted")));
+        Assert.False(File.Exists(Path.Combine(incompleteDirectory, "aborted")));
+    }
+
+    [Fact]
     public void StartupCompletesInterruptedMultiFileUndo()
     {
         string userData = CreateUserData();
@@ -278,6 +314,34 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
         Assert.Equal(gameToolState, File.ReadAllText(gameIni));
         Assert.True(File.Exists(Path.Combine(operation, "aborted")));
         Assert.True(editor.CanRemoveToolChanges(snapshot));
+    }
+
+    [Fact]
+    public void RollbackRemovesBaselineRecordsIntroducedOnlyByTheFailedApply()
+    {
+        string userData = CreateUserData();
+        string engineIni = EngineIniPath(userData);
+        string gameIni = GameIniPath(userData);
+        File.WriteAllText(engineIni, "[SystemSettings]\nr.ViewDistanceScale=1.0\n");
+        File.WriteAllText(gameIni, "[/Script/MoviePlayer.MoviePlayerSettings]\nbWaitForMoviesToComplete=True\n");
+        SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
+        GameInspectionSnapshot snapshot = CreateSnapshot(userData);
+
+        Assert.True(editor.Apply(editor.CreatePlan(snapshot,
+            [Change("view-distance", "View distance", "r.ViewDistanceScale", "1.2")])).Succeeded);
+
+        SettingsChangePlan failedPlan = editor.CreatePlan(snapshot,
+            [new SettingChangeRequest(
+                "Skip intro", "Game.ini", "/Script/MoviePlayer.MoviePlayerSettings",
+                "bWaitForMoviesToComplete", "False")]);
+        ToolChangeBaselineStore.BaselineCapture capture = ToolChangeBaselineStore.CaptureBeforeApply(failedPlan);
+        ToolChangeBaselineStore.RollbackApplied(failedPlan, capture);
+
+        File.WriteAllText(gameIni, "user-owned Game.ini content");
+        SettingsChangePlan removal = editor.CreateRemoveToolChangesPlan(snapshot);
+
+        ConfigurationFileChangePlan tracked = Assert.Single(removal.Files);
+        Assert.Equal("Engine.ini", tracked.FileName);
     }
 
     [Fact]
@@ -1237,9 +1301,10 @@ public sealed class SafeGameSettingsEditorTests : IDisposable
             install);
 
         SafeGameSettingsEditor editor = CreateEditor(gameRunning: false);
-        SettingsOperationResult result = editor.Apply(plan);
+        SettingsOperationResult result = editor.Apply(editor.IssuePlan(plan));
 
         Assert.False(result.Succeeded, result.Message);
+        Assert.Equal(SettingsOperationStatus.RolledBack, result.Status);
         // The apply must fail in the write/rollback phase, not in the pre-check;
         // otherwise the deleted vignette file was never touched and the rollback
         // path is not exercised.

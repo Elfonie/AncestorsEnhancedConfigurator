@@ -9,8 +9,8 @@
         x:Class="AncestorsEnhanced.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         x:CompileBindings="True"
-        MinWidth="760"
-        MinHeight="640"
+        MinWidth="780"
+        MinHeight="600"
         Icon="/Assets/aec-icon.ico"
         Title="Ancestors Enhanced Configurator">
 
@@ -19,149 +19,382 @@
                  VerticalAlignment="Top"
                  HorizontalAlignment="Stretch"
                  Height="3"
-                 Foreground="#FF5A00"
+                 Foreground="{DynamicResource OrangeAccentBrush}"
                  Background="Transparent"
                  IsIndeterminate="True"
                  IsVisible="{Binding IsAnyOperationRunning}" />
     <!-- Sidebar navigation -->
     <Border Grid.Column="0"
-            Width="200"
-            Padding="16,18"
-            Background="{DynamicResource RaisedSurfaceBrush}"
+            x:Name="NavigationPane"
+            Width="220"
+            Padding="16,20,16,20"
+            Background="{DynamicResource SurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,0,1,0">
-      <StackPanel Spacing="6">
-        <StackPanel Spacing="1" Margin="0,0,0,14">
-          <TextBlock Text="{Binding ProductName}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
-          <TextBlock Text="{Binding Phase}" FontSize="12" Foreground="#7A877A" TextWrapping="Wrap" />
+      <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Brand Header & Navigation -->
+        <StackPanel Grid.Row="0" Spacing="0">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="4,0,4,20">
+            <Border Width="36" Height="36" CornerRadius="8"
+                    Background="{DynamicResource BrandGradientBrush}"
+                    BorderBrush="{DynamicResource OliveBorderBrush}"
+                    BorderThickness="1"
+                    VerticalAlignment="Center">
+              <PathIcon Data="{StaticResource IconLeaf}" Width="18" Height="18"
+                        Foreground="{DynamicResource AccentBrush}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+              <TextBlock Text="Ancestors" FontSize="15.5" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" />
+              <TextBlock Text="Enhanced Configurator" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}" />
+            </StackPanel>
+          </Grid>
+          <TextBlock Text="NAVIGATION" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource MutedTextBrush}" Margin="8,0,0,6" />
+          <StackPanel Spacing="3">
+            <ToggleButton Classes="nav"
+                          Command="{Binding ShowHomeCommand}"
+                          IsChecked="{Binding IsHomeSectionActive, Mode=OneWay}"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="11">
+                <PathIcon Data="{StaticResource IconHome}" Width="16" Height="16" />
+                <TextBlock Text="Home" VerticalAlignment="Center" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Classes="nav"
+                          Command="{Binding ShowGraphicsCommand}"
+                          IsChecked="{Binding IsGraphicsSectionActive, Mode=OneWay}"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="11">
+                <PathIcon Data="{StaticResource IconGraphics}" Width="16" Height="16" />
+                <TextBlock Text="Graphics" VerticalAlignment="Center" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Classes="nav"
+                          Command="{Binding ShowSaveGamesCommand}"
+                          IsChecked="{Binding IsSaveGamesSectionActive, Mode=OneWay}"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="11">
+                <PathIcon Data="{StaticResource IconSaves}" Width="16" Height="16" />
+                <TextBlock Text="Saves" VerticalAlignment="Center" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Classes="nav"
+                          Command="{Binding ShowGameplayCommand}"
+                          IsChecked="{Binding IsGameplaySectionActive, Mode=OneWay}"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="11">
+                <PathIcon Data="{StaticResource IconGameplay}" Width="16" Height="16" />
+                <TextBlock Text="Gameplay" VerticalAlignment="Center" />
+              </StackPanel>
+            </ToggleButton>
+            <ToggleButton Classes="nav"
+                          Command="{Binding ShowProfilesCommand}"
+                          IsChecked="{Binding IsProfilesSectionActive, Mode=OneWay}"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Left">
+              <StackPanel Orientation="Horizontal" Spacing="11">
+                <PathIcon Data="{StaticResource IconProfiles}" Width="16" Height="16" />
+                <TextBlock Text="Profiles" VerticalAlignment="Center" />
+              </StackPanel>
+            </ToggleButton>
+          </StackPanel>
         </StackPanel>
-        <ToggleButton Classes="nav"
-                      Command="{Binding ShowGraphicsCommand}"
-                      IsChecked="{Binding ShowGraphicsView, Mode=OneWay}"
-                      HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                       Content="Graphics" />
-        <ToggleButton Classes="nav"
-                      Command="{Binding ShowSaveGamesCommand}"
-                      IsChecked="{Binding ShowSaveGamesView, Mode=OneWay}"
-                      HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                       Content="Saves" />
-        <ToggleButton Classes="nav"
-                      Command="{Binding ShowCheatCommand}"
-                      IsChecked="{Binding ShowCheatView, Mode=OneWay}"
-                      HorizontalAlignment="Stretch"
-                      HorizontalContentAlignment="Left"
-                       Content="Cheats" />
 
-        <Button Classes="nav"
-                Command="{Binding RefreshCommand}"
-                IsEnabled="{Binding !IsAnyOperationRunning}"
-                Margin="0,18,0,0"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Left"
-                Content="Reload" />
-      </StackPanel>
+        <!-- System Section -->
+        <StackPanel Grid.Row="2" Spacing="3">
+          <TextBlock Text="SYSTEM" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource MutedTextBrush}" Margin="8,0,0,6" />
+          <ToggleButton Classes="nav"
+                        Command="{Binding ShowSettingsCommand}"
+                        IsChecked="{Binding IsSettingsSectionActive, Mode=OneWay}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="11">
+              <PathIcon Data="{StaticResource IconSettings}" Width="16" Height="16" />
+              <TextBlock Text="Settings" VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+          <ToggleButton Classes="nav"
+                        Command="{Binding ShowDiagnosticsCommand}"
+                        IsChecked="{Binding IsDiagnosticsSectionActive, Mode=OneWay}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="11">
+              <PathIcon Data="{StaticResource IconDiagnostics}" Width="16" Height="16" />
+              <TextBlock Text="Diagnostics" VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+        </StackPanel>
+      </Grid>
     </Border>
 
     <!-- Content -->
     <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
-    <Border Grid.Row="0" Grid.Column="1"
-            Padding="22,14"
-            Background="{DynamicResource RaisedSurfaceBrush}"
+    <Border Grid.Row="0"
+            Padding="28,15"
+            Background="{DynamicResource SurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,0,0,1">
-      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="20">
-        <StackPanel Spacing="1">
-          <TextBlock Text="{Binding ProductName}"
-                     FontSize="23"
-                     FontWeight="SemiBold"
-                     Foreground="{DynamicResource PrimaryTextBrush}" />
-          <TextBlock Text="{Binding Phase}"
+      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="16">
+        <StackPanel Spacing="2">
+          <TextBlock Text="{Binding PageContextLabel}"
+                     x:Name="PageContextTitle"
+                     FontSize="20"
+                     FontWeight="Bold"
+                     Foreground="{DynamicResource HeadingTextBrush}" />
+          <TextBlock Text="{Binding InstallationDetails}"
                      FontSize="12"
-                     Foreground="#748691" />
+                     Foreground="{DynamicResource SecondaryTextBrush}"
+                     TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <Border Classes="StatusPill">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Ellipse Width="8" Height="8" Fill="{Binding DetectionBrush}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding DetectionStatus}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+          </Border>
+          <Button Command="{Binding ToggleHighContrastCommand}"
+                  ToolTip.Tip="Toggle High Contrast Mode"
+                  Padding="8,7"
+                  VerticalAlignment="Center">
+            <PathIcon Data="{StaticResource IconContrast}" Width="14" Height="14" />
+          </Button>
+          <Button x:Name="ReloadGameDataButton"
+                  Command="{Binding RefreshCommand}"
+                  IsEnabled="{Binding !IsAnyOperationRunning}"
+                  Padding="12,7">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+              <PathIcon Data="{StaticResource IconRefresh}" Width="13" Height="13" />
+              <TextBlock Text="Reload" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
         </StackPanel>
       </Grid>
     </Border>
 
     <ScrollViewer Grid.Row="1" Grid.Column="1">
-      <StackPanel Margin="22,18"
-                  Spacing="12"
-                  MaxWidth="1380"
+      <StackPanel Margin="28,24,28,72"
+                  Spacing="16"
+                  MaxWidth="1500"
                   HorizontalAlignment="Stretch">
 
+        <StackPanel IsVisible="{Binding ShowHomeView}" Spacing="16">
+          <StackPanel Spacing="3">
+            <TextBlock Text="{Binding HomeTitle}" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" />
+            <TextBlock Text="Ancestors: The Humankind Odyssey" FontSize="12.5" Foreground="{DynamicResource SecondaryTextBrush}" />
+          </StackPanel>
 
-        <StackPanel IsVisible="{Binding ShowGraphicsView}" Spacing="12">
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
-          <Border Padding="14,10"
-                  CornerRadius="7"
-                  BorderThickness="1"
-                  BorderBrush="{Binding DetectionColor}"
-                  Background="{DynamicResource SurfaceBrush}">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-              <Ellipse Width="9" Height="9" Fill="{Binding DetectionDotColor}" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Spacing="1">
-                <TextBlock Text="{Binding DetectionStatus}"
-                           FontWeight="SemiBold"
-                           Foreground="{Binding DetectionColor}" />
-                <TextBlock Text="{Binding InstallationDetails}"
-                           FontSize="12"
-                           Foreground="#9CB0BC" />
+          <!-- Hero recommendation card -->
+          <Border Padding="22" CornerRadius="12" Background="{DynamicResource RaisedSurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+              <StackPanel Spacing="6">
+                <TextBlock Text="SUGGESTED STARTING POINT" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
+                <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.PresetName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource HeadingTextBrush}" />
+                <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.Description}" MaxWidth="680" TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource SecondaryTextBrush}" />
+                <TextBlock Text="{Binding HardwareScanMessage}" IsVisible="{Binding HasHardwareScanMessage}" MaxWidth="680" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource GoldTextBrush}" />
+                <TextBlock Text="CPU, memory, graphics adapter and dedicated VRAM are read locally from your system. AEC uses them only for a conservative recommendation, never as a benchmark." IsVisible="{Binding !HardwareDiagnostics.Recommendation.CanStagePreset}" MaxWidth="680" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" />
+                <Expander Header="Detected hardware" FontSize="11.5" Foreground="{DynamicResource TechnicalTextBrush}" Margin="0,4,0,0">
+                  <StackPanel Spacing="3" Margin="0,6,0,0">
+                    <TextBlock FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}"><Run Text="CPU: " /><Run Text="{Binding HardwareDiagnostics.Cpu}" /></TextBlock>
+                    <TextBlock FontSize="11.5" Foreground="{DynamicResource SecondaryTextBrush}"><Run Text="Memory: " /><Run Text="{Binding HardwareDiagnostics.Memory}" /></TextBlock>
+                    <TextBlock FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}"><Run Text="Graphics: " /><Run Text="{Binding HardwareDiagnostics.Graphics}" /></TextBlock>
+                  </StackPanel>
+                </Expander>
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+                <Button Classes="PrimaryAction" Content="Review recommendation" Command="{Binding LoadHardwareRecommendationCommand}" IsVisible="{Binding HardwareDiagnostics.Recommendation.CanStagePreset}" />
+                <Button Content="{Binding DetailedHardwareActionLabel}" Command="{Binding RunDetailedHardwareDetectionCommand}" IsVisible="{Binding CanShowHardwareScanAction}" IsEnabled="{Binding CanRunDetailedHardwareDetection}" />
               </StackPanel>
             </Grid>
           </Border>
 
-          <Border Grid.Column="1"
-                  Padding="4"
-                  CornerRadius="7"
-                  Background="{DynamicResource RaisedSurfaceBrush}"
-                  BorderBrush="{DynamicResource BorderBrush}"
-                  BorderThickness="1">
-            <StackPanel Orientation="Horizontal" Spacing="2">
-              <ToggleButton Classes="mode"
-                            Command="{Binding ShowSimpleCommand}"
-                            IsChecked="{Binding IsSimpleMode, Mode=OneWay}"
-                            Content="Simple" />
-              <ToggleButton Classes="mode"
-                            Command="{Binding ShowAdvancedCommand}"
-                            IsChecked="{Binding IsAdvancedMode, Mode=OneWay}"
-                            Content="Advanced" />
+          <!-- KPI Metric Cards Grid -->
+          <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="14" RowSpacing="14">
+            <!-- Graphics KPI Card -->
+            <Border Classes="KpiCard">
+              <StackPanel Spacing="7">
+                <TextBlock Text="GRAPHICS CONFIGURATION" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
+                <TextBlock Text="{Binding HomeGraphicsSummary}" FontSize="16.5" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Performance baselines and visual quality overrides" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                <Button Classes="ActionLink" Content="Open graphics →" Command="{Binding ShowGraphicsCommand}" HorizontalAlignment="Left" Margin="0,10,0,0" />
+              </StackPanel>
+            </Border>
+
+            <!-- Gameplay Difficulty KPI Card -->
+            <Border Grid.Column="1" Classes="KpiCard">
+              <StackPanel Spacing="7">
+                <TextBlock Text="GAMEPLAY DIFFICULTY" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
+                <TextBlock Text="{Binding HomeGameplayTitle}" FontSize="16.5" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding HomeGameplaySummary}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
+                <TextBlock Text="{Binding ExternalPakHelpText}" IsVisible="{Binding HasExternalPaks}" FontSize="11.5" TextWrapping="Wrap" Foreground="{DynamicResource GoldTextBrush}" />
+                <WrapPanel Margin="0,10,0,0">
+                  <Button Classes="ActionLink" Content="Adjust difficulty →" Command="{Binding ShowGameplayCommand}" Margin="0,0,8,4" />
+                  <Button Content="Open game PAK folder" Command="{Binding OpenGamePakFolderCommand}" IsVisible="{Binding CanOpenGamePakFolder}" Padding="8,4" FontSize="11.5" Margin="0,0,0,4" />
+                </WrapPanel>
+              </StackPanel>
+            </Border>
+
+            <!-- Saves & Checkpoints KPI Card -->
+            <Border Grid.Column="2" Classes="KpiCard">
+              <StackPanel Spacing="7">
+                <TextBlock Text="SAVES &amp; CHECKPOINTS" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
+                <TextBlock Text="{Binding HomeSavesSummary}" FontSize="16.5" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Automatic watchdog protection &amp; slot timelines" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                <Button Classes="ActionLink" Content="Manage saves →" Command="{Binding ShowSaveGamesCommand}" HorizontalAlignment="Left" Margin="0,10,0,0" />
+              </StackPanel>
+            </Border>
+            <Border Grid.Row="1" Grid.ColumnSpan="3" Padding="16,13" CornerRadius="10" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1" IsVisible="{Binding HasPendingChanges}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14"><StackPanel Spacing="2"><TextBlock Text="CURRENT CHANGES" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource GoldTextBrush}" /><TextBlock Text="{Binding PendingSummary}" FontSize="15" FontWeight="SemiBold" /><TextBlock Text="{Binding PendingDetails}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" /></StackPanel><Button Grid.Column="1" Content="Review changes" Command="{Binding OpenReviewCommand}" Classes="PrimaryAction" VerticalAlignment="Center" /></Grid>
+            </Border>
+          </Grid>
+        </StackPanel>
+
+
+        <StackPanel IsVisible="{Binding ShowGraphicsView}" Spacing="16">
+          <Border Classes="SettingCard" Padding="18,14">
+            <StackPanel Spacing="12">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding ViewModeTitle}"
+                             FontSize="18"
+                             FontWeight="Bold"
+                             Foreground="{DynamicResource HeadingTextBrush}" />
+                  <TextBlock Text="{Binding ViewModeDescription}"
+                             FontSize="12"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource SecondaryTextBrush}" />
+                </StackPanel>
+                <Border Grid.Column="1"
+                        Padding="4"
+                        CornerRadius="8"
+                        Background="{DynamicResource ControlBackgroundBrush}"
+                        BorderBrush="{DynamicResource ControlBorderBrush}"
+                        BorderThickness="1"
+                        VerticalAlignment="Center">
+                  <StackPanel Orientation="Horizontal" Spacing="2">
+                    <ToggleButton Classes="mode"
+                                  Command="{Binding ShowSimpleCommand}"
+                                  IsChecked="{Binding IsSimpleMode, Mode=OneWay}"
+                                  Content="Simple" />
+                    <ToggleButton Classes="mode"
+                                  Command="{Binding ShowAdvancedCommand}"
+                                  IsChecked="{Binding IsAdvancedMode, Mode=OneWay}"
+                                  Content="Advanced" />
+                  </StackPanel>
+                </Border>
+              </Grid>
+              <Grid IsVisible="{Binding IsAdvancedMode}" ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,4,0,0">
+                <TextBox Text="{Binding SearchText, Mode=TwoWay}"
+                         Classes="clearButton"
+                         PlaceholderText="Search settings…"
+                         VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                  <ToggleButton Classes="mode" Command="{Binding ShowAllGraphicsCommand}" IsChecked="{Binding IsAllGraphicsFilter}" Content="All" />
+                  <ToggleButton Classes="mode" Command="{Binding ShowModifiedGraphicsCommand}" IsChecked="{Binding IsModifiedGraphicsFilter}" Content="Modified" />
+                  <ToggleButton Classes="mode" Command="{Binding ShowGameDefaultsGraphicsCommand}" IsChecked="{Binding IsGameDefaultsGraphicsFilter}" Content="Game defaults" />
+                </StackPanel>
+              </Grid>
             </StackPanel>
           </Border>
-        </Grid>
 
-        <Border Padding="14,11"
-                CornerRadius="7"
-                Background="{DynamicResource SurfaceBrush}"
-                BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="1">
-          <Grid ColumnDefinitions="*,320" ColumnSpacing="18">
-            <StackPanel Spacing="2">
-              <TextBlock Text="{Binding ViewModeTitle}"
-                         FontSize="18"
-                         FontWeight="SemiBold"
-                         Foreground="#EBF0F3" />
-              <TextBlock Text="{Binding ViewModeDescription}"
-                         FontSize="12"
-                         TextWrapping="Wrap"
-                         Foreground="#81929D" />
-            </StackPanel>
-            <TextBox Grid.Column="1"
-                     IsVisible="{Binding IsAdvancedMode}"
-                     Text="{Binding SearchText, Mode=TwoWay}"
-                     PlaceholderText="Search settings…"
-                     VerticalAlignment="Center" />
-          </Grid>
-        </Border>
-
-        <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1"
+        <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource OliveBorderBrush}" BorderThickness="1"
                 IsVisible="{Binding HasGamePreset}">
           <StackPanel Spacing="3">
-            <TextBlock FontWeight="SemiBold" Foreground="#E6ECEF">
-              <Run Text="Game preset: " /><Run Text="{Binding GamePresetName}" Foreground="#B4D941" />
-              <Run Text=" · Custom overrides: " /><Run Text="{Binding CustomOverrideCount}" Foreground="#FF5A00" />
+            <TextBlock FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}">
+              <Run Text="Game preset: " /><Run Text="{Binding GamePresetName}" Foreground="{DynamicResource AccentBrush}" />
+              <Run Text=" · Custom overrides: " /><Run Text="{Binding CustomOverrideCount}" Foreground="{DynamicResource OrangeAccentBrush}" />
             </TextBlock>
-            <TextBlock Text="Custom settings replace parts of the selected game preset. Settings that still come from the preset show their Low/Medium/High value; overridden settings show their custom value." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+            <TextBlock Text="Custom settings replace parts of the selected game preset. Settings that still come from the preset show their Low/Medium/High value; overridden settings show their custom value." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <Button Content="Save as profile" Command="{Binding CreateProfileFromGraphicsCommand}" />
+          <Button Content="Manage profiles" Command="{Binding ShowProfilesCommand}" />
+        </StackPanel>
+
+        <Border Classes="SettingCard InteractiveCard" Padding="18,16">
+          <StackPanel Spacing="12">
+            <Button Classes="CardHeader" Command="{Binding ToggleGraphicsPresetsCommand}" Padding="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsHitTestVisible="False">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="QUICK SETUPS" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
+                  <TextBlock Text="Choose a graphics baseline" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource HeadingTextBrush}" />
+                  <TextBlock Text="First choose one performance baseline. Optional image styles can be added afterwards without replacing that baseline." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding GraphicsPresetsToggleLabel}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+              </Grid>
+            </Button>
+            <StackPanel IsVisible="{Binding IsGraphicsPresetsExpanded}" Spacing="14">
+              <StackPanel Spacing="2">
+                <TextBlock Text="Performance baseline" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                <TextBlock Text="Pick one. These configure the game-quality baseline, texture streaming and anti-aliasing together." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding HardwareGraphicsPresets}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="246" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
+                    <Border Classes="PresetTile" Padding="14,12" Margin="0,0,10,10" MinHeight="130" Width="236">
+                      <Grid RowDefinitions="*,Auto" RowSpacing="10">
+                        <StackPanel Spacing="4">
+                          <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14.5" Foreground="{DynamicResource PrimaryTextBrush}" />
+                          <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                          <Button Content="Preview" Command="{Binding $parent[Window].DataContext.PreviewBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" Padding="9,5" FontSize="12" />
+                          <Button Classes="PrimaryAction" Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" Padding="11,5" FontSize="12" />
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Spacing="2">
+                <TextBlock Text="Optional image style" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                <TextBlock Text="These only adjust the look. They can be combined with one performance baseline." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding ImageStyleGraphicsPresets}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="246" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:BuiltInGraphicsPresetViewModel">
+                    <Border Classes="PresetTile" Padding="14,12" Margin="0,0,10,6" MinHeight="125" Width="236">
+                      <Grid RowDefinitions="*,Auto" RowSpacing="10">
+                        <StackPanel Spacing="4">
+                          <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14.5" Foreground="{DynamicResource PrimaryTextBrush}" />
+                          <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                          <Button Content="Preview" Command="{Binding $parent[Window].DataContext.PreviewBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" Padding="9,5" FontSize="12" />
+                          <Button Classes="PrimaryAction" Content="{Binding ActionLabel}" Command="{Binding $parent[Window].DataContext.LoadBuiltInGraphicsPresetCommand}" CommandParameter="{Binding}" Padding="11,5" FontSize="12" />
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Border IsVisible="{Binding HasGraphicsPresetPreview}" Padding="14,12" CornerRadius="8" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource OliveBorderBrush}" BorderThickness="1">
+                <StackPanel Spacing="7">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding GraphicsPresetPreviewTitle}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                    <TextBlock Text="{Binding GraphicsPresetPreviewSummary}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                  </StackPanel>
+                  <ItemsControl ItemsSource="{Binding GraphicsPresetPreviewValues}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="190" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:GraphicsPresetPreviewValueViewModel">
+                        <Border Padding="8,6" Margin="0,0,7,5" Width="180" CornerRadius="6" Background="{DynamicResource EditorSurfaceBrush}" BorderBrush="{DynamicResource EditorBorderBrush}" BorderThickness="1">
+                          <StackPanel Spacing="1"><TextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" /><TextBlock Text="{Binding Value}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" /></StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+            </StackPanel>
           </StackPanel>
         </Border>
 
@@ -175,38 +408,52 @@
                   <Button Classes="CardHeader"
                           Command="{Binding ToggleExpandedCommand}"
                           AutomationProperties.Name="{Binding Name}"
-                          Padding="14,10"
-                          MinHeight="42"
+                          Padding="16,12"
+                          MinHeight="44"
                           HorizontalAlignment="Stretch"
                           HorizontalContentAlignment="Stretch"
                           Background="Transparent"
                           BorderThickness="0">
                     <Grid ColumnDefinitions="4,*,Auto,22" ColumnSpacing="12" IsHitTestVisible="False">
-                      <Border Background="{Binding AccentColor}" CornerRadius="2" />
+                      <Border Background="{Binding AccentBrush}" CornerRadius="2" />
                       <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                        <TextBlock Text="{Binding Category}" FontSize="11" FontWeight="SemiBold" Foreground="#788892" />
-                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="#E6ECEF" />
-                        <TextBlock Text="{Binding Description}" IsVisible="{Binding ShowDescription}" FontSize="12" TextWrapping="Wrap" Foreground="#82939E" />
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                          <TextBlock Text="{Binding Category}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
+                          <Border IsVisible="{Binding HasChangedSettings}" Padding="6,1" CornerRadius="6" Background="{DynamicResource ControlHoverBrush}" BorderBrush="{DynamicResource OliveBorderBrush}" BorderThickness="1">
+                            <TextBlock Text="{Binding ChangeBadge}" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
+                          </Border>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
+                        <TextBlock Text="{Binding Description}" IsVisible="{Binding ShowDescription}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
                       </StackPanel>
                       <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="1">
-                        <TextBlock Text="{Binding Summary}" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap" MaxWidth="280" FontWeight="SemiBold" Foreground="#E8E4D9" />
-                        <TextBlock Text="{Binding SettingCount}" HorizontalAlignment="Right" FontSize="11" Foreground="#74838D" />
+                        <TextBlock Text="{Binding Summary}" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap" MaxWidth="280" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                        <TextBlock Text="{Binding SettingCount}" HorizontalAlignment="Right" FontSize="11" Foreground="{DynamicResource LabelTextBrush}" />
                       </StackPanel>
-                      <TextBlock Grid.Column="3" Text="{Binding Chevron}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#8B9AA4" />
+                      <TextBlock Grid.Column="3" Text="{Binding Chevron}" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MidTextBrush}" />
                     </Grid>
                   </Button>
 
                   <Border Grid.Row="1"
-                          CornerRadius="0,0,9,9"
+                          CornerRadius="0,0,10,10"
                           ClipToBounds="True"
                           IsVisible="{Binding IsExpanded}">
+                    <StackPanel Margin="0,0,0,8">
+                    <Button Content="Reset custom overrides in this group"
+                            Command="{Binding $parent[Window].DataContext.ResetGraphicsGroupCommand}"
+                            CommandParameter="{Binding}"
+                            IsVisible="{Binding HasResettableChanges}"
+                            HorizontalAlignment="Right"
+                            Margin="14,4,14,8" />
                     <ItemsControl ItemsSource="{Binding Settings}">
                       <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:FeatureSettingRowViewModel">
-                        <Border Padding="14,16"
-                                Background="{DynamicResource AppBackgroundBrush}"
-                                BorderBrush="#1A221A"
-                                BorderThickness="0,1,0,0"
+                        <Border Margin="12,0,12,6"
+                                Padding="14,13"
+                                CornerRadius="8"
+                                Background="{DynamicResource ControlBackgroundBrush}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1"
                                 ToolTip.Tip="{Binding Description}">
                           <Grid RowDefinitions="Auto,Auto,Auto"
                                 ColumnDefinitions="*,Auto"
@@ -216,16 +463,16 @@
                               <TextBlock Text="{Binding Name}"
                                          FontSize="14"
                                          FontWeight="SemiBold"
-                                         Foreground="#E2E8EB" />
+                                         Foreground="{DynamicResource BodyTextBrush}" />
                               <TextBlock Text="{Binding Description}"
                                          IsVisible="{Binding ShowDescription}"
                                          TextWrapping="Wrap"
                                          FontSize="12"
-                                         Foreground="#81929D" />
+                                         Foreground="{DynamicResource LabelTextBrush}" />
                               <TextBlock Text="{Binding TechnicalKey}"
                                          IsVisible="{Binding ShowTechnicalDetails}"
                                          FontSize="12"
-                                         Foreground="#6F828D" />
+                                         Foreground="{DynamicResource TechnicalTextBrush}" />
                             </StackPanel>
 
                             <StackPanel Grid.Column="1"
@@ -235,14 +482,30 @@
                               <TextBlock Text="{Binding ValueLabel}"
                                          HorizontalAlignment="Right"
                                          FontSize="11"
-                                         Foreground="#657680" />
+                                         Foreground="{DynamicResource TechnicalTextBrush}" />
+                              <TextBlock IsVisible="{Binding Editor.HasChanges}"
+                                         HorizontalAlignment="Right"
+                                         TextAlignment="Right"
+                                         TextWrapping="Wrap"
+                                         MaxWidth="180"
+                                         FontSize="11"
+                                         Foreground="{DynamicResource GoldTextBrush}">
+                                <Run Text="{Binding Value}" /><Run Text=" → " /><Run Text="{Binding Editor.DesiredSummary}" />
+                              </TextBlock>
+                              <TextBlock Text="Experimental"
+                                         IsVisible="{Binding IsExperimental}"
+                                         HorizontalAlignment="Right"
+                                         FontSize="10"
+                                         FontWeight="SemiBold"
+                                         Foreground="{DynamicResource GoldTextBrush}" />
                               <TextBlock Text="{Binding Value}"
+                                         IsVisible="{Binding !Editor.HasChanges}"
                                          HorizontalAlignment="Right"
                                          TextAlignment="Right"
                                          TextWrapping="Wrap"
                                          MaxWidth="140"
                                          FontWeight="SemiBold"
-                                         Foreground="#E8E4D9" />
+                                         Foreground="{DynamicResource PrimaryTextBrush}" />
                             </StackPanel>
 
                             <ContentControl Grid.Row="1"
@@ -262,16 +525,8 @@
                                                   AutomationProperties.Name="Skip startup videos"
                                                   Content="Skip startup videos" />
 
-                                    <Grid IsVisible="{Binding IsRegularEditor}"
-                                          ColumnDefinitions="Auto,*"
-                                          ColumnSpacing="12">
-                                      <CheckBox IsChecked="{Binding UseCustomValue, Mode=TwoWay}"
-                                                IsVisible="{Binding ShowOverrideToggle}"
-                                                VerticalAlignment="Center"
-                                                Content="Use custom value" />
-
-                                      <Grid Grid.Column="1"
-                                            IsEnabled="{Binding IsCustomEditorEnabled}"
+                                    <Grid IsVisible="{Binding IsRegularEditor}">
+                                      <Grid IsEnabled="{Binding IsCustomEditorEnabled}"
                                             IsVisible="{Binding ShowValueEditor}">
                                         <ToggleSwitch IsVisible="{Binding IsToggle}"
                                                       IsChecked="{Binding ToggleValue, Mode=TwoWay}"
@@ -292,7 +547,7 @@
                                                      Text="{Binding Unit}"
                                                      IsVisible="{Binding HasUnit}"
                                                      VerticalAlignment="Center"
-                                                     Foreground="#82939E" />
+                                                     Foreground="{DynamicResource LabelTextBrush}" />
                                         </Grid>
 
                                         <ComboBox IsVisible="{Binding IsChoice}"
@@ -307,23 +562,10 @@
                                         </ComboBox>
                                       </Grid>
 
-                                      <Border Grid.Column="1"
-                                              IsVisible="{Binding ShowUnknownGameValue}"
-                                              Padding="10,7"
-                                              CornerRadius="5"
-                                              Background="#182127"
-                                              BorderBrush="#2A363E"
-                                              BorderThickness="1">
-                                        <TextBlock Text="Runtime value is not stored in the game config"
-                                                   TextWrapping="Wrap"
-                                                   Foreground="#82939E" />
-                                      </Border>
-
-                                      <TextBlock Grid.Column="1"
-                                                 IsVisible="{Binding HasUnsupportedCurrentValue}"
-                                                 Text="Unsupported value. Disable Use custom value to reset it."
+                                      <TextBlock IsVisible="{Binding HasUnsupportedCurrentValue}"
+                                                 Text="Unsupported value detected."
                                                  TextWrapping="Wrap"
-                                                 Foreground="#D6BC84" />
+                                                 Foreground="{DynamicResource GoldTextBrush}" />
                                     </Grid>
                                   </Grid>
                                 </DataTemplate>
@@ -339,7 +581,7 @@
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     Background="{DynamicResource SurfaceBrush}">
-                              <TextBlock Text="{Binding ReadOnlyLabel}" FontSize="12" Foreground="#71828D" TextWrapping="Wrap" />
+                              <TextBlock Text="{Binding ReadOnlyLabel}" FontSize="12" Foreground="{DynamicResource TechnicalTextBrush}" TextWrapping="Wrap" />
                             </Border>
 
                             <Expander Grid.Row="2"
@@ -348,11 +590,11 @@
                                       Margin="0,9,0,0"
                                       Header="Game preset values"
                                       FontSize="12"
-                                      Foreground="#91A4AF">
+                                      Foreground="{DynamicResource MidTextBrush}">
                               <StackPanel Margin="0,8,0,2" Spacing="8">
                                 <TextBlock Text="{Binding PresetExplanation}"
                                            TextWrapping="Wrap"
-                                           Foreground="#81929D" />
+                                           Foreground="{DynamicResource LabelTextBrush}" />
                                 <ItemsControl ItemsSource="{Binding PresetValues}">
                                   <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -364,16 +606,16 @@
                                       <Border Margin="0,0,8,0"
                                               Padding="10,7"
                                               CornerRadius="5"
-                                              Background="#172027"
-                                              BorderBrush="#29353E"
+                                              Background="{DynamicResource EditorSurfaceBrush}"
+                                              BorderBrush="{DynamicResource EditorBorderBrush}"
                                               BorderThickness="1">
                                         <StackPanel Spacing="2">
                                           <TextBlock Text="{Binding Name}"
                                                      FontSize="11"
-                                                     Foreground="#71828D" />
+                                                     Foreground="{DynamicResource TechnicalTextBrush}" />
                                           <TextBlock Text="{Binding Value}"
                                                      FontWeight="SemiBold"
-                                                     Foreground="#C9D4DA" />
+                                                     Foreground="{DynamicResource BodyTextBrush}" />
                                         </StackPanel>
                                       </Border>
                                     </DataTemplate>
@@ -385,7 +627,8 @@
                         </Border>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
-                  </ItemsControl>
+                    </ItemsControl>
+                    </StackPanel>
                   </Border>
                 </Grid>
               </Border>
@@ -403,120 +646,41 @@
             <TextBlock Text="No matching settings"
                        HorizontalAlignment="Center"
                        FontWeight="SemiBold"
-                       Foreground="#D6DEE3" />
+                       Foreground="{DynamicResource BodyTextBrush}" />
             <TextBlock Text="Try a setting name such as shadow or a renderer key"
                        HorizontalAlignment="Center"
                        FontSize="12"
-                       Foreground="#71828D" />
+                       Foreground="{DynamicResource TechnicalTextBrush}" />
           </StackPanel>
         </Border>
 
-        <Expander IsVisible="{Binding IsAdvancedMode}"
-                  Header="Files and diagnostics"
-                  IsExpanded="False"
-                  FontSize="14"
-                  Foreground="#D6DEE3">
-          <StackPanel Margin="0,10,0,0" Spacing="10">
-            <Border Padding="13" CornerRadius="7" Background="{DynamicResource SurfaceBrush}">
-              <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
-                <TextBlock Text="Installation" Foreground="#71828D" />
-                <TextBlock Grid.Column="1" Text="{Binding InstallationPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="1" Text="User data" Foreground="#71828D" />
-                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding UserDataPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="2" Text="System.sav" Foreground="#71828D" />
-                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding BinarySettingsPath}" TextWrapping="Wrap" />
-                <TextBlock Grid.Row="3" Text="Status" Foreground="#71828D" />
-                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding BinarySettingsStatus}" TextWrapping="Wrap" Foreground="#C3A66A" />
-              </Grid>
-            </Border>
-
-            <Expander Header="Configuration files">
-              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ConfigurationFiles}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:ConfigurationFileRowViewModel">
-                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
-                      <Grid ColumnDefinitions="170,*,210">
-                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#8B9AA4" />
-                        <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="#B4D941" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Expander>
-
-            <Expander Header="Raw INI entries">
-              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Settings}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:SettingRowViewModel">
-                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
-                      <Grid ColumnDefinitions="120,2*,2*,60" ColumnSpacing="8">
-                        <TextBlock Text="{Binding Source}" Foreground="#71828D" />
-                        <TextBlock Grid.Column="1" Text="{Binding Setting}" TextWrapping="Wrap" />
-                        <TextBlock Grid.Column="2" Text="{Binding Value}" TextWrapping="Wrap" Foreground="#E8E4D9" />
-                        <TextBlock Grid.Column="3" Text="{Binding Location}" Foreground="#71828D" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Expander>
-
-            <Expander Header="PAK packages">
-              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding PakFiles}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:PakFileRowViewModel">
-                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
-                      <Grid ColumnDefinitions="250,180,*">
-                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="#8B9AA4" />
-                        <TextBlock Grid.Column="2" Text="{Binding Classification}" Foreground="#C7B98C" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Expander>
-
-            <Expander Header="Inspection notes">
-              <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Notices}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:NoticeRowViewModel">
-                    <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
-                      <Grid ColumnDefinitions="90,*">
-                        <TextBlock Text="{Binding Severity}" FontWeight="SemiBold" Foreground="#D6BC84" />
-                        <TextBlock Grid.Column="1" Text="{Binding Message}" TextWrapping="Wrap" />
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </Expander>
-          </StackPanel>
-        </Expander>
+        <Border IsVisible="{Binding IsAdvancedMode}" Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock Text="Need technical information? Open Diagnostics for files, PAKs and inspection notes." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <Button Grid.Column="1" Content="Open diagnostics" Command="{Binding ShowDiagnosticsCommand}" />
+          </Grid>
+        </Border>
         </StackPanel>
 
-        <StackPanel IsVisible="{Binding ShowSaveGamesView}" Spacing="12">
+        <StackPanel IsVisible="{Binding ShowSaveGamesView}" Spacing="16">
           <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
               <StackPanel Spacing="2">
-                <TextBlock Text="Save Games" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
-                <TextBlock Text="Manage your five save slots and their checkpoints. Create checkpoints or restore an earlier checkpoint to a slot." FontSize="12" Foreground="#81929D" TextWrapping="Wrap" />
-                <TextBlock Text="Restoring a checkpoint requires the game to be closed." FontSize="12" Foreground="#D6BC84" TextWrapping="Wrap" />
+                <TextBlock Text="Save Games" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
+                <TextBlock Text="Five slots · checkpoints · restore" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
               </StackPanel>
             </Grid>
           </Border>
 
           <Border Padding="14,11"
                   CornerRadius="7"
-                  Background="#2A1F16"
-                  BorderBrush="#6B4A26"
+                  Background="{DynamicResource WarningSurfaceBrush}"
+                  BorderBrush="{DynamicResource WarningBorderBrush}"
                   BorderThickness="1"
                   IsVisible="{Binding SaveManager.HasToolSettingsWarning}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
               <TextBlock Text="{Binding SaveManager.ToolSettingsWarning}"
-                         Foreground="#E8C08A"
+                         Foreground="{DynamicResource GoldTextBrush}"
                          TextWrapping="Wrap"
                          VerticalAlignment="Center" />
               <Button Grid.Column="1"
@@ -527,95 +691,184 @@
             </Grid>
           </Border>
 
-          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1"
+          <Border Classes="SettingCard" Padding="12,9" CornerRadius="7" BorderThickness="1"
                     IsVisible="{Binding IsSaveManagerAvailable}"
                     IsEnabled="{Binding SaveManager.CanConfigureAutoBackup}">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+            <Grid ColumnDefinitions="Auto,*,Auto,132,Auto" ColumnSpacing="12">
               <ToggleSwitch IsChecked="{Binding SaveManager.IsWatchdogEnabled, Mode=TwoWay}"
                              OffContent="Off" OnContent="On"
                              AutomationProperties.Name="Enable Auto-Backup"
                              VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Spacing="3">
-                <TextBlock Text="Enable Auto-Backup" FontWeight="SemiBold" Foreground="#E6ECEF" />
-                <TextBlock Text="Automatically saves a checkpoint in the background whenever the game saves."
-                           FontSize="12" Foreground="#82939D" TextWrapping="Wrap" />
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" VerticalAlignment="Center">
-                  <TextBlock Text="Minimum time between auto-backups:" FontSize="12" Foreground="#82939D" VerticalAlignment="Center" />
-                  <ComboBox ItemsSource="{Binding SaveManager.CooldownChoices}"
-                            SelectedItem="{Binding SaveManager.CooldownMinutes, Mode=TwoWay}"
-                            IsEnabled="{Binding SaveManager.IsWatchdogEnabled}"
-                            Width="76" MinWidth="76" HorizontalAlignment="Left" />
-                  <TextBlock Text="min" FontSize="12" Foreground="#82939D" VerticalAlignment="Center" />
-                </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                <TextBlock Text="Enable Auto-Backup" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                <TextBlock Text="Creates a checkpoint when the game saves."
+                           FontSize="12" Foreground="{DynamicResource LabelTextBrush}" TextWrapping="Wrap" />
               </StackPanel>
+              <TextBlock Grid.Column="2" Text="Minimum interval" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
+              <NumericUpDown Grid.Column="3" Value="{Binding SaveManager.CooldownMinutes, Mode=TwoWay}"
+                             Minimum="1" Maximum="1440" Increment="1"
+                             IsEnabled="{Binding SaveManager.IsWatchdogEnabled}"
+                             Width="132" MinWidth="132" HorizontalAlignment="Left"
+                             ToolTip.Tip="Any whole number from 1 to 1440 minutes." />
+              <TextBlock Grid.Column="4" Text="min" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
             </Grid>
           </Border>
 
           <StackPanel IsVisible="{Binding IsSaveManagerAvailable}" Spacing="12">
+          <Border Padding="12,9" CornerRadius="7" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource GoldTextBrush}" BorderThickness="1"
+                  IsVisible="{Binding SaveManager.IsGameRunning}">
+            <TextBlock Text="Ancestors is running. Checkpoints can be created, but restoring is disabled until the game closes."
+                       Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
+          </Border>
           <Border Padding="14,10" CornerRadius="7" BorderThickness="1"
-                  BorderBrush="{Binding SaveManager.StatusAccent}"
+                  BorderBrush="{Binding SaveManager.StatusBrush}"
                   Background="{DynamicResource SurfaceBrush}"
                   IsVisible="True">
-            <TextBlock Text="{Binding SaveManager.StatusMessage}" TextWrapping="Wrap" Foreground="{Binding SaveManager.StatusAccent}" />
+            <TextBlock Text="{Binding SaveManager.StatusMessage}" TextWrapping="Wrap" Foreground="{Binding SaveManager.StatusBrush}" />
           </Border>
 
-          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#3B3120" BorderThickness="1">
-            <TextBlock Text="{Binding SaveManager.SteamCloudWarning}" TextWrapping="Wrap" Foreground="#D6BC84" FontSize="12" />
-          </Border>
+          <Expander Header="{Binding SaveManager.CloudWarningTitle}" Padding="12,8" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource CloudWarningBorderBrush}" BorderThickness="1">
+            <TextBlock Text="{Binding SaveManager.CloudWarning}" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource GoldTextBrush}" FontSize="12" />
+          </Expander>
 
-          <ItemsControl ItemsSource="{Binding SaveManager.Slots}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:SaveGameSlotViewModel">
-                <Border Margin="0,0,0,8" Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
-                  <StackPanel Spacing="9">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                      <StackPanel Spacing="1">
-                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="#E6ECEF" />
-                        <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="#71828D" />
-                        <TextBlock Text="{Binding Status}" FontSize="12" Foreground="#82939E" TextWrapping="Wrap" />
-                        <TextBlock Text="{Binding CheckpointCount}" FontSize="12" Foreground="#82939E" />
-                      </StackPanel>
-                      <Button Grid.Column="1" Command="{Binding CreateCheckpointCommand}" IsEnabled="{Binding CanSaveCheckpoint}" Content="Save checkpoint" VerticalAlignment="Center" />
-                    </Grid>
-                    <ItemsControl ItemsSource="{Binding VisibleCheckpoints}">
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
-                          <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="14">
-                              <StackPanel Spacing="1">
-                                <TextBlock Text="{Binding CreatedLabel}" FontWeight="SemiBold" Foreground="#E1E7EA" />
-                                <TextBlock Text="{Binding OriginLabel}" FontSize="12" Foreground="#B4D941" />
-                                <TextBlock Text="{Binding SizeLabel}" FontSize="12" Foreground="#71828D" />
+          <!-- 2-Column Slot Picker & Checkpoint Timeline -->
+          <Grid ColumnDefinitions="270,*" ColumnSpacing="18">
+            <!-- Left: Save Game Slots -->
+            <Border Classes="SettingCard" Padding="12">
+              <StackPanel Spacing="8">
+                <TextBlock Text="SAVE GAME SLOTS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource LabelTextBrush}" Margin="2,2,2,4" />
+                <ItemsControl ItemsSource="{Binding SaveManager.Slots}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SaveGameSlotViewModel">
+                      <Button Classes="Ghost"
+                              Command="{Binding $parent[Window].DataContext.SaveManager.SelectSlotCommand}"
+                              CommandParameter="{Binding}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch"
+                              Padding="0" Margin="0,0,0,8">
+                        <Border Classes="PresetTile"
+                                Classes.Selected="{Binding IsSelected}"
+                                Padding="12,10">
+                          <StackPanel Spacing="3">
+                            <Grid ColumnDefinitions="*,Auto">
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border Width="3" Height="14" CornerRadius="1.5"
+                                        Background="{DynamicResource AccentBrush}"
+                                        IsVisible="{Binding IsSelected}"
+                                        VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Title}" FontWeight="Bold" Foreground="{DynamicResource BodyTextBrush}" VerticalAlignment="Center" />
                               </StackPanel>
-                              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
-                                <Button Classes="Ghost" Content="Delete" Padding="12,6" Foreground="#D6BC84" Command="{Binding OpenDeleteConfirmCommand}" IsEnabled="{Binding CanDelete}" IsVisible="{Binding !IsDeleteConfirmVisible}" />
-                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="DangerAction" Content="Yes, delete it" Padding="12,6" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanDelete}" />
-                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelDeleteConfirmCommand}" />
-                              </StackPanel>
-
-                              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                <Button Command="{Binding OpenRestoreConfirmCommand}" IsEnabled="{Binding CanRestore}" Content="Restore" Padding="12,6" IsVisible="{Binding !IsRestoreConfirmVisible}" />
-                                <Button IsVisible="{Binding IsRestoreConfirmVisible}" IsEnabled="{Binding CanRestore}" Classes="PrimaryAction" Content="Confirm restore" Padding="12,6" Command="{Binding LoadCommand}" />
-                                <Button IsVisible="{Binding IsRestoreConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelRestoreConfirmCommand}" />
-                              </StackPanel>
+                              <TextBlock Grid.Column="1" Text="{Binding CheckpointCount}" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
                             </Grid>
-                          </Border>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Button Content="{Binding ShowAllLabel}"
-                            Command="{Binding ShowOlderCommand}"
-                            IsVisible="{Binding HasHiddenCheckpoints}"
-                            HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="#FF5A00" FontSize="12" />
-                    <Button Content="Show less"
-                            Command="{Binding ShowRecentCommand}"
-                            IsVisible="{Binding HasExpandedCheckpoints}"
-                            HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="#FF5A00" FontSize="12" />
+                            <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" />
+                            <TextBlock Text="{Binding Status}" FontSize="11.5" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                          </StackPanel>
+                        </Border>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <!-- Right: Selected Slot Details & Timeline -->
+            <StackPanel Grid.Column="1" Spacing="12">
+              <!-- Selected Slot Header -->
+              <Border Classes="SettingCard" Padding="16,12" DataContext="{Binding SaveManager.SelectedSlot}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource HeadingTextBrush}" />
+                    <TextBlock Text="{Binding Status}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
                   </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+                  <Button Grid.Column="1" Classes="PrimaryAction"
+                          Command="{Binding CreateCheckpointCommand}"
+                          IsEnabled="{Binding CanSaveCheckpoint}"
+                          Content="Create checkpoint"
+                          VerticalAlignment="Center" />
+                </Grid>
+              </Border>
+
+              <!-- Empty Slot Notice -->
+              <Border Classes="SettingCard" Padding="18,16" IsVisible="{Binding !SaveManager.SelectedSlot.HasSave}">
+                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                  <TextBlock Text="Empty Slot" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource BodyTextBrush}" HorizontalAlignment="Center" />
+                  <TextBlock Text="No active lineage save data exists in this slot yet. Start a new game in Ancestors or switch to another slot on the left."
+                             FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="480" />
+                </StackPanel>
+              </Border>
+
+              <!-- Search & Filters -->
+              <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding SaveManager.SelectedSlot.HasSave}">
+                <Grid ColumnDefinitions="*,180" ColumnSpacing="10">
+                  <TextBox PlaceholderText="Search checkpoint name, note or origin"
+                           Classes="clearButton"
+                           Text="{Binding SaveManager.CheckpointSearchText}" />
+                  <ComboBox Grid.Column="1" ItemsSource="{Binding SaveManager.CheckpointOriginFilters}"
+                            SelectedItem="{Binding SaveManager.CheckpointOriginFilter, Mode=TwoWay}" />
+                </Grid>
+              </Border>
+
+              <!-- Checkpoints list for SelectedSlot -->
+              <ItemsControl ItemsSource="{Binding SaveManager.SelectedSlot.VisibleCheckpoints}" IsVisible="{Binding SaveManager.SelectedSlot.HasSave}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SaveGameCheckpointViewModel">
+                    <Border Margin="0,0,0,6" Classes="SettingCard" Padding="12,10">
+                      <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" FontSize="13.5" Foreground="{DynamicResource BodyTextBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <Border Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="5,1">
+                                <TextBlock Text="{Binding OriginLabel}" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
+                              </Border>
+                              <TextBlock Text="{Binding CreatedLabel}" FontSize="11.5" Foreground="{DynamicResource LabelTextBrush}" VerticalAlignment="Center" />
+                              <TextBlock Text="{Binding SizeLabel}" FontSize="11.5" Foreground="{DynamicResource TechnicalTextBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding Note}" IsVisible="{Binding HasNote}" FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <ToggleButton Classes="Favorite" Content="★" ToolTip.Tip="Pin as favorite (prevents automatic pruning)" IsChecked="{Binding IsFavorite, Mode=TwoWay}" />
+                            <Button Command="{Binding OpenRestoreConfirmCommand}" IsEnabled="{Binding CanRestore}" Content="Restore" Padding="12,6" IsVisible="{Binding !IsRestoreConfirmVisible}" />
+                            <Button IsVisible="{Binding IsRestoreConfirmVisible}" IsEnabled="{Binding CanRestore}" Classes="PrimaryAction" Content="Confirm restore" Padding="12,6" Command="{Binding LoadCommand}" />
+                            <Button IsVisible="{Binding IsRestoreConfirmVisible}" Classes="Ghost" Content="Cancel" Padding="12,6" Command="{Binding CancelRestoreConfirmCommand}" />
+                            <Expander Header="More" FontSize="12">
+                              <StackPanel Spacing="5" Margin="0,6,0,0">
+                                <Button Content="Edit name / note" Command="{Binding ToggleMetadataEditorCommand}" />
+                                <Button Classes="Ghost" Content="Delete" Foreground="{DynamicResource GoldTextBrush}" Command="{Binding OpenDeleteConfirmCommand}" IsEnabled="{Binding CanDelete}" IsVisible="{Binding !IsDeleteConfirmVisible}" />
+                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="DangerAction" Content="Yes, delete it" Command="{Binding DeleteCommand}" IsEnabled="{Binding CanDelete}" />
+                                <Button IsVisible="{Binding IsDeleteConfirmVisible}" Classes="Ghost" Content="Cancel" Command="{Binding CancelDeleteConfirmCommand}" />
+                              </StackPanel>
+                            </Expander>
+                          </StackPanel>
+                        </Grid>
+                        <StackPanel IsVisible="{Binding IsMetadataEditorVisible}" Spacing="6" Margin="0,8,0,0">
+                          <TextBox PlaceholderText="Checkpoint name optional" Text="{Binding Title}" MaxLength="80" />
+                          <TextBox PlaceholderText="Note optional" Text="{Binding Note}" MaxLength="400" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="52" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Button Content="{Binding SaveManager.SelectedSlot.ShowAllLabel}"
+                      Command="{Binding SaveManager.SelectedSlot.ShowOlderCommand}"
+                      IsVisible="{Binding SaveManager.SelectedSlot.HasHiddenCheckpoints}"
+                      HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource OrangeAccentBrush}" FontSize="12" />
+              <Button Content="Show less"
+                      Command="{Binding SaveManager.SelectedSlot.ShowRecentCommand}"
+                      IsVisible="{Binding SaveManager.SelectedSlot.HasExpandedCheckpoints}"
+                      HorizontalAlignment="Left" Padding="8,4" Margin="-8,-4" Cursor="Hand" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource OrangeAccentBrush}" FontSize="12" />
+            </StackPanel>
+          </Grid>
+          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding SaveManager.BackupHealthBrush}" BorderThickness="1">
+            <StackPanel Spacing="3">
+              <TextBlock Text="Backup health" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+              <TextBlock Text="{Binding SaveManager.BackupHealthSummary}" TextWrapping="Wrap" Foreground="{Binding SaveManager.BackupHealthBrush}" />
+              <TextBlock Text="This is an inventory-level scan of checkpoint paths, manifests and sizes. Full decompression and hash validation happen immediately before a restore; AEC never treats this list as proof that a checkpoint loaded successfully in-game."
+                         FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
           <StackPanel IsVisible="{Binding SaveManager.HasNoSlots}" Spacing="10" Margin="0,2,0,0">
             <Border Classes="SettingCard" Padding="16,14" CornerRadius="7" BorderThickness="1">
               <StackPanel Spacing="5" HorizontalAlignment="Center">
@@ -623,12 +876,12 @@
                            HorizontalAlignment="Center"
                            FontSize="16"
                            FontWeight="SemiBold"
-                           Foreground="#E8E4D9" />
+                           Foreground="{DynamicResource PrimaryTextBrush}" />
                 <TextBlock Text="Start Ancestors once and create a save; then it appears here along with any checkpoints."
                            HorizontalAlignment="Center"
                            TextWrapping="Wrap"
                            FontSize="12"
-                           Foreground="#82939D" />
+                           Foreground="{DynamicResource LabelTextBrush}" />
                 <Button Classes="PrimaryAction"
                         Content="Scan for save games"
                         Command="{Binding SaveManager.RefreshCommand}"
@@ -643,173 +896,564 @@
                   IsVisible="{Binding IsSaveManagerUnavailable}">
             <StackPanel Spacing="8">
               <TextBlock Text="Save management requires a supported, verified Ancestors installation and detected user data. If the game is running or recovery is pending, close it and reload."
-                         TextWrapping="Wrap" Foreground="#82939D" />
+                         TextWrapping="Wrap" Foreground="{DynamicResource LabelTextBrush}" />
               <Button Classes="PrimaryAction" Content="Scan again" Command="{Binding RefreshCommand}"
                       HorizontalAlignment="Left" />
             </StackPanel>
           </Border>
         </StackPanel>
-        <StackPanel IsVisible="{Binding ShowCheatView}" Spacing="12">
-          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
-            <StackPanel Spacing="2">
-              <TextBlock Text="Cheats" FontSize="18" FontWeight="SemiBold" Foreground="#EBF0F3" />
-              <TextBlock Text="Cheats are created as separate checkpoints. Restoring one replaces the live save after creating a safety checkpoint." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-            </StackPanel>
-          </Border>
-
-          <Border Padding="14,11" CornerRadius="7" Background="#2A1F16" BorderBrush="#6B4A26" BorderThickness="1"
-                  IsVisible="{Binding Cheat.IsGameRunning}">
-            <TextBlock Text="Game is running - close Ancestors before creating or restoring a cheat checkpoint. The cheat buttons are disabled while the game is open." FontWeight="SemiBold" Foreground="#E8C08A" TextWrapping="Wrap" />
-          </Border>
-
-          <StackPanel IsVisible="{Binding IsCheatAvailable}" Spacing="8">
-            <TextBlock Text="EXPERIMENTAL SAVEGAME CHEATS — create a modified checkpoint for the selected slot" FontSize="12" FontWeight="Bold" Foreground="#FF5A00" Margin="2,8,0,0" />
-          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
-            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="16">
-              <StackPanel Spacing="2" VerticalAlignment="Center">
-                <TextBlock Text="Save slot" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                <TextBlock Text="The cheat is saved as a new checkpoint for this slot." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
+        <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="16">
+          <Border Classes="SettingCard" Padding="18,14">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+              <StackPanel Spacing="3">
+                <TextBlock Text="Gameplay difficulty" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource HeadingTextBrush}" />
+                <TextBlock Text="Start with a preset, then adjust the six core survival and hazard controls." IsVisible="{Binding IsGameplaySimpleMode}" FontSize="12.5" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
+                <TextBlock Text="All core controls stay available here. Use the additional recovery, wound and exhaustion controls only when you need them." IsVisible="{Binding IsGameplayAdvancedMode}" FontSize="12.5" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
               </StackPanel>
-              <ComboBox Grid.Column="1" ItemsSource="{Binding Cheat.Slots}"
-                        SelectedItem="{Binding Cheat.SelectedSlot}"
-                        IsEnabled="{Binding !Cheat.IsBusy}"
-                        VerticalAlignment="Center"
-                        Width="180" MinWidth="180">
-                <ComboBox.ItemTemplate>
-                  <DataTemplate x:DataType="vm:CheatSlotChoice">
-                    <TextBlock Text="{Binding Label}" />
-                  </DataTemplate>
-                </ComboBox.ItemTemplate>
-              </ComboBox>
+              <Border Grid.Column="1" Padding="4" CornerRadius="8" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                  <ToggleButton Classes="mode" Command="{Binding ShowGameplaySimpleCommand}" IsChecked="{Binding IsGameplaySimpleMode, Mode=OneWay}" Content="Simple" />
+                  <ToggleButton Classes="mode" Command="{Binding ShowGameplayAdvancedCommand}" IsChecked="{Binding IsGameplayAdvancedMode, Mode=OneWay}" Content="Advanced" />
+                </StackPanel>
+              </Border>
             </Grid>
           </Border>
 
-          <StackPanel Spacing="8">
-            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="Max Neuronal Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Creates an experimental checkpoint that sets the neuronal-energy field to 1000. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-                </StackPanel>
-                <Button Grid.Column="1" Command="{Binding Cheat.MaxNeuronalEnergyCommand}"
-                        IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
-              </Grid>
-            </Border>
+          <Border Padding="4" CornerRadius="7" Background="{DynamicResource RaisedSurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding IsGameplayAdvancedMode}">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <ToggleButton Classes="mode" Command="{Binding ShowGameplaySurvivalTabCommand}" IsChecked="{Binding IsGameplaySurvivalTab, Mode=OneWay}" Content="Survival" />
+              <ToggleButton Classes="mode" Command="{Binding ShowGameplayRecoveryTabCommand}" IsChecked="{Binding IsGameplayRecoveryTab, Mode=OneWay}" Content="Health &amp; recovery" />
+            </StackPanel>
+          </Border>
 
-            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="Max Stamina and Energy" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's stamina, energy and regimen-stamina fields to 1000. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-                </StackPanel>
-                <Button Grid.Column="1" Command="{Binding Cheat.MaxNeedsCommand}"
-                        IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
-              </Grid>
-            </Border>
-
-            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#4A5A23" BorderThickness="1">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                <StackPanel Spacing="2" VerticalAlignment="Center">
-                  <TextBlock Text="Heal Current Ape" FontWeight="SemiBold" Foreground="#E2E8EB" />
-                  <TextBlock Text="Creates an experimental checkpoint that sets the current ape's health, stamina and energy fields to 1.0. Verify the result in-game." FontSize="12" Foreground="#9CB0BC" TextWrapping="Wrap" />
-                </StackPanel>
-                <Button Grid.Column="1" Command="{Binding Cheat.HealCurrentApeCommand}"
-                        IsEnabled="{Binding Cheat.CanApply}"
-                        Content="Create modified checkpoint" Padding="16,8" VerticalAlignment="Center" />
-              </Grid>
+          <StackPanel IsVisible="{Binding IsGameplaySimpleMode}">
+            <Border Classes="SettingCard InteractiveCard" Padding="14,11" IsVisible="{Binding HasGameplayDifficultyPresets}">
+              <StackPanel Spacing="10">
+                <Button Classes="CardHeader" Command="{Binding ToggleGameplayPresetsCommand}" Padding="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsHitTestVisible="False">
+                    <StackPanel Spacing="2">
+                      <TextBlock Text="Gameplay presets" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                      <TextBlock Text="Choose a starting point, then fine-tune the six main survival and hazard controls below." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding GameplayPresetsToggleLabel}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+                  </Grid>
+                </Button>
+                <ItemsControl IsVisible="{Binding IsGameplayPresetsExpanded}" ItemsSource="{Binding GameplayDifficultyPresets}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GameplayDifficultyPresetViewModel">
+                      <Border Classes="PresetCard" Padding="12,9" Margin="0,0,8,6" MinHeight="132">
+                        <Grid RowDefinitions="*,Auto" RowSpacing="8">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                            <TextBlock Text="{Binding Summary}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
+                            <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                          </StackPanel>
+                          <Button Grid.Row="1" Content="Use preset" Command="{Binding $parent[Window].DataContext.SelectGameplayPresetCommand}" CommandParameter="{Binding}" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" HorizontalAlignment="Left" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
             </Border>
           </StackPanel>
 
+          <Border Padding="16,14" CornerRadius="10" Background="{DynamicResource RaisedSurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding ShowGameplayCoreControls}">
+              <StackPanel Spacing="12">
+                <Border Padding="14,12" CornerRadius="8" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                      <TextBlock Text="Patch scope" FontWeight="Bold" Foreground="{DynamicResource HeadingTextBrush}" />
+                      <TextBlock Text="Player only scales the active ape you control. Player + Clan also scales food, water and sleep requirements for AI clan members." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <ToggleSwitch Grid.Column="1" IsChecked="{Binding IncludeClanInGameplayPatch}" OnContent="Player + Clan" OffContent="Player only" VerticalAlignment="Center" />
+                  </Grid>
+                </Border>
+                <StackPanel Spacing="3" Margin="2,4,0,2">
+                  <TextBlock Text="Core survival controls" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                  <TextBlock Text="{Binding GameplayControlRangeLabel}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding GameplaySimpleControls}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GameplayDifficultyControlViewModel">
+                      <Border Padding="14,11" Margin="0,0,0,6" CornerRadius="8" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                            <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <StackPanel Spacing="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                              <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" TextAlignment="Right" />
+                              <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" HorizontalAlignment="Right" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="140" Padding="8,4" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
+                            <Button Classes="InlineReset" Command="{Binding ResetToDefaultCommand}" ToolTip.Tip="Reset to 100%" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}">
+                              <PathIcon Data="{StaticResource IconReset}" Width="12" Height="12" />
+                            </Button>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+          </Border>
+
+          <StackPanel IsVisible="{Binding IsGameplayAdvancedMode}" Spacing="12">
+            <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" IsVisible="{Binding IsGameplayRecoveryTab}">
+              <StackPanel Spacing="10">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="Recovery &amp; wounds" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                  <TextBlock Text="These controls change verified player vitality and wound values. They do not change save data or bypass the normal ability system." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding GameplayAdvancedControls}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GameplayDifficultyControlViewModel">
+                      <Border Padding="14,11" Margin="0,0,0,6" CornerRadius="8" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                            <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                          </StackPanel>
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <StackPanel Spacing="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                              <TextBlock Text="{Binding StockValue}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" TextAlignment="Right" />
+                              <TextBlock Text="{Binding DraftValue}" FontSize="11" Foreground="{DynamicResource TechnicalTextBrush}" HorizontalAlignment="Right" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding MultiplierPercent, Mode=TwoWay}" Minimum="{Binding $parent[Window].DataContext.GameplayMinimumPercent}" Maximum="{Binding $parent[Window].DataContext.GameplayMaximumPercent}" Increment="10" FormatString="{}{0}%" Width="140" Padding="8,4" HorizontalAlignment="Right" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}" />
+                            <Button Classes="InlineReset" Command="{Binding ResetToDefaultCommand}" ToolTip.Tip="Reset to 100%" IsEnabled="{Binding $parent[Window].DataContext.CanEditGameplay}">
+                              <PathIcon Data="{StaticResource IconReset}" Width="12" Height="12" />
+                            </Button>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
           </StackPanel>
 
-          <Button Classes="PrimaryAction"
-                  Command="{Binding Cheat.RestoreLastCheckpointCommand}"
-                  IsVisible="{Binding Cheat.CanRestoreLastCheckpoint}"
-                  HorizontalAlignment="Left"
-                  Content="Restore this cheat checkpoint now"
-                  Margin="0,4,0,0" />
-
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{Binding GameplayReadiness.AccentBrush}" BorderThickness="1">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding GameplayReadiness.Title}" FontWeight="SemiBold" Foreground="{DynamicResource WarningTextBrush}" />
+              <TextBlock Text="{Binding GameplayReadiness.Description}" FontSize="12" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding ShowProfilesView}" Spacing="16">
+          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <StackPanel Spacing="3">
+                <TextBlock Text="Profiles" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
+                <TextBlock Text="Save, share and review your graphics and future gameplay setup without changing save games." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Content="Import profile" Click="ImportProfileClick" />
+                <Button Classes="PrimaryAction" Content="Create profile" Command="{Binding StartCreatingProfileCommand}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="10,8" CornerRadius="6" Background="{DynamicResource SurfaceBrush}" BorderBrush="{Binding OperationBrush}" BorderThickness="1">
+            <TextBlock Text="{Binding OperationMessage}" FontSize="12" Foreground="{Binding OperationBrush}" TextWrapping="Wrap" />
+          </Border>
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                  IsVisible="{Binding Cheat.HasStatus}" Margin="0,0,0,2">
-            <TextBlock Text="{Binding Cheat.StatusMessage}" TextWrapping="Wrap" Foreground="{Binding Cheat.StatusAccent}" FontSize="13" FontWeight="SemiBold" />
+                  IsVisible="{Binding IsCreatingProfile}">
+            <StackPanel Spacing="10" MaxWidth="660">
+              <TextBlock Text="Create graphics profile" FontWeight="SemiBold" Foreground="{DynamicResource ReviewTextBrush}" />
+              <TextBlock Text="This saves the current editable graphics setup, including direct game graphics values. Save games and external mods are never included." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              <TextBlock Text="Set at least one graphics setting to Custom before saving a profile."
+                         IsVisible="{Binding !HasCustomProfileSettings}"
+                         FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+              <TextBox PlaceholderText="Profile name" Text="{Binding NewProfileName}" MaxLength="80" />
+              <TextBox PlaceholderText="Short description optional" Text="{Binding NewProfileDescription}" MaxLength="400" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" />
+              <StackPanel Spacing="3">
+                <CheckBox IsChecked="True" IsEnabled="False" Content="Graphics settings" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Cancel" Command="{Binding CancelCreatingProfileCommand}" />
+                <Button Classes="PrimaryAction" Content="Save profile" Command="{Binding CreateProfileCommand}" IsEnabled="{Binding CanSaveProfile}" />
+              </StackPanel>
+            </StackPanel>
           </Border>
-
           <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                  IsVisible="{Binding IsCheatUnavailable}">
-            <TextBlock Text="Experimental save modifications require a supported, verified Ancestors installation and detected user data. If the game is running or recovery is pending, close it and reload."
-                       TextWrapping="Wrap" Foreground="#82939D" />
+                  IsVisible="{Binding HasImportedProfile}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Imported profile" FontWeight="SemiBold" Foreground="{DynamicResource ReviewTextBrush}" />
+              <TextBlock Text="{Binding ImportedProfile.Name}" FontSize="16" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding ImportedProfile.Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ImportedProfile.Contents}" FontSize="12" Foreground="{DynamicResource AccentBrush}" />
+              <TextBlock Text="{Binding ImportedProfile.SettingCount, StringFormat={}{0} settings checked}" FontSize="12" Foreground="{DynamicResource LabelTextBrush}" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Add to My profiles" Command="{Binding AddImportedProfileToLibraryCommand}" />
+                <Button Classes="PrimaryAction" Content="Load for review" Command="{Binding LoadImportedProfileCommand}" />
+              </StackPanel>
+            </StackPanel>
           </Border>
-
-          <Border Padding="14,11" CornerRadius="7" BorderBrush="#3A4A2E" BorderThickness="1"
-                  IsVisible="{Binding IsCheatAvailable}">
-            <Border.Background>
-              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                <GradientStop Offset="0" Color="#16382D" />
-                <GradientStop Offset="1" Color="#0D1C16" />
-              </LinearGradientBrush>
-            </Border.Background>
-            <TextBlock Text="Experimental: savegame cheats are not yet verified with real saves in-game. A checkpoint is created first, but keep your own save backup before using them." TextWrapping="Wrap" Foreground="#E8E4D9" />
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                  IsVisible="{Binding !HasUserProfiles}">
+            <StackPanel Spacing="5">
+              <TextBlock Text="No saved profiles yet" FontWeight="SemiBold" Foreground="{DynamicResource InfoTextBrush}" />
+              <TextBlock Text="Create a profile from the current editable graphics setup or import a .aecprofile file. Loaded values are always reviewed before anything is applied." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
           </Border>
-
-          <Border Padding="12,10" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="#3B3120" BorderThickness="1">
-            <TextBlock Text="{Binding Cheat.SteamCloudWarning}" TextWrapping="Wrap" Foreground="#D6BC84" FontSize="12" />
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                  IsVisible="{Binding HasProfilePendingRename}">
+            <StackPanel Spacing="8" MaxWidth="660">
+              <TextBlock Text="Rename profile" FontWeight="SemiBold" Foreground="{DynamicResource ReviewTextBrush}" />
+              <TextBlock Text="AEC first writes a validated renamed copy. Only then is the original removed, so a failed write cannot lose the profile." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              <TextBox Text="{Binding RenamedProfileName}" MaxLength="80" />
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Cancel" Command="{Binding CancelProfileRenameCommand}" />
+                <Button Classes="PrimaryAction" Content="Rename profile" Command="{Binding ConfirmProfileRenameCommand}" IsEnabled="{Binding CanConfirmProfileRename}" />
+              </StackPanel>
+            </StackPanel>
           </Border>
-
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1"
+                  IsVisible="{Binding HasProfileComparison}">
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Text="{Binding ProfileComparisonName, StringFormat=Compare: {0}}" FontWeight="SemiBold" Foreground="{DynamicResource InfoTextBrush}" />
+                <Button Grid.Column="1" Content="Close" Command="{Binding ClearProfileComparisonCommand}" />
+              </Grid>
+              <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                <TextBlock Text="Setting" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TechnicalTextBrush}" />
+                <TextBlock Grid.Column="1" Text="Current" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TechnicalTextBrush}" />
+                <TextBlock Grid.Column="2" Text="Profile" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TechnicalTextBrush}" />
+              </Grid>
+              <ItemsControl ItemsSource="{Binding ProfileComparisonRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ProfileComparisonRowViewModel">
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" Margin="0,2">
+                      <TextBlock Text="{Binding Name}" />
+                      <TextBlock Grid.Column="1" Text="{Binding CurrentValue}" Foreground="{DynamicResource SecondaryTextBrush}" />
+                      <TextBlock Grid.Column="2" Text="{Binding ProfileValue}" Foreground="{DynamicResource AccentBrush}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+          <ItemsControl ItemsSource="{Binding UserProfiles}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:UserProfileRowViewModel">
+                <Border Classes="SettingCard" Padding="16,13" Margin="0,0,0,8">
+                  <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                      <StackPanel Spacing="3">
+                        <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource HeadingTextBrush}" />
+                        <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                        <Border Background="{DynamicResource InfoSurfaceBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left" Margin="0,2,0,0">
+                          <TextBlock Text="{Binding Contents}" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
+                        </Border>
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" VerticalAlignment="Center">
+                        <Button Classes="PrimaryAction" Content="Load profile" Click="LoadStoredProfileClick" />
+                        <Button Content="Compare" Command="{Binding $parent[Window].DataContext.CompareProfileCommand}" CommandParameter="{Binding}" />
+                        <Expander Header="More" FontSize="12">
+                          <StackPanel Spacing="5" Margin="0,6,0,0">
+                            <Button Content="Rename" Command="{Binding $parent[Window].DataContext.RequestProfileRenameCommand}" CommandParameter="{Binding}" />
+                            <Button Content="Duplicate" Command="{Binding $parent[Window].DataContext.DuplicateProfileCommand}" CommandParameter="{Binding}" />
+                            <Button Content="Export" Click="ExportProfileClick" />
+                            <Button Classes="DangerAction" Content="Delete" Command="{Binding $parent[Window].DataContext.RequestProfileDeletionCommand}" CommandParameter="{Binding}" />
+                          </StackPanel>
+                        </Expander>
+                      </StackPanel>
+                    </Grid>
+                    <Border Margin="0,8,0,0" Padding="12,9" CornerRadius="6"
+                            Background="{DynamicResource WarningSurfaceBrush}"
+                            BorderBrush="{DynamicResource WarningBorderBrush}"
+                            BorderThickness="1"
+                            IsVisible="{Binding IsPendingDeletion}">
+                      <StackPanel Spacing="8">
+                        <TextBlock Text="Delete this profile?" FontWeight="SemiBold" Foreground="{DynamicResource WarningTextBrush}" />
+                        <TextBlock Text="This permanently removes this profile from My profiles." FontSize="12" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                          <Button Content="Cancel" Command="{Binding $parent[Window].DataContext.CancelProfileDeletionCommand}" />
+                          <Button Classes="DangerAction" Content="Delete profile" Command="{Binding $parent[Window].DataContext.ConfirmProfileDeletionCommand}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding ShowSettingsView}" Spacing="16">
+          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
+            <StackPanel Spacing="3">
+              <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
+              <TextBlock Text="Accessibility options and maintenance for Ancestors Enhanced Configurator." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1"
+                  IsVisible="{Binding HasApplicationPreferencesWarning}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Application preferences need attention" FontWeight="SemiBold" Foreground="{DynamicResource WarningTextBrush}" />
+              <TextBlock Text="{Binding ApplicationPreferencesWarning}" FontSize="12" Foreground="{DynamicResource WarningTextBrush}" TextWrapping="Wrap" />
+              <TextBlock Text="Reset archives the unreadable file first, then restores AEC's application preferences to safe defaults. This does not change Ancestors, save games, graphics settings or profiles."
+                         FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+              <Button Content="Reset application preferences" Command="{Binding ResetApplicationPreferencesCommand}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <StackPanel Spacing="3">
+                <TextBlock Text="Profiles and support" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
+                <TextBlock Text="Manage saved graphics setups or open a diagnostic report when something needs troubleshooting." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Content="Manage profiles" Command="{Binding ShowProfilesCommand}" />
+                <Button Content="Open diagnostics" Command="{Binding ShowDiagnosticsCommand}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding IsHighContrastEnabled, Mode=TwoWay}"
+                            OffContent="Off" OnContent="On"
+                            AutomationProperties.Name="Use high contrast mode"
+                            VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="High contrast" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                <TextBlock Text="Uses brighter text, clearer borders and a visible keyboard focus on AEC's shared surfaces. This does not change Ancestors, your save games or your graphics settings." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding IsDiscordRichPresenceEnabled, Mode=TwoWay}"
+                            OffContent="Off" OnContent="On"
+                            AutomationProperties.Name="Share Discord Rich Presence"
+                            VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="Discord Rich Presence" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                <TextBlock Text="Optional. This keeps your preference to use Discord; AEC separately shows whether the local Discord integration actually started. It is off by default." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding DiscordRichPresenceStatus, StringFormat=Status: {0}}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding IsExperimentalGraphicsSettingsEnabled, Mode=TwoWay}"
+                            OffContent="Off" OnContent="On"
+                            AutomationProperties.Name="Enable experimental graphics settings"
+                            VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="Enable experimental graphics settings" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                <TextBlock Text="Shows 19 additional renderer controls in Graphics › Advanced; it does not change any value by itself. These controls may have little visible effect, need game-specific testing, or trade image quality for performance." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding IsExperimentalGameplaySettingsEnabled, Mode=TwoWay}"
+                            OffContent="Off" OnContent="On"
+                            AutomationProperties.Name="Enable experimental gameplay tuning"
+                            VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="Enable experimental gameplay tuning" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                <TextBlock Text="Extends every gameplay percentage control above the normal 10% to 200% range, up to 1000% in 10% steps. This is not a balanced preset range: extreme values can make required portions, damage and healing behave very differently. Simple presets remain within their tested 70% to 150% range." FontSize="12" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                  IsVisible="{Binding IsSaveManagerAvailable}">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+              <ToggleSwitch IsChecked="{Binding SaveManager.KeepRunningInTrayWhenClosing, Mode=TwoWay}"
+                            IsEnabled="{Binding SaveManager.CanConfigureAutoBackup}"
+                            OffContent="Off" OnContent="On"
+                            AutomationProperties.Name="Keep running in tray when closing"
+                            VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="Keep auto-backup running when I close the window" FontWeight="SemiBold" Foreground="{DynamicResource BodyTextBrush}" />
+                <TextBlock Text="When Auto-Backup is enabled, closing AEC hides it in the system tray instead of stopping it. You can open it again or choose Exit from the tray menu." FontSize="12" Foreground="{DynamicResource LabelTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Ancestors Enhanced maintenance" FontWeight="SemiBold" Foreground="{DynamicResource WarningTextBrush}" />
+              <TextBlock Text="Remove Configurator changes restores files changed by this Configurator to their state before you first used it. Your save games and other mods are not removed." FontSize="12" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+              <TextBlock Text="No removable Configurator changes were found." IsVisible="{Binding !HasRemovableToolChanges}" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
+              <Button Command="{Binding RemoveToolChangesCommand}"
+                      IsEnabled="{Binding CanRemoveToolChanges}"
+                      HorizontalAlignment="Left"
+                      Content="Remove Configurator changes"
+                      ToolTip.Tip="Shows every unchanged file that will be restored before anything is written." />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding ShowDiagnosticsView}" Spacing="16">
+          <Border Classes="SettingCard" Padding="14,11" CornerRadius="7" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <StackPanel Spacing="3">
+                <TextBlock Text="Diagnostics" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource HeadingTextBrush}" />
+                <TextBlock Text="Read-only inspection data for support and conflict triage. Copying the report redacts Windows user paths." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+              </StackPanel>
+              <Button Grid.Column="1" Content="Copy diagnostics" Click="CopyDiagnosticsClick" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+          <Border Padding="14,11" CornerRadius="7" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+            <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="7">
+              <TextBlock Text="AEC status" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <TextBlock Grid.Column="1" Text="{Binding DetectionStatus}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="1" Text="Installation" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding InstallationDetails}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="2" Text="System.sav" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding BinarySettingsStatus}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="3" Text="System" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SystemDiagnostics}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="4" Text="CPU" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding HardwareDiagnostics.Cpu}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="5" Text="Memory" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding HardwareDiagnostics.Memory}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="6" Text="GPU / VRAM" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding HardwareDiagnostics.Graphics}" TextWrapping="Wrap" />
+              <TextBlock Grid.Row="7" Text="Recommendation" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <StackPanel Grid.Row="7" Grid.Column="1" Spacing="4">
+                <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.PresetName}" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
+                <TextBlock Text="{Binding HardwareDiagnostics.Recommendation.Description}" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+                <Button Content="{Binding DetailedHardwareActionLabel}" Command="{Binding RunDetailedHardwareDetectionCommand}" IsEnabled="{Binding CanRunDetailedHardwareDetection}" HorizontalAlignment="Left" />
+                <Button Content="Stage recommended preset" Command="{Binding LoadHardwareRecommendationCommand}" IsEnabled="{Binding CanStageHardwareRecommendation}" HorizontalAlignment="Left" />
+              </StackPanel>
+              <TextBlock Grid.Row="8" Text="Hardware status" Foreground="{DynamicResource TechnicalTextBrush}" />
+              <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding HardwareDiagnostics.Status}" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+            </Grid>
+          </Border>
+          <Expander Header="Configuration files">
+            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding ConfigurationFiles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ConfigurationFileRowViewModel">
+                  <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
+                    <Grid ColumnDefinitions="170,*,210">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="{DynamicResource MidTextBrush}" />
+                      <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+          <Expander Header="PAK packages">
+            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding PakFiles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:PakFileRowViewModel">
+                  <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
+                    <Grid ColumnDefinitions="250,180,*">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding Details}" Foreground="{DynamicResource MidTextBrush}" />
+                      <TextBlock Grid.Column="2" Text="{Binding Classification}" Foreground="{DynamicResource GoldTextBrush}" TextWrapping="Wrap" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+          <Expander Header="Inspection notes">
+            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Notices}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:NoticeRowViewModel">
+                  <Border Margin="0,0,0,4" Padding="9" CornerRadius="5" Background="{DynamicResource SurfaceBrush}">
+                    <Grid ColumnDefinitions="90,*">
+                      <TextBlock Text="{Binding Severity}" FontWeight="SemiBold" Foreground="{DynamicResource GoldTextBrush}" />
+                      <TextBlock Grid.Column="1" Text="{Binding Message}" TextWrapping="Wrap" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
         </StackPanel>
       </StackPanel>
     </ScrollViewer>
 
-    <Border Grid.Row="2" Grid.Column="1"
-              IsVisible="{Binding ShowBottomBar}"
-            Padding="16,10"
-            Background="{DynamicResource RaisedSurfaceBrush}"
+    <Border Grid.Row="2"
+            IsVisible="{Binding ShowBottomBar}"
+            Padding="28,14"
+            Background="{DynamicResource SurfaceBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="0,1,0,0">
-      <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
-        <StackPanel Spacing="1" VerticalAlignment="Center">
-          <TextBlock Text="{Binding PendingSummary}"
-                     FontWeight="SemiBold"
-                     Foreground="#E1E7EA" />
-          <TextBlock Text="{Binding PendingDetails}"
-                     IsVisible="{Binding HasPendingChanges}"
-                     TextWrapping="Wrap"
-                     FontSize="12"
-                     Foreground="#C7B98C" />
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center" ClipToBounds="True">
+          <StackPanel IsVisible="{Binding !ShowGameplayView}" Spacing="2">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Border Classes="StatusPill" Padding="8,2" IsVisible="{Binding HasPendingChanges}" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}">
+                <TextBlock Text="Pending" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource OrangeAccentBrush}" />
+              </Border>
+              <TextBlock Text="{Binding PendingSummary}"
+                         FontWeight="Bold"
+                         FontSize="13.5"
+                         VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource BodyTextBrush}" />
+            </StackPanel>
+            <TextBlock Text="{Binding PendingDetails}"
+                       IsVisible="{Binding HasPendingChanges}"
+                       TextTrimming="CharacterEllipsis"
+                       FontSize="12"
+                       Foreground="{DynamicResource GoldTextBrush}" />
+          </StackPanel>
+          <StackPanel IsVisible="{Binding ShowGameplayView}" Spacing="2">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Border Classes="StatusPill" Padding="8,2" IsVisible="{Binding HasGameplayPendingChanges}" Background="{DynamicResource WarningSurfaceBrush}" BorderBrush="{DynamicResource WarningBorderBrush}">
+                <TextBlock Text="Draft" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource OrangeAccentBrush}" />
+              </Border>
+              <TextBlock Text="{Binding GameplayDraftStatus}"
+                         FontWeight="Bold"
+                         FontSize="13.5"
+                         VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource BodyTextBrush}" />
+            </StackPanel>
+            <TextBlock Text="{Binding GameplayPendingDetails}"
+                       IsVisible="{Binding HasGameplayPendingChanges}"
+                       TextTrimming="CharacterEllipsis"
+                       FontSize="12"
+                       Foreground="{DynamicResource GoldTextBrush}" />
+          </StackPanel>
           <TextBlock Text="{Binding OperationMessage}"
-                     TextWrapping="Wrap"
+                     TextTrimming="CharacterEllipsis"
                      FontSize="12"
-                     Foreground="{Binding OperationAccent}" />
+                     Foreground="{Binding OperationBrush}" />
         </StackPanel>
-        <WrapPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Button Command="{Binding RestoreGameDefaultsCommand}"
                   IsEnabled="{Binding CanRestoreGameDefaults}"
                   IsVisible="{Binding ShowGraphicsView}"
-                  Margin="0,0,8,0"
-                  Content="Clear my custom overrides"
-                  ToolTip.Tip="Reviews and removes the custom graphics values currently shown in the editor. Undo history and pre-tool baselines are kept." />
+                  Content="Use game graphics settings"
+                  ToolTip.Tip="Removes only custom graphics values set in this Configurator. The graphics presets selected in the game will be used again." />
           <Button Command="{Binding RevertLastCommand}"
                   IsEnabled="{Binding CanUndo}"
                   IsVisible="{Binding ShowGraphicsView}"
-                  Margin="0,0,8,0"
                   Padding="16,7"
-                  Content="Undo" />
-          <Button Command="{Binding RemoveToolChangesCommand}"
-                  IsVisible="{Binding HasRemovableToolChanges}"
-                  IsEnabled="{Binding CanRemoveToolChanges}"
-                  Margin="0,0,8,0"
-                  Content="Remove tool changes"
-                  ToolTip.Tip="Restores every tool-owned settings file to its recorded state from before the configurator first changed it." />
+                  Content="Undo last apply" />
           <Button Command="{Binding DiscardChangesCommand}"
                   IsVisible="{Binding ShowPendingActions}"
-                  Margin="0,0,8,0"
                   Content="Discard" />
           <Button Command="{Binding OpenReviewCommand}"
                   Classes="PrimaryAction"
                   IsVisible="{Binding ShowPendingActions}"
                   Content="Review" />
-        </WrapPanel>
+          <Button Command="{Binding ResetGameplayCommand}"
+                  IsEnabled="{Binding CanResetGameplay}"
+                  IsVisible="{Binding ShowGameplayView}"
+                  Content="Restore game default"
+                  ToolTip.Tip="Removes the AEC gameplay difficulty PAK and restores unmodded game behavior." />
+          <Button Command="{Binding DiscardGameplayChangesCommand}"
+                  IsEnabled="{Binding CanDiscardGameplayDraft}"
+                  IsVisible="{Binding ShowGameplayPendingActions}"
+                  Content="Discard" />
+          <Button Command="{Binding OpenGameplayReviewCommand}"
+                  Classes="PrimaryAction"
+                  IsEnabled="{Binding CanReviewGameplay}"
+                  IsVisible="{Binding ShowGameplayView}"
+                  Content="{Binding GameplayReviewButtonLabel}" />
+        </StackPanel>
       </Grid>
     </Border>
     </Grid>
@@ -822,49 +1466,55 @@
       <Grid.KeyBindings>
         <KeyBinding Gesture="Escape" Command="{Binding CancelReviewCommand}" />
       </Grid.KeyBindings>
-      <Button Classes="Ghost" Background="#E60C1115"
+      <Button Classes="Ghost" Background="{DynamicResource ModalOverlayBrush}"
               Command="{Binding CancelReviewCommand}"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Stretch"
+              Focusable="False"
+              IsTabStop="False"
               BorderThickness="0"
               CornerRadius="0"
               Padding="0" />
-      <Border MaxWidth="900"
-              MaxHeight="580"
-              Padding="20"
+      <Border x:Name="ReviewDialog"
+              MaxWidth="920"
+              Margin="20"
+              MaxHeight="600"
+              Padding="24"
               HorizontalAlignment="Center"
               VerticalAlignment="Center"
-              CornerRadius="9"
-              Background="#15232C"
-              BorderBrush="#3B7598"
+              CornerRadius="12"
+              Background="{DynamicResource RaisedSurfaceBrush}"
+              BorderBrush="{DynamicResource ReviewBorderBrush}"
               BorderThickness="1">
-        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="9">
+        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
           <TextBlock Text="{Binding ReviewSummary}"
                      FontSize="20"
-                     FontWeight="SemiBold"
-                     Foreground="#DCEEFF" />
+                     FontWeight="Bold"
+                     Foreground="{DynamicResource ReviewTextBrush}" />
           <TextBlock Grid.Row="1"
                      Text="{Binding ReviewDescription}"
-                     Foreground="#8CA9BA" />
+                     TextWrapping="Wrap"
+                     FontSize="12.5"
+                     Foreground="{DynamicResource SecondaryTextBrush}" />
           <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-              <Grid ColumnDefinitions="1.2*,1.2*,Auto,1.2*" ColumnSpacing="10" Margin="0,0,0,4">
-                <TextBlock Text="Setting" FontSize="12" FontWeight="SemiBold" Foreground="#8CA9BA" />
-                <TextBlock Grid.Column="1" Text="Current value" FontSize="12" FontWeight="SemiBold" Foreground="#8CA9BA" />
-                <TextBlock Grid.Column="3" Text="New value" FontSize="12" FontWeight="SemiBold" Foreground="#8CA9BA" />
+              <Grid ColumnDefinitions="1.2*,1.2*,Auto,1.2*" ColumnSpacing="10" Margin="0,0,0,6">
+                <TextBlock Text="Setting" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
+                <TextBlock Grid.Column="1" Text="Current value" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
+                <TextBlock Grid.Column="3" Text="New value" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource GoldTextBrush}" />
               </Grid>
               <ItemsControl ItemsSource="{Binding ReviewChanges}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:ChangeReviewRowViewModel">
-                  <Border Margin="0,0,0,5" Padding="11" CornerRadius="5" Background="#10191F">
+                  <Border Margin="0,0,0,6" Padding="13,10" CornerRadius="8" Background="{DynamicResource ControlBackgroundBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
                     <Grid ColumnDefinitions="1.2*,1.2*,Auto,1.2*" ColumnSpacing="10">
                       <StackPanel>
-                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding TechnicalKey}" FontSize="11" Foreground="#687984" />
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                        <TextBlock Text="{Binding TechnicalKey}" FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TechnicalTextBrush}" />
                       </StackPanel>
-                      <TextBlock Grid.Column="1" Text="{Binding Before}" TextWrapping="Wrap" Foreground="#8E9DA6" />
-                      <TextBlock Grid.Column="2" Text="→" Foreground="#71818C" />
-                      <TextBlock Grid.Column="3" Text="{Binding After}" TextWrapping="Wrap" Foreground="#FF5A00" />
+                      <TextBlock Grid.Column="1" Text="{Binding Before}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2" Text="→" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="3" Text="{Binding After}" TextWrapping="Wrap" Foreground="{DynamicResource OrangeAccentBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </Grid>
                   </Border>
                 </DataTemplate>
@@ -873,16 +1523,40 @@
             </StackPanel>
           </ScrollViewer>
           <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,14,0,0">
-            <Button x:Name="ReviewCancelButton" Command="{Binding CancelReviewCommand}" Content="Cancel" />
-            <Button Command="{Binding ConfirmApplyCommand}" Classes="PrimaryAction" Content="{Binding ConfirmReviewLabel}" />
+            <Button x:Name="ReviewCancelButton" Command="{Binding CancelReviewCommand}" Content="Cancel" Padding="14,7" />
+            <Button x:Name="ReviewConfirmButton" Command="{Binding ConfirmApplyCommand}" Classes="PrimaryAction" Content="{Binding ConfirmReviewLabel}" Padding="18,8" />
           </StackPanel>
         </Grid>
         </Border>
     </Grid>
+    <Grid Grid.ColumnSpan="2"
+          x:Name="OnboardingOverlay"
+          ZIndex="110"
+          IsVisible="{Binding IsOnboardingVisible}"
+          Focusable="True"
+          AutomationProperties.Name="Welcome to Ancestors Enhanced">
+      <Grid.KeyBindings>
+        <KeyBinding Gesture="Escape" Command="{Binding SkipOnboardingCommand}" />
+      </Grid.KeyBindings>
+      <Border Background="{DynamicResource ModalOverlayBrush}" />
+      <Border x:Name="OnboardingDialog"
+              MaxWidth="650" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+              CornerRadius="9" Background="{DynamicResource OnboardingPanelBrush}" BorderBrush="{DynamicResource ReviewBorderBrush}" BorderThickness="1">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding OnboardingTitle}" FontSize="21" FontWeight="SemiBold" Foreground="{DynamicResource ReviewTextBrush}" />
+          <TextBlock Text="{Binding OnboardingDescription}" TextWrapping="Wrap" Foreground="{DynamicResource InfoTextBrush}" />
+          <TextBlock Text="You can open this Configurator safely: no game files change until you explicitly review and confirm a supported edit." FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button x:Name="OnboardingSkipButton" Content="Skip" Command="{Binding SkipOnboardingCommand}" />
+            <Button x:Name="OnboardingPrimaryButton" Classes="PrimaryAction" Content="{Binding OnboardingActionLabel}" Command="{Binding AdvanceOnboardingCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
 
     <Border Grid.ColumnSpan="2"
              ZIndex="90"
-             Background="#1A000000"
+             Background="{DynamicResource DialogScrimBrush}"
              IsVisible="{Binding IsAnyOperationRunning}" />
   </Grid>
 </Window>

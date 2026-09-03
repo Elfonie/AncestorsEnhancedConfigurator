@@ -2,12 +2,154 @@ using System.Globalization;
 using AncestorsEnhanced.App.ViewModels;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.Profiles;
 using AncestorsEnhanced.Core.SaveGames;
+using AncestorsEnhanced.Infrastructure.Platform;
 
 namespace AncestorsEnhanced.App.Tests.ViewModels;
 
 public sealed class MainViewModelTests
 {
+    [Fact]
+    public void OnboardingExplainsSafetyAndPersistsCompletionOnlyWhenDismissed()
+    {
+        int completionCount = 0;
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            showOnboarding: true,
+            onboardingCompleted: () => completionCount++);
+
+        Assert.True(viewModel.IsOnboardingVisible);
+        Assert.Contains("detects", viewModel.OnboardingDescription, StringComparison.OrdinalIgnoreCase);
+
+        viewModel.AdvanceOnboardingCommand.Execute(null);
+        viewModel.AdvanceOnboardingCommand.Execute(null);
+        viewModel.AdvanceOnboardingCommand.Execute(null);
+
+        Assert.False(viewModel.IsOnboardingVisible);
+        Assert.Equal(1, completionCount);
+    }
+
+    [Fact]
+    public void HighContrastChangeUsesTheInjectedApplicationThemeHandler()
+    {
+        bool? observed = null;
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            highContrastEnabled: false,
+            highContrastChanged: enabled => observed = enabled);
+
+        viewModel.IsHighContrastEnabled = true;
+
+        Assert.True(observed);
+    }
+
+    [Fact]
+    public void ResetApplicationPreferencesArchivesBeforeRestoringSafeApplicationDefaults()
+    {
+        int resetCalls = 0;
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            highContrastEnabled: true,
+            discordRichPresenceEnabled: true,
+            applicationPreferencesWarning: "Unreadable preferences",
+            resetApplicationPreferences: () =>
+            {
+                resetCalls++;
+                return "accessibility.json.invalid-test.bak";
+            });
+
+        viewModel.ResetApplicationPreferencesCommand.Execute(null);
+
+        Assert.Equal(1, resetCalls);
+        Assert.False(viewModel.HasApplicationPreferencesWarning);
+        Assert.False(viewModel.IsHighContrastEnabled);
+        Assert.False(viewModel.IsDiscordRichPresenceEnabled);
+        Assert.True(viewModel.IsOnboardingVisible);
+        Assert.Contains("invalid-test", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GraphicsAndGameplayPresetsStartCollapsedAndToggleOpen()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+
+        Assert.False(viewModel.IsGraphicsPresetsExpanded);
+        Assert.Equal("Show presets", viewModel.GraphicsPresetsToggleLabel);
+        Assert.False(viewModel.IsGameplayPresetsExpanded);
+        Assert.Equal("Show presets", viewModel.GameplayPresetsToggleLabel);
+
+        viewModel.ToggleGraphicsPresetsCommand.Execute(null);
+        viewModel.ToggleGameplayPresetsCommand.Execute(null);
+
+        Assert.True(viewModel.IsGraphicsPresetsExpanded);
+        Assert.Equal("Hide presets", viewModel.GraphicsPresetsToggleLabel);
+        Assert.True(viewModel.IsGameplayPresetsExpanded);
+        Assert.Equal("Hide presets", viewModel.GameplayPresetsToggleLabel);
+    }
+
+    [Fact]
+    public void DetailedHardwareActionReportsProgressImmediately()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+
+        Assert.Equal("Refresh hardware details", viewModel.DetailedHardwareActionLabel);
+
+        viewModel.IsDetailedHardwareDetectionRunning = true;
+
+        Assert.Equal("Checking hardware…", viewModel.DetailedHardwareActionLabel);
+
+        viewModel.IsDetailedHardwareDetectionRunning = false;
+        viewModel.HasAcknowledgedDetailedHardwareScan = true;
+
+        Assert.Equal("Refresh hardware details", viewModel.DetailedHardwareActionLabel);
+    }
+
+    [Fact]
+    public void MultipleDedicatedAdaptersDoNotProduceAnAutomaticRecommendation()
+    {
+        HardwareRecommendationViewModel recommendation = HardwareRecommendationEngine.Recommend(new HardwareSnapshot(
+            "Windows",
+            "CPU",
+            16,
+            8,
+            32UL * 1024 * 1024 * 1024,
+            [
+                new GraphicsAdapterSnapshot("GPU 1", 8UL * 1024 * 1024 * 1024, true),
+                new GraphicsAdapterSnapshot("GPU 2", 16UL * 1024 * 1024 * 1024, true),
+            ]));
+
+        Assert.False(recommendation.CanStagePreset);
+        Assert.Contains("More than one", recommendation.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NavigatingDirectlyToGraphicsMakesBottomBarVisible()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.ShowHomeView);
+        Assert.False(viewModel.ShowGraphicsView);
+        Assert.False(viewModel.ShowBottomBar);
+
+        viewModel.ShowGraphicsCommand.Execute(null);
+
+        Assert.False(viewModel.ShowHomeView);
+        Assert.True(viewModel.ShowGraphicsView);
+        Assert.True(viewModel.ShowBottomBar);
+    }
+
     [Fact]
     public async Task InspectionStartsAfterConstruction()
     {
@@ -172,6 +314,20 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void ProfileComparisonValueUsesTheRawSerializedValueInsteadOfTheDisplayLabel()
+    {
+        var editor = new SettingEditorViewModel(new SettingEditSnapshot(
+            "Engine.ini",
+            "SystemSettings",
+            "r.ViewDistanceScale",
+            SettingEditorKind.Number,
+            "1",
+            "1.2"));
+
+        Assert.Equal("1.2", editor.GetProfileComparisonValue());
+    }
+
+    [Fact]
     public void FailedInspectionDoesNotClaimTheGameDefault()
     {
         var row = new FeatureSettingRowViewModel(
@@ -205,7 +361,7 @@ public sealed class MainViewModelTests
 
         Assert.Equal(1, editor.DiscardCount);
         Assert.False(viewModel.IsReviewingChanges);
-        Assert.True(viewModel.HasPendingChanges);
+        Assert.True(viewModel.HasPendingChanges, viewModel.OperationMessage);
         Assert.Equal(0, editor.ApplyCount);
     }
 
@@ -265,7 +421,8 @@ public sealed class MainViewModelTests
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),
-            new RecordingEditor());
+            new RecordingEditor(),
+            experimentalGraphicsSettingsEnabled: true);
         await viewModel.InitializeAsync();
 
         FeatureGroupRowViewModel shadows = Assert.Single(
@@ -296,17 +453,25 @@ public sealed class MainViewModelTests
     {
         var viewModel = new MainViewModel(
             new FixedInspector(CreateSnapshot()),
-            new RecordingEditor());
+            new RecordingEditor(),
+            experimentalGraphicsSettingsEnabled: true);
         await viewModel.InitializeAsync();
         viewModel.ShowAdvancedCommand.Execute(null);
 
         FeatureGroupRowViewModel shadows = Assert.Single(
             viewModel.FeatureGroups,
             group => group.Id == "shadows-lighting");
-        Assert.Equal(8, shadows.Settings.Count);
+        Assert.Equal(18, shadows.Settings.Count);
         Assert.All(shadows.Settings, setting => Assert.True(setting.ShowDescription));
         Assert.Contains(shadows.Settings, setting => setting.Name == "CSM maximum resolution");
-        Assert.DoesNotContain(shadows.Settings, setting => setting.Name == "Fog history supersamples");
+        Assert.Contains(shadows.Settings, setting => setting.Name == "Fog history supersamples");
+        Assert.Contains(shadows.Settings, setting => setting.Name == "Light-function quality" && setting.Editor is not null);
+        Assert.Contains(
+            viewModel.FeatureGroups.SelectMany(group => group.Settings),
+            setting => setting.Name == "Render-target pool minimum" && setting.Editor is not null);
+        Assert.Contains(
+            viewModel.FeatureGroups.SelectMany(group => group.Settings),
+            setting => setting.Name == "Fast-blur threshold" && setting.Editor is not null);
 
         viewModel.SearchText = "r.Shadow.MaxResolution";
 
@@ -323,6 +488,82 @@ public sealed class MainViewModelTests
 
         Assert.Empty(viewModel.FeatureGroups);
         Assert.True(viewModel.HasNoSearchResults);
+    }
+
+    [Fact]
+    public async Task ExperimentalGraphicsSettingsRemainHiddenUntilExplicitlyEnabled()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor());
+        await viewModel.InitializeAsync();
+        viewModel.ShowAdvancedCommand.Execute(null);
+
+        FeatureGroupRowViewModel shadows = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "shadows-lighting");
+        Assert.DoesNotContain(shadows.Settings, setting => setting.Name == "Fog history supersamples");
+
+        viewModel.IsExperimentalGraphicsSettingsEnabled = true;
+
+        shadows = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "shadows-lighting");
+        Assert.Contains(shadows.Settings, setting => setting.Name == "Fog history supersamples");
+    }
+
+    [Fact]
+    public async Task DisablingExperimentalGraphicsResetsExperimentalDraftsWhileRetainingNormalDrafts()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            experimentalGraphicsSettingsEnabled: true);
+        await viewModel.InitializeAsync();
+        viewModel.ShowAdvancedCommand.Execute(null);
+
+        // 1. Stage an experimental setting
+        FeatureGroupRowViewModel shadows = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "shadows-lighting");
+        FeatureSettingRowViewModel experimentalSetting = Assert.Single(
+            shadows.Settings,
+            setting => setting.Name == "Fog history supersamples");
+        Assert.NotNull(experimentalSetting.Editor);
+        experimentalSetting.Editor.UseCustomValue = true;
+        experimentalSetting.Editor.SelectedChoice = experimentalSetting.Editor.Choices[^1];
+        Assert.True(experimentalSetting.Editor.HasChanges);
+
+        // 2. Stage a normal setting
+        FeatureGroupRowViewModel imageClarity = Assert.Single(
+            viewModel.FeatureGroups,
+            group => group.Id == "image-clarity");
+        FeatureSettingRowViewModel normalSetting = Assert.Single(
+            imageClarity.Settings,
+            setting => setting.Name == "Image sharpening");
+        Assert.NotNull(normalSetting.Editor);
+        normalSetting.Editor.UseCustomValue = true;
+        normalSetting.Editor.NumberValue = 1.8m;
+        Assert.True(normalSetting.Editor.HasChanges);
+
+        // Both settings must be in PendingChanges
+        Assert.Equal(2, viewModel.PendingChanges.Count);
+
+        // 3. Disable experimental graphics
+        viewModel.IsExperimentalGraphicsSettingsEnabled = false;
+
+        // Experimental draft must be gone, normal draft must be retained
+        Assert.False(experimentalSetting.Editor.HasChanges);
+        Assert.True(normalSetting.Editor.HasChanges);
+
+        PendingChangeRowViewModel remaining = Assert.Single(viewModel.PendingChanges);
+        Assert.Equal("Image sharpening", remaining.Name);
+
+        // 4. Review must contain only the normal setting
+        viewModel.OpenReviewCommand.Execute(null);
+        Assert.True(viewModel.IsReviewingChanges);
+        ChangeReviewRowViewModel reviewChange = Assert.Single(viewModel.ReviewChanges);
+        Assert.Equal("Image sharpening", reviewChange.Name);
     }
 
     [Fact]
@@ -383,7 +624,8 @@ public sealed class MainViewModelTests
 
             var viewModel = new MainViewModel(
                 new FixedInspector(snapshot),
-                new RecordingEditor());
+                new RecordingEditor(),
+                experimentalGraphicsSettingsEnabled: true);
             await viewModel.InitializeAsync();
 
             FeatureGroupRowViewModel simpleTextures = Assert.Single(
@@ -422,6 +664,414 @@ public sealed class MainViewModelTests
         Assert.Equal("Game controlled", sharpening.ValueLabel);
         Assert.Equal("Game controlled", sharpening.Value);
         Assert.True(sharpening.Editor!.ShowUnknownGameValue);
+    }
+
+    [Fact]
+    public async Task LoadingSavedProfileStagesValuesForNormalReview()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Clean high",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [new ProfileSetting("r.ViewDistanceScale", "1.5")],
+            [],
+            []);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.ShowProfilesCommand.Execute(null);
+        viewModel.LoadProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.True(viewModel.ShowGraphicsView, viewModel.OperationMessage);
+        Assert.True(viewModel.HasPendingChanges);
+        Assert.Contains("Loaded Clean high", viewModel.OperationMessage, StringComparison.Ordinal);
+        Assert.False(viewModel.IsReviewingChanges);
+    }
+
+    [Fact]
+    public async Task LoadingMatchingProfileDoesNotShowAReviewWarning()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Current setup",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [new ProfileSetting("r.ViewDistanceScale", "1.2")],
+            [],
+            []);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.LoadProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.False(viewModel.HasPendingChanges);
+        Assert.Equal("#B4D941", viewModel.OperationAccent);
+        Assert.Contains("already matches", viewModel.OperationMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Review the pending changes", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProfileDeletionConfirmationIsTrackedOnTheSelectedProfile()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Safe profile",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [new ProfileSetting("r.ViewDistanceScale", "1.5")],
+            [],
+            []);
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile)));
+        await viewModel.InitializeAsync();
+
+        UserProfileRowViewModel row = Assert.Single(viewModel.UserProfiles);
+        viewModel.RequestProfileDeletionCommand.Execute(row);
+
+        Assert.True(viewModel.HasProfilePendingDeletion);
+        Assert.True(row.IsPendingDeletion);
+
+        viewModel.CancelProfileDeletionCommand.Execute(null);
+
+        Assert.False(viewModel.HasProfilePendingDeletion);
+        Assert.False(row.IsPendingDeletion);
+    }
+
+    [Fact]
+    public async Task GameplayProfileDoesNotStageAnyValuesUntilGameplayPakSupportExists()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Future gameplay",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [],
+            [],
+            [new ProfileSetting("r.ViewDistanceScale", "1.5")]);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.LoadProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.False(viewModel.HasPendingChanges);
+        Assert.Contains("Gameplay profiles are not available", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DisplayProfileSettingsAreStagedThroughTheSameVerifiedEditorPath()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion,
+            "Display setup",
+            null,
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            [],
+            [new ProfileSetting("r.ViewDistanceScale", "1.5")],
+            []);
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile)));
+        await viewModel.InitializeAsync();
+
+        viewModel.LoadProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.True(viewModel.HasPendingChanges);
+        Assert.Contains("Loaded Display setup", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreatingProfileStoresTechnicalKeysNotUiIds()
+    {
+        var profiles = new RecordingProfileLibrary();
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.StartCreatingProfileCommand.Execute(null);
+        viewModel.NewProfileName = "My setup";
+        viewModel.CreateProfileCommand.Execute(null);
+
+        StoredUserProfile saved = Assert.Single(profiles.List());
+        ProfileSetting setting = Assert.Single(saved.Profile.Graphics);
+        Assert.Equal("r.ViewDistanceScale", setting.Key);
+        Assert.Equal("1.2", setting.Value);
+        Assert.Equal("My setup", saved.Profile.Name);
+    }
+
+    [Fact]
+    public async Task CreatingProfileUsesTheVignetteEditorKeyInsteadOfItsAssetLabel()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot() with
+        {
+            Vignette = new VignetteModSnapshot(50, IsEditable: true, "Managed patch"),
+        };
+        var profiles = new RecordingProfileLibrary();
+        var viewModel = new MainViewModel(
+            new FixedInspector(snapshot),
+            new RecordingEditor(),
+            profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+        viewModel.NewProfileName = "Reduced vignette";
+
+        viewModel.CreateProfileCommand.Execute(null);
+
+        StoredUserProfile saved = Assert.Single(profiles.List());
+        Assert.Contains(saved.Profile.Graphics, setting =>
+            setting.Key == "mod.VignettePercent" && setting.Value == "50");
+        Assert.DoesNotContain(saved.Profile.Graphics, setting =>
+            setting.Key == "VL01E01_Vignette_Intensity");
+    }
+
+    [Fact]
+    public async Task DuplicateProfileCreatesAnIndependentSavedCopy()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion, "My setup", "Description", DateTimeOffset.UnixEpoch,
+            "1.0.0", [new ProfileSetting("r.ViewDistanceScale", "1.2")], [], []);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor(), profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.DuplicateProfileCommand.Execute(Assert.Single(viewModel.UserProfiles));
+
+        Assert.Equal(2, profiles.List().Count);
+        Assert.Contains(profiles.List(), item => item.Profile.Name == "My setup copy");
+        Assert.Contains("Created copy", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RenameProfileCreatesTheReplacementBeforeRemovingTheOriginal()
+    {
+        UserProfile profile = new(
+            UserProfile.CurrentSchemaVersion, "Before", null, DateTimeOffset.UnixEpoch,
+            "1.0.0", [new ProfileSetting("r.ViewDistanceScale", "1.2")], [], []);
+        var profiles = new RecordingProfileLibrary(new StoredUserProfile("11111111111111111111111111111111", profile));
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor(), profileLibrary: profiles);
+        await viewModel.InitializeAsync();
+
+        viewModel.RequestProfileRenameCommand.Execute(Assert.Single(viewModel.UserProfiles));
+        viewModel.RenamedProfileName = "After";
+        viewModel.ConfirmProfileRenameCommand.Execute(null);
+
+        StoredUserProfile renamed = Assert.Single(profiles.List());
+        Assert.Equal("After", renamed.Profile.Name);
+        Assert.Null(viewModel.ProfilePendingRename);
+        Assert.Contains("Renamed profile", viewModel.OperationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuiltInGraphicsPresetsCoverQualityVramAndCinematicUseCases()
+    {
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
+
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "High Quality Setup");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Ultra Setup");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Low VRAM Setup");
+        Assert.Contains(viewModel.BuiltInGraphicsPresets, preset => preset.Name == "Cinematic Tweak");
+    }
+
+    [Fact]
+    public void GraphicsPresetSectionsKeepBaselinesSeparateFromOptionalImageStyles()
+    {
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
+
+        Assert.Equal(5, viewModel.HardwareGraphicsPresets.Count);
+        Assert.All(viewModel.HardwareGraphicsPresets, preset => Assert.True(preset.IsHardwareSetup));
+        Assert.Equal(2, viewModel.ImageStyleGraphicsPresets.Count);
+        Assert.All(viewModel.ImageStyleGraphicsPresets, preset => Assert.False(preset.IsHardwareSetup));
+    }
+
+    [Fact]
+    public void GraphicsPresetPreviewShowsOnlyTheValuesThatWouldBeStaged()
+    {
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
+        BuiltInGraphicsPresetViewModel preset = Assert.Single(viewModel.BuiltInGraphicsPresets,
+            candidate => candidate.Name == "High Quality Setup");
+
+        viewModel.PreviewBuiltInGraphicsPresetCommand.Execute(preset);
+
+        Assert.True(viewModel.HasGraphicsPresetPreview);
+        Assert.Contains("High Quality", viewModel.GraphicsPresetPreviewTitle, StringComparison.Ordinal);
+        Assert.Contains("stage", viewModel.GraphicsPresetPreviewSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEmpty(viewModel.GraphicsPresetPreviewValues);
+        Assert.Contains(viewModel.GraphicsPresetPreviewValues, value => value.Name == "Texture quality");
+    }
+
+    [Fact]
+    public void HardwareSetupsCoverEveryNativeQualityCategoryAndCoreMemoryControls()
+    {
+        var viewModel = new MainViewModel(new FixedInspector(CreateSnapshot()), new RecordingEditor());
+        string[] nativeQualityKeys =
+        [
+            SystemSaveSettingKeys.ViewDistanceQuality,
+            SystemSaveSettingKeys.PostProcessingQuality,
+            SystemSaveSettingKeys.ShadowQuality,
+            SystemSaveSettingKeys.TextureQuality,
+            SystemSaveSettingKeys.VisualEffectsQuality,
+            SystemSaveSettingKeys.FoliageQuality,
+        ];
+
+        foreach (BuiltInGraphicsPresetViewModel preset in viewModel.BuiltInGraphicsPresets.Where(preset => preset.IsHardwareSetup))
+        {
+            string[] keys = preset.Profile.Graphics.Select(setting => setting.Key).ToArray();
+
+            Assert.All(nativeQualityKeys, key => Assert.Contains(key, keys));
+            Assert.Contains(preset.Profile.Graphics, setting => setting.Key == "r.MaxAnisotropy" && setting.Value == "16");
+            Assert.Contains(preset.Profile.Graphics, setting => setting.Key == "r.Streaming.PoolSize");
+            Assert.Contains(preset.Profile.Graphics, setting => setting.Key == "r.Streaming.LimitPoolSizeToVRAM" && setting.Value == "1");
+        }
+    }
+
+    [Fact]
+    public async Task HardwareSetupStagesOnlyItsListedSettings()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot() with
+        {
+            ConfigurationFiles =
+            [
+                new ConfigurationFileSnapshot(
+                    "Engine.ini",
+                    "Engine.ini",
+                    Exists: true,
+                    42,
+                    DateTimeOffset.UnixEpoch,
+                    [
+                        new IniSettingSnapshot("SystemSettings", "r.ViewDistanceScale", "1.2", 1),
+                        new IniSettingSnapshot("SystemSettings", "r.MotionBlurQuality", "4", 2),
+                        new IniSettingSnapshot("SystemSettings", "r.PostProcessAAQuality", "3", 3),
+                        new IniSettingSnapshot("SystemSettings", "r.MaxAnisotropy", "4", 4),
+                        new IniSettingSnapshot("SystemSettings", "r.Streaming.PoolSize", "1000", 5),
+                        new IniSettingSnapshot("SystemSettings", "r.Streaming.LimitPoolSizeToVRAM", "1", 6),
+                        new IniSettingSnapshot("SystemSettings", "r.SSR.Quality", "2", 7),
+                        new IniSettingSnapshot("SystemSettings", "foliage.DensityScale", "1.5", 8),
+                        new IniSettingSnapshot("SystemSettings", "grass.DensityScale", "1.5", 9),
+                        new IniSettingSnapshot("SystemSettings", "r.Shadow.MaxResolution", "1024", 10),
+                    ],
+                    null),
+            ],
+            BinarySettingsFile = new BinarySettingsFileSnapshot(
+                "System.sav",
+                "System.sav",
+                true,
+                128,
+                DateTimeOffset.UnixEpoch,
+                "Decoded and verified",
+                new SystemGraphicsSettingsSnapshot(
+                    1920, 1080, 1920, 1080, 1,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    GameGraphicsQuality.High,
+                    60,
+                    false)),
+        };
+        var viewModel = new MainViewModel(new FixedInspector(snapshot), new RecordingEditor());
+        await viewModel.InitializeAsync();
+        SettingEditorViewModel motionBlur = Assert.Single(
+            viewModel.FeatureGroups.SelectMany(group => group.Settings),
+            setting => setting.TechnicalKey == "r.MotionBlurQuality").Editor!;
+        viewModel.IsAdvancedMode = true;
+        Dictionary<string, SettingEditorViewModel> editorsByKey = viewModel.FeatureGroups
+            .SelectMany(group => group.Settings)
+            .Where(setting => setting.Editor is not null)
+            .ToDictionary(setting => setting.TechnicalKey, setting => setting.Editor!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (BuiltInGraphicsPresetViewModel hardwareSetup in viewModel.BuiltInGraphicsPresets.Where(preset => preset.IsHardwareSetup))
+        {
+            foreach (ProfileSetting profileSetting in hardwareSetup.Profile.Graphics)
+            {
+                Assert.True(
+                    editorsByKey.TryGetValue(profileSetting.Key, out SettingEditorViewModel? editor),
+                    $"{hardwareSetup.Name}: {profileSetting.Key} must be available without experimental graphics settings.");
+                Assert.True(
+                    editor!.CanApplyProfileValue(profileSetting.Value),
+                    $"{hardwareSetup.Name}: {profileSetting.Key}={profileSetting.Value} must be a supported value.");
+            }
+        }
+
+        BuiltInGraphicsPresetViewModel performanceSetup = viewModel.BuiltInGraphicsPresets.Single(
+            preset => preset.Name == "Performance Setup");
+
+        Assert.True(motionBlur.HasActiveOverride);
+        viewModel.LoadBuiltInGraphicsPresetCommand.Execute(
+            performanceSetup);
+
+        Assert.True(motionBlur.HasActiveOverride);
+        Assert.True(viewModel.HasPendingChanges, viewModel.OperationMessage);
+        Assert.DoesNotContain(viewModel.PendingChanges, change => change.Name == "Quality and activation");
+    }
+
+    [Fact]
+    public async Task FailedProfileSaveIsReportedWithoutThrowingFromTheCommand()
+    {
+        var viewModel = new MainViewModel(
+            new FixedInspector(CreateSnapshot()),
+            new RecordingEditor(),
+            profileLibrary: new FailingProfileLibrary());
+        await viewModel.InitializeAsync();
+        viewModel.NewProfileName = "My setup";
+
+        viewModel.CreateProfileCommand.Execute(null);
+
+        Assert.Contains("The profile was not saved", viewModel.OperationMessage, StringComparison.Ordinal);
+        Assert.False(viewModel.IsCreatingProfile);
+    }
+
+    [Fact]
+    public async Task ProfileSaveAvailabilityUpdatesWhenAnOverrideChanges()
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot() with
+        {
+            ConfigurationFiles =
+            [
+                new ConfigurationFileSnapshot(
+                    "Engine.ini",
+                    "Engine.ini",
+                    Exists: true,
+                    0,
+                    DateTimeOffset.UnixEpoch,
+                    [],
+                    null),
+            ],
+        };
+        var viewModel = new MainViewModel(new FixedInspector(snapshot), new RecordingEditor());
+        await viewModel.InitializeAsync();
+        viewModel.NewProfileName = "My setup";
+
+        Assert.False(viewModel.HasCustomProfileSettings);
+        Assert.False(viewModel.CanSaveProfile);
+
+        SettingEditorViewModel editor = FindViewDistanceEditor(viewModel);
+        editor.UseCustomValue = true;
+
+        Assert.True(viewModel.HasCustomProfileSettings);
+        Assert.True(viewModel.CanSaveProfile);
     }
 
     private static SettingEditorViewModel FindViewDistanceEditor(MainViewModel viewModel) =>
@@ -504,6 +1154,46 @@ public sealed class MainViewModelTests
 
         public SaveGameOperationResult DeleteCheckpoint(string slotNumber, string checkpointId) =>
             new(false, "not used");
+    }
+
+    private sealed class RecordingProfileLibrary(params StoredUserProfile[] profiles) : IUserProfileLibrary
+    {
+        private readonly Dictionary<string, UserProfile> _profiles = profiles.ToDictionary(profile => profile.Id, profile => profile.Profile);
+
+        public int UnreadableProfileCount { get; init; }
+
+        public IReadOnlyList<StoredUserProfile> List() =>
+            _profiles.Select(pair => new StoredUserProfile(pair.Key, pair.Value)).ToArray();
+
+        public UserProfile Read(string id) => _profiles[id];
+
+        public StoredUserProfile Save(UserProfile profile)
+        {
+            UserProfile validated = UserProfileCodec.Deserialize(UserProfileCodec.Serialize(profile));
+            string id = Guid.NewGuid().ToString("N");
+            _profiles.Add(id, validated);
+            return new StoredUserProfile(id, validated);
+        }
+
+        public void Delete(string id) => _profiles.Remove(id);
+
+        public UserProfile ReadExternal(string path) => throw new NotSupportedException();
+    }
+
+    private sealed class FailingProfileLibrary : IUserProfileLibrary
+    {
+        public int UnreadableProfileCount => 0;
+
+        public IReadOnlyList<StoredUserProfile> List() => [];
+
+        public UserProfile Read(string id) => throw new FileNotFoundException();
+
+        public StoredUserProfile Save(UserProfile profile) =>
+            throw new InvalidDataException("unsupported test value");
+
+        public void Delete(string id) => throw new FileNotFoundException();
+
+        public UserProfile ReadExternal(string path) => throw new NotSupportedException();
     }
 
     private sealed class RecordingEditor : IGameSettingsEditor

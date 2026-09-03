@@ -36,6 +36,15 @@ public static class SettingDefinitionCatalog
         "game-menu-unavailable",
     };
 
+    private static readonly HashSet<string> ExperimentalSettings = new(StringComparer.Ordinal)
+    {
+        "skeletal-lod-bias", "render-target-pool", "ao-radius", "ao-max-quality", "ao-mip-factor",
+        "fast-blur-threshold", "filter-size", "light-function-quality", "shadow-radius-threshold",
+        "shadow-transition", "preshadow-resolution", "fog-grid-pixel-size", "fog-grid-depth",
+        "fog-history-samples", "light-distance", "translucency-volume", "sss-samples",
+        "texture-streaming-boost", "texture-mip-bias"
+    };
+
     public static bool IsShownInSimpleMode(string settingId) =>
         SimpleSettings.Contains(settingId);
 
@@ -43,4 +52,6 @@ public static class SettingDefinitionCatalog
         SimpleSettings.Contains(setting.Id) ||
         UsefulReadOnlySettings.Contains(setting.Id) ||
         EditableSettingsCatalog.IsDefined(setting.TechnicalKey);
+
+    public static bool IsExperimental(string settingId) => ExperimentalSettings.Contains(settingId);
 }

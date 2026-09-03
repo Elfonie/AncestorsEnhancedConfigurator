@@ -447,6 +447,41 @@ public sealed class SafeSaveGameManagerTests : IDisposable
     }
 
     [Fact]
+    public void LoadKeepsSelectedSourceWhenPreRestoreRetentionRunsBeforeAnAbort()
+    {
+        byte[] selectedContent = TestSaveFactory.Create(1, 2, 3);
+        byte[] liveContent = TestSaveFactory.Create(4, 5, 6);
+        string userData = CreateUserDataWithSave(0, selectedContent);
+        DateTimeOffset now = new(2026, 8, 30, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset NextTime() => now = now.AddMinutes(1);
+
+        var creator = new SafeSaveGameManager(
+            userData,
+            NextTime,
+            () => false,
+            new SaveGameManagerOptions(MaxCheckpointsPerSlot: 2));
+        string selected = creator.CreateCheckpoint("0").CreatedCheckpointId!;
+        File.WriteAllBytes(SaveGamePaths.GetSlotPath(userData, 0), liveContent);
+        _ = creator.CreateCheckpoint("0");
+
+        bool gameRunning = false;
+        var manager = new SafeSaveGameManager(
+            userData,
+            NextTime,
+            () => gameRunning,
+            new SaveGameManagerOptions(MaxCheckpointsPerSlot: 2),
+            beforeRestoreCommit: () => gameRunning = true);
+
+        SaveGameOperationResult result = manager.LoadCheckpoint("0", selected);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(liveContent, File.ReadAllBytes(SaveGamePaths.GetSlotPath(userData, 0)));
+        Assert.NotNull(result.CreatedCheckpointId);
+        Assert.True(File.Exists(SaveGamePaths.GetCheckpointPath(userData, 0, selected)));
+        Assert.Equal(selectedContent, SaveGameCheckpointStore.Read(userData, 0, selected));
+    }
+
+    [Fact]
     public void DamagedMatchingCheckpointDoesNotBlockANewBackup()
     {
         byte[] content = TestSaveFactory.Create(1, 2, 3);

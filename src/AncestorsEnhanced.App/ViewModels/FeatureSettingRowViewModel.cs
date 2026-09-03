@@ -1,3 +1,5 @@
+using Avalonia.Media;
+
 namespace AncestorsEnhanced.App.ViewModels;
 
 public sealed record FeatureSettingRowViewModel(
@@ -11,8 +13,11 @@ public sealed record FeatureSettingRowViewModel(
     bool ShowTechnicalDetails,
     IReadOnlyList<SettingPresetValueRowViewModel> PresetValues,
     string? ActivePresetName,
-    SettingEditorViewModel? Editor)
+    SettingEditorViewModel? Editor,
+    bool IsExperimental = false)
 {
+    public IBrush AccentBrush => StatusPresentation.BrushForLegacyAccent(AccentColor);
+
     public bool IsEditable => Editor is not null;
 
     public bool IsReadOnly => Editor is null;
@@ -21,7 +26,11 @@ public sealed record FeatureSettingRowViewModel(
 
     public bool HasInspectionFailure => string.Equals(Value, "Not verified", StringComparison.Ordinal);
 
-    public string ValueLabel => Editor?.HasCurrentOverride == true
+    public string ValueLabel => Editor?.HasChanges == true
+        ? "Pending change"
+        : Editor is { ShowOverrideToggle: false }
+        ? "Current game value"
+        : Editor?.HasCurrentOverride == true
         ? "Custom override"
         : Editor?.ShowUnknownGameValue == true && !HasPresetValues
             ? "Game controlled"

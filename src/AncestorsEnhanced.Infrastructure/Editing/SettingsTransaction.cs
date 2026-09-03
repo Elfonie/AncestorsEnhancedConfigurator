@@ -85,11 +85,15 @@ internal sealed class SettingsTransaction(
                 }
                 operationDirectory = SettingsBackupStore.Prepare(plan);
                 List<ConfigurationFileChangePlan> applied = [];
+                ToolChangeBaselineStore.BaselineCapture? baselineCapture = null;
                 try
                 {
-                    ToolChangeBaselineStore.CaptureBeforeApply(plan);
+                    baselineCapture = ToolChangeBaselineStore.CaptureBeforeApply(plan);
                     foreach (ConfigurationFileChangePlan file in plan.Files)
                     {
+                        string trustedRoot = file.Target == SettingFileTarget.Pak
+                            ? plan.InstallDirectory!
+                            : plan.UserDataDirectory;
                         if (file.ResultExists)
                         {
                             // CAS immediately before the write: the current file must
@@ -100,11 +104,12 @@ internal sealed class SettingsTransaction(
                                 file.FullPath,
                                 file.UpdatedContent,
                                 file.OriginalSha256,
-                                file.Existed);
+                                file.Existed,
+                                trustedRoot);
                         }
                         else
                         {
-                            CompareAndDelete(file.FullPath, file.OriginalSha256);
+                            CompareAndDelete(file.FullPath, file.OriginalSha256, trustedRoot);
                         }
 
                         applied.Add(file);
@@ -125,10 +130,10 @@ internal sealed class SettingsTransaction(
                 }
                 catch
                 {
-                    List<string> rollbackFailures = RestoreFilesBestEffort(applied);
+                    List<string> rollbackFailures = RestoreFilesBestEffort(applied, plan.UserDataDirectory, plan.InstallDirectory);
                     try
                     {
-                        ToolChangeBaselineStore.RollbackApplied(plan);
+                        ToolChangeBaselineStore.RollbackApplied(plan, baselineCapture);
                     }
                     catch (Exception exception) when (IsExpectedWriteException(exception))
                     {
@@ -140,6 +145,7 @@ internal sealed class SettingsTransaction(
                     }
                     catch (Exception exception) when (IsExpectedWriteException(exception))
                     {
+                        rollbackFailures.Add("backup-manifest");
                     }
                     if (rollbackFailures.Count > 0)
                     {
@@ -165,7 +171,7 @@ internal sealed class SettingsTransaction(
         }
         catch (Exception exception) when (IsExpectedWriteException(exception))
         {
-            return Failure($"No changes were kept: {exception.Message}");
+            return SettingsOperationResult.RolledBack($"No changes were kept: {exception.Message}");
         }
     }
 
@@ -276,6 +282,9 @@ internal sealed class SettingsTransaction(
                         // the state this tool produced when it applied the change (the
                         // Result state). If anyone modified it since, abort without
                         // overwriting those new changes.
+                        string trustedRoot = file.Target == SettingFileTarget.Pak
+                            ? installDirectory!
+                            : userDataDirectory;
                         byte[]? original = file.Existed ? ReadOriginal(operation, file) : null;
                         if (file.ResultExists)
                         {
@@ -285,11 +294,12 @@ internal sealed class SettingsTransaction(
                                     targetPath,
                                     original!,
                                     file.ResultSha256,
-                                    expectedExists: true);
+                                    expectedExists: true,
+                                    trustedRoot);
                             }
                             else
                             {
-                                CompareAndDelete(targetPath, file.ResultSha256);
+                                CompareAndDelete(targetPath, file.ResultSha256, trustedRoot);
                             }
                         }
                         else
@@ -302,7 +312,8 @@ internal sealed class SettingsTransaction(
                                     targetPath,
                                     original!,
                                     expectedSha256: null,
-                                    expectedExists: false);
+                                    expectedExists: false,
+                                    trustedRoot);
                             }
                         }
 
@@ -340,11 +351,11 @@ internal sealed class SettingsTransaction(
                 }
                 catch (Exception exception) when (IsExpectedWriteException(exception))
                 {
-                    return SettingsOperationResult.RolledBack(
+                    return SettingsOperationResult.Reverted(
                         "The configuration was restored, but its history marker could not be written: " + exception.Message);
                 }
 
-                return SettingsOperationResult.RolledBack(
+                return SettingsOperationResult.Reverted(
                     "The last configurator change was restored from its backup.");
             });
         }
@@ -395,17 +406,22 @@ internal sealed class SettingsTransaction(
                     continue;
                 }
 
+                string trustedRoot = file.Target == SettingFileTarget.Pak
+                    ? installDirectory!
+                    : userDataDirectory;
+
                 if (file.ResultExists)
                 {
                     CompareAndReplace(
                         targetPath,
                         current,
                         file.Existed ? file.OriginalSha256 : null,
-                        file.Existed);
+                        file.Existed,
+                        trustedRoot);
                 }
                 else if (file.Existed)
                 {
-                    CompareAndDelete(targetPath, file.OriginalSha256);
+                    CompareAndDelete(targetPath, file.OriginalSha256, trustedRoot);
                 }
             }
             catch (Exception exception) when (IsExpectedWriteException(exception))
@@ -453,11 +469,17 @@ internal sealed class SettingsTransaction(
     /// current file still matches the result state this apply wrote. A foreign concurrent
     /// change is never overwritten; such files are reported as failures.
     /// </summary>
-    private static List<string> RestoreFilesBestEffort(IEnumerable<ConfigurationFileChangePlan> files)
+    private static List<string> RestoreFilesBestEffort(
+        IEnumerable<ConfigurationFileChangePlan> files,
+        string userDataDirectory,
+        string? installDirectory)
     {
         var failures = new List<string>();
         foreach (ConfigurationFileChangePlan file in files.Reverse())
         {
+            string trustedRoot = file.Target == SettingFileTarget.Pak
+                ? installDirectory!
+                : userDataDirectory;
             try
             {
                 string resultHash = Sha256(file.UpdatedContent);
@@ -465,19 +487,19 @@ internal sealed class SettingsTransaction(
                 {
                     // Replace: the file existed before and after; fold our own write back
                     // only if it still matches the result state we wrote.
-                    CompareAndReplace(file.FullPath, file.OriginalContent, resultHash, expectedExists: true);
+                    CompareAndReplace(file.FullPath, file.OriginalContent, resultHash, expectedExists: true, trustedRoot);
                 }
                 else if (!file.Existed && file.ResultExists)
                 {
                     // Create: the file did not exist before; remove the file we created.
-                    CompareAndDelete(file.FullPath, resultHash);
+                    CompareAndDelete(file.FullPath, resultHash, trustedRoot);
                 }
                 else if (file.Existed && !file.ResultExists)
                 {
                     // Delete: the file existed before and was removed by this apply.
                     // Recreate the original only if the target is still absent, so a
                     // foreign re-created file is never overwritten.
-                    CompareAndReplace(file.FullPath, file.OriginalContent, expectedSha256: null, expectedExists: false);
+                    CompareAndReplace(file.FullPath, file.OriginalContent, expectedSha256: null, expectedExists: false, trustedRoot);
                 }
             }
             catch (Exception exception) when (IsExpectedWriteException(exception))

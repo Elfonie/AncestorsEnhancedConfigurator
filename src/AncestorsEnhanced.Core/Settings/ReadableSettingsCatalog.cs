@@ -297,16 +297,25 @@ public static class ReadableSettingsCatalog
             "Adds sharpening after temporal anti-aliasing.",
             missingValue: "Game controlled",
             missingSource: "No custom override; runtime value is not stored in the config");
+        FeatureSettingSnapshot renderScale = Decimal(
+            snapshot,
+            "render-scale",
+            "Render scale",
+            "r.ScreenPercentage",
+            value => $"{value:0.#}%",
+            "Renders internally at a lower or higher resolution before scaling to the screen. Lower values gain performance at some sharpness cost.",
+            missingValue: "Game controlled",
+            missingSource: "No custom override; device profiles use 66–100%");
 
         return new FeatureGroupSnapshot(
             "image-clarity",
             "Image quality",
             "Image clarity and anti-aliasing",
-            CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen), ("TAA weight", taa)),
-            "Controls edge smoothing, temporal response and final image sharpening.",
+            CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen), ("TAA weight", taa), ("Render scale", renderScale)),
+            "Controls edge smoothing, temporal response, final image sharpening and internal render resolution.",
             IsEssential: true,
-            CombineStates(antiAliasing, taa, sharpen),
-            [antiAliasing, taa, sharpen],
+            CombineStates(antiAliasing, taa, sharpen, renderScale),
+            [antiAliasing, taa, sharpen, renderScale],
             SimpleSummary: CreateCompactSummary(("AA", antiAliasing), ("Sharpen", sharpen)));
     }
 
@@ -438,11 +447,11 @@ public static class ReadableSettingsCatalog
         FeatureSettingSnapshot[] settings =
         [
             Integer(snapshot, "ao-levels", "Ambient occlusion levels", "r.AmbientOcclusionLevels", FormatAutoLevel, "Controls the number of screen-space ambient-occlusion levels. -1 lets the renderer choose."),
-            Integer(snapshot, "bloom-quality", "Bloom quality", "r.BloomQuality", FormatQualityLevel, "Controls the quality of glow around bright areas."),
+            Integer(snapshot, "bloom-quality", "Bloom (glow around bright lights)", "r.BloomQuality", FormatQualityLevel, "Controls the glow around bright lights, such as the sun or reflections."),
             Integer(snapshot, "eye-adaptation", "Eye adaptation", "r.EyeAdaptationQuality", FormatOffOrQuality, "Controls automatic exposure adaptation when moving between bright and dark areas."),
             Integer(snapshot, "chromatic-aberration", "Chromatic aberration", "r.SceneColorFringeQuality", FormatOffOrQuality, "Controls colored lens fringing, mainly near image edges."),
             Integer(snapshot, "lens-flare", "Lens flares", "r.LensFlareQuality", FormatOffOrQuality, "Controls lens-flare rendering quality."),
-            Boolean(snapshot, "light-shafts", "Light shafts", "r.LightShaftQuality", "Controls atmospheric sunbeams and similar light shafts."),
+            Boolean(snapshot, "light-shafts", "God rays", "r.LightShaftQuality", "Shows visible rays of sunlight through fog, leaves or dust."),
             Boolean(snapshot, "gradient-smoothing", "Color-gradient smoothing", "r.Tonemapper.GrainQuantization", "Adds subtle dithering to reduce visible color banding."),
             Integer(snapshot, "tonemapper-quality", "Tonemapper quality", "r.Tonemapper.Quality", FormatQualityLevel, "Controls quality features in the final tone-mapping pass.", isAdvanced: true),
             Integer(snapshot, "render-target-pool", "Render-target pool minimum", "r.RenderTargetPoolMin", value => $"{value} MB", "Minimum pooled memory reserved for intermediate rendering targets.", isAdvanced: true),
@@ -461,17 +470,17 @@ public static class ReadableSettingsCatalog
             "Post-processing",
             overrides == 0
                 ? CreateCompactSummary(
-                    ("Glow", settings.Single(setting => setting.Id == "bloom-quality")),
+                    ("Bloom", settings.Single(setting => setting.Id == "bloom-quality")),
                     ("Color fringing", settings.Single(setting => setting.Id == "chromatic-aberration")),
-                    ("Sunbeams", settings.Single(setting => setting.Id == "light-shafts")))
+                    ("God rays", settings.Single(setting => setting.Id == "light-shafts")))
                 : $"{overrides} custom overrides",
             "Lighting and lens-style effects applied after the scene is rendered.",
             IsEssential: true,
             CombineStates(settings),
             settings,
             SimpleSummary: CreateCompactSummary(
-                ("Glow", settings.Single(setting => setting.Id == "bloom-quality")),
-                ("Sunbeams", settings.Single(setting => setting.Id == "light-shafts"))));
+                ("Bloom", settings.Single(setting => setting.Id == "bloom-quality")),
+                ("God rays", settings.Single(setting => setting.Id == "light-shafts"))));
     }
 
     private static FeatureGroupSnapshot CreateShadowGroup(GameInspectionSnapshot snapshot)
@@ -508,7 +517,8 @@ public static class ReadableSettingsCatalog
             IsEssential: true,
             CombineStates(settings),
             settings,
-            SimpleSummary: settings[0].Value);
+            SimpleSummary: settings[0].Value,
+            SimpleName: "Shadows");
     }
 
     private static FeatureGroupSnapshot CreateEffectsGroup(GameInspectionSnapshot snapshot)
@@ -1041,7 +1051,10 @@ public static class ReadableSettingsCatalog
         1 => "Low",
         2 => "Medium",
         3 => "High",
-        _ => $"Level {value}",
+        4 => "Very high",
+        5 => "Ultra",
+        6 => "Cinematic",
+        _ => $"Engine level {value}",
     };
 
     private static string FormatMegabytes(int value) =>

@@ -88,6 +88,8 @@ public sealed class SafeGameSettingsEditor : IGameSettingsEditor
 
     public SettingsOperationResult Apply(SettingsChangePlan plan) => _transaction.Apply(plan);
 
+    internal SettingsChangePlan IssuePlan(SettingsChangePlan plan) => _transaction.Issue(plan);
+
     public void DiscardPlan(SettingsChangePlan plan) => _transaction.Discard(plan);
 
     public bool CanRevertLast(GameInspectionSnapshot snapshot) =>

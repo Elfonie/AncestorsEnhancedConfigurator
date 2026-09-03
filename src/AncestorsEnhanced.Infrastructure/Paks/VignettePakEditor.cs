@@ -96,6 +96,10 @@ internal static class VignettePakEditor
         decimal? requested = value is null
             ? null
             : decimal.Parse(value, NumberStyles.Number, CultureInfo.InvariantCulture);
+        if (requested is < 0 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "Vignette intensity must be between 0 and 100.");
+        }
         if (requested == 100)
         {
             requested = null;
@@ -190,6 +194,11 @@ internal static class VignettePakEditor
 
     internal static byte[] Scale(byte[] original, decimal percent)
     {
+        if (percent is < 0 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(percent), "Vignette intensity must be between 0 and 100.");
+        }
+
         byte[] updated = [.. original];
         float multiplier = (float)(percent / 100);
         foreach (int offset in ScaleOffsets)

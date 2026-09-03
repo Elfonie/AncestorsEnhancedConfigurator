@@ -35,10 +35,9 @@ internal sealed class EpicInstallationLocator(
                         continue;
                     }
 
-                    GameInstallationSnapshot? snapshot = factory.CreateWindows(
-                        StoreKind.EpicGames,
-                        install,
-                        ReadString(root, "BuildVersion"));
+                    GameInstallationSnapshot? snapshot = environment.Host == HostKind.Linux
+                        ? factory.CreateLinux(StoreKind.EpicGames, install, ReadString(root, "BuildVersion"), CompatibilityLayerKind.Proton)
+                        : factory.CreateWindows(StoreKind.EpicGames, install, ReadString(root, "BuildVersion"));
                     if (snapshot is not null)
                     {
                         found.Add(snapshot);

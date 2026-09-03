@@ -17,6 +17,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 {
     private readonly Func<int, SaveGameOperationResult> _createCheckpoint;
     private readonly string _userDataDirectory;
+    private readonly Action<string> _diagnosticLog;
     private readonly Lock _gate = new();
     private readonly object _lifecycleGate = new();
     private readonly Dictionary<int, WorkerState> _running = new();
@@ -30,25 +31,37 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     private bool _disposed;
     private long _generation;
     private FileSystemWatcher? _watcher;
+    private bool _watcherRestartScheduled;
 
     /// <summary>Binds to a verified game context and its user-data path.</summary>
-    public SaveGameWatchdog(VerifiedGameContext context, GameContextVerifier verifier)
-        : this(context.UserDataDirectory, () => verifier.Verify(context))
+    public SaveGameWatchdog(
+        VerifiedGameContext context,
+        GameContextVerifier verifier,
+        Action<string>? diagnosticLog = null)
+        : this(context.UserDataDirectory, () => verifier.Verify(context), diagnosticLog)
     {
     }
 
-    public SaveGameWatchdog(string userDataDirectory, Func<bool>? revalidate = null)
+    public SaveGameWatchdog(
+        string userDataDirectory,
+        Func<bool>? revalidate = null,
+        Action<string>? diagnosticLog = null)
     {
         _userDataDirectory = userDataDirectory;
         var manager = new SafeSaveGameManager(userDataDirectory, null, revalidate);
         _createCheckpoint = slot => manager.CreateCheckpoint(
             slot.ToString(CultureInfo.InvariantCulture), "AutoBackup");
+        _diagnosticLog = diagnosticLog ?? WriteTrace;
     }
 
-    internal SaveGameWatchdog(string userDataDirectory, Func<int, SaveGameOperationResult> createCheckpoint)
+    internal SaveGameWatchdog(
+        string userDataDirectory,
+        Func<int, SaveGameOperationResult> createCheckpoint,
+        Action<string>? diagnosticLog = null)
     {
         _userDataDirectory = userDataDirectory;
         _createCheckpoint = createCheckpoint ?? throw new ArgumentNullException(nameof(createCheckpoint));
+        _diagnosticLog = diagnosticLog ?? WriteTrace;
     }
 
     public event EventHandler<string>? CheckpointCreated;
@@ -110,29 +123,16 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 _stopCancellation = new CancellationTokenSource();
                 _generation++;
                 _stopped = false;
-                string saveDirectory = SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory);
-                if (!Directory.Exists(saveDirectory))
-                {
-                    Directory.CreateDirectory(saveDirectory);
-                }
-
-                var watcher = new FileSystemWatcher(saveDirectory)
-                {
-                    Filter = "Savegame*.sav",
-                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size |
-                                 NotifyFilters.FileName | NotifyFilters.CreationTime,
-                };
-                watcher.Changed += OnChanged;
-                watcher.Created += OnChanged;
-                watcher.Renamed += OnRenamed;
-                watcher.Error += OnWatcherError;
-                watcher.EnableRaisingEvents = true;
-                _watcher = watcher;
+                CreateWatcherLocked();
             }
         }
     }
 
-    public void StopWatch()
+    public static readonly TimeSpan DefaultShutdownTimeout = TimeSpan.FromSeconds(5);
+
+    public void StopWatch() => StopWatch(DefaultShutdownTimeout);
+
+    public bool StopWatch(TimeSpan timeout)
     {
         lock (_lifecycleGate)
         {
@@ -154,21 +154,19 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 _stopped = true;
                 stoppingGeneration = _generation;
                 _stopCancellation.Cancel();
-                _pending.Clear();
-                _lastBackupTicks.Clear();
-                _retryAttempts.Clear();
-                _activeMutations.Clear();
                 snapshot = _running.Values
                     .Where(worker => worker.Generation == stoppingGeneration)
                     .ToArray();
             }
 
             Task[] tasks = snapshot.Select(worker => worker.Task).ToArray();
+            bool completedCleanly = true;
             if (tasks.Length > 0)
             {
                 try
                 {
-                    _ = Task.WaitAll(tasks, TimeSpan.FromSeconds(5));
+                    int timeoutMilliseconds = (int)Math.Clamp(timeout.TotalMilliseconds, 1, int.MaxValue);
+                    completedCleanly = Task.WaitAll(tasks, timeoutMilliseconds);
                 }
                 catch (AggregateException)
                 {
@@ -185,6 +183,58 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     }
                 }
             }
+
+            if (!completedCleanly)
+            {
+                PublishWatcherError($"Auto-backup workers did not finish within the shutdown timeout of {timeout.TotalSeconds:0.##} seconds.");
+                lock (_gate)
+                {
+                    _pending.Clear();
+                    _lastBackupTicks.Clear();
+                    _retryAttempts.Clear();
+                    _activeMutations.Clear();
+                }
+
+                return false;
+            }
+
+            int[] flushSlots;
+            lock (_gate)
+            {
+                // Workers cancelled during debounce/cooldown leave their dirty bit
+                // intact.  Flush those slots once without a cooldown, but never
+                // snapshot while an explicit restore/mutation lease remains active.
+                flushSlots = _pending
+                    .Where(pair => pair.Value && !_activeMutations.ContainsKey(pair.Key))
+                    .Select(pair => pair.Key)
+                    .ToArray();
+                _pending.Clear();
+                _lastBackupTicks.Clear();
+                _retryAttempts.Clear();
+                _activeMutations.Clear();
+            }
+
+            foreach (int slot in flushSlots)
+            {
+                try
+                {
+                    SaveGameOperationResult result = _createCheckpoint(slot);
+                    if (result.Succeeded && result.CreatedCheckpointId is not null)
+                    {
+                        PublishCheckpointCreated(slot.ToString(CultureInfo.InvariantCulture));
+                    }
+                    else if (!result.Succeeded)
+                    {
+                        PublishWatcherError($"Final auto-backup failed for slot {slot + 1}: {result.Message}");
+                    }
+                }
+                catch (Exception exception)
+                {
+                    PublishWatcherError($"Final auto-backup failed for slot {slot + 1}: {exception.Message}");
+                }
+            }
+
+            return true;
         }
     }
 
@@ -246,6 +296,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     private void RestartWatcher()
     {
+        bool needsRetry = false;
         lock (_gate)
         {
             if (_stopped || _watcher is null)
@@ -264,8 +315,14 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 _watcher.Dispose();
                 _watcher = null;
                 PublishWatcherError($"The save watcher could not be restarted: {exception.Message}");
-                return;
+                needsRetry = true;
             }
+        }
+
+        if (needsRetry)
+        {
+            ScheduleWatcherRestart();
+            return;
         }
 
         // FileSystemWatcher can lose an arbitrary number of notifications during an
@@ -277,6 +334,92 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 MarkDirty(slot);
             }
         }
+    }
+
+    private void CreateWatcherLocked()
+    {
+        string saveDirectory = SaveGamePaths.GetSaveGamesDirectory(_userDataDirectory);
+        if (!Directory.Exists(saveDirectory))
+        {
+            Directory.CreateDirectory(saveDirectory);
+        }
+
+        var watcher = new FileSystemWatcher(saveDirectory)
+        {
+            Filter = "Savegame*.sav",
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size |
+                         NotifyFilters.FileName | NotifyFilters.CreationTime,
+        };
+        watcher.Changed += OnChanged;
+        watcher.Created += OnChanged;
+        watcher.Renamed += OnRenamed;
+        watcher.Error += OnWatcherError;
+        watcher.EnableRaisingEvents = true;
+        _watcher = watcher;
+    }
+
+    private void ScheduleWatcherRestart()
+    {
+        CancellationToken token;
+        lock (_gate)
+        {
+            if (_stopped || _watcher is not null || _watcherRestartScheduled)
+            {
+                return;
+            }
+
+            _watcherRestartScheduled = true;
+            token = _stopCancellation.Token;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            TimeSpan delay = TimeSpan.FromMilliseconds(250);
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    await Task.Delay(delay, token).ConfigureAwait(false);
+                    try
+                    {
+                        lock (_gate)
+                        {
+                            if (_stopped || _watcher is not null)
+                            {
+                                return;
+                            }
+
+                            CreateWatcherLocked();
+                            _watcherRestartScheduled = false;
+                        }
+
+                        for (int slot = 0; slot < SaveGamePaths.SlotCount; slot++)
+                        {
+                            if (File.Exists(SaveGamePaths.GetSlotPath(_userDataDirectory, slot)))
+                            {
+                                MarkDirty(slot);
+                            }
+                        }
+                        return;
+                    }
+                    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+                    {
+                        PublishWatcherError($"The save watcher retry failed: {exception.Message}");
+                        delay = TimeSpan.FromMilliseconds(Math.Min(delay.TotalMilliseconds * 2, 5_000));
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    _watcherRestartScheduled = false;
+                }
+            }
+        });
     }
 
     public void Dispose()
@@ -322,6 +465,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
         try
         {
             await Task.Delay(500, stopToken).ConfigureAwait(false);
+            bool retrying = false;
 
             while (true)
             {
@@ -342,7 +486,7 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     {
                         wait = TimeSpan.FromMilliseconds(100);
                     }
-                    else if (_lastBackupTicks.TryGetValue(slot, out long last))
+                    else if (!retrying && _lastBackupTicks.TryGetValue(slot, out long last))
                     {
                         TimeSpan elapsed = Stopwatch.GetElapsedTime(last);
                         if (elapsed < _cooldown)
@@ -369,8 +513,17 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                 }
 
                 SaveGameOperationResult result = _createCheckpoint(slot);
+                lock (_gate)
+                {
+                    if (_stopped || _disposed || generation != _generation)
+                    {
+                        return;
+                    }
+                }
+
                 if (result.Succeeded)
                 {
+                    retrying = false;
                     lock (_gate)
                     {
                         // Retry budget is per contiguous failure episode, not a
@@ -391,18 +544,27 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
                     TimeSpan? retryDelay = RegisterFailure(slot, result);
                     if (retryDelay is not null)
                     {
+                        retrying = true;
                         await Task.Delay(retryDelay.Value, stopToken).ConfigureAwait(false);
                         continue;
                     }
                 }
             }
         }
-        catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             // StopWatch deliberately interrupts debounce/cooldown waits.
         }
         catch (Exception exception)
         {
+            lock (_gate)
+            {
+                if (_stopped || _disposed)
+                {
+                    return;
+                }
+            }
+
             PublishWatcherError($"Auto-backup failed for slot {slot + 1}: {exception.Message}");
         }
         finally
@@ -428,6 +590,11 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
     {
         lock (_gate)
         {
+            if (_stopped || _disposed)
+            {
+                return null;
+            }
+
             if (!result.IsTransientFailure)
             {
                 _retryAttempts.Remove(slot);
@@ -528,25 +695,51 @@ public sealed class SaveGameWatchdog : ISaveGameWatchdog, IDisposable
 
     private void PublishCheckpointCreated(string slot)
     {
+        lock (_gate)
+        {
+            if (_stopped || _disposed) return;
+        }
+
         foreach (EventHandler<string> handler in CheckpointCreated?.GetInvocationList().Cast<EventHandler<string>>() ?? [])
         {
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                try { handler(this, slot); } catch { }
+                try { handler(this, slot); }
+                catch (Exception exception) { WriteSubscriberFailure("CheckpointCreated", exception); }
             });
         }
     }
 
     private void PublishWatcherError(string message)
     {
+        lock (_gate)
+        {
+            if (_disposed) return;
+        }
+
         foreach (EventHandler<string> handler in WatcherError?.GetInvocationList().Cast<EventHandler<string>>() ?? [])
         {
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                try { handler(this, message); } catch { }
+                try { handler(this, message); }
+                catch (Exception exception) { WriteSubscriberFailure("WatcherError", exception); }
             });
         }
     }
+
+    private void WriteSubscriberFailure(string eventName, Exception exception)
+    {
+        try
+        {
+            _diagnosticLog($"Save watcher {eventName} subscriber failed: {exception}");
+        }
+        catch
+        {
+            Trace.TraceError($"Save watcher {eventName} subscriber failed: {exception.GetType().Name}");
+        }
+    }
+
+    private static void WriteTrace(string message) => Trace.TraceError(message);
 
     private sealed record WorkerState(long Generation, Task Task);
 }

@@ -3,7 +3,7 @@ namespace AncestorsEnhanced.Infrastructure.Editing;
 /// <summary>
 /// Single global async mutation gate for every write that touches the game's
 /// configuration or save files. All mutating operations (settings apply/undo,
-/// checkpoints, restore and cheats) must run through
+/// checkpoints, and restore) must run through
 /// <see cref="Run"/> so concurrent writes are serialized. This is deliberately a
 /// single conservative semaphore; finer-grained locks can be
 /// introduced later without changing call sites.

@@ -18,6 +18,17 @@ public sealed class VignettePakEditorTests
         Assert.Equal(percent, detected);
     }
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-50)]
+    [InlineData(101)]
+    [InlineData(200)]
+    public void ScaleRejectsInvalidPercent(int percent)
+    {
+        byte[] original = CreateAsset();
+        Assert.Throws<ArgumentOutOfRangeException>(() => VignettePakEditor.Scale(original, percent));
+    }
+
     [Fact]
     public void OtherAssetChangesAreRejected()
     {

@@ -12,6 +12,22 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="ThirdParty\Discord\win-x64\discord_partner_sdk.dll"
+             Link="discord_partner_sdk.dll"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Always"
+             Condition="'$(RuntimeIdentifier)' == 'win-x64' Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Windows')))" />
+    <Content Include="ThirdParty\Discord\linux-x64\libdiscord_partner_sdk.so"
+             Link="libdiscord_partner_sdk.so"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Always"
+             Condition="'$(RuntimeIdentifier)' == 'linux-x64' Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Linux')))" />
+    <Content Include="ThirdParty\Discord\License-Notices.txt"
+             Link="Discord-Social-SDK-LICENSE-NOTICES.txt"
+             CopyToPublishDirectory="Always" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />

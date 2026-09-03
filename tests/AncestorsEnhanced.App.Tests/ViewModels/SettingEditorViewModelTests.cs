@@ -79,6 +79,8 @@ public sealed class SettingEditorViewModelTests
 
         Assert.False(viewModel.ShowOverrideToggle);
         Assert.Equal("120", viewModel.CreateRequest("Frame-rate limit").Value);
+        Assert.True(viewModel.TryGetCustomProfileValue(out string? profileValue));
+        Assert.Equal("120", profileValue);
     }
 
     [Fact]
@@ -107,7 +109,7 @@ public sealed class SettingEditorViewModelTests
     }
 
     [Fact]
-    public void DisabledOverrideEditorShowsTheResolvedGamePresetValue()
+    public void DisabledOverrideEditorShowsTheResolvedGamePresetValueAndAllowsDirectEdit()
     {
         var viewModel = new SettingEditorViewModel(new SettingEditSnapshot(
             "Engine.ini",
@@ -127,13 +129,18 @@ public sealed class SettingEditorViewModelTests
         Assert.False(viewModel.UseCustomValue);
         Assert.True(viewModel.HasKnownGameValue);
         Assert.True(viewModel.ShowValueEditor);
-        Assert.False(viewModel.IsCustomEditorEnabled);
+        Assert.True(viewModel.IsCustomEditorEnabled);
         Assert.Equal("Quality 2", viewModel.SelectedChoice!.Label);
         Assert.False(viewModel.HasChanges);
+
+        viewModel.SelectedChoice = viewModel.Choices[0];
+        Assert.True(viewModel.UseCustomValue);
+        Assert.True(viewModel.HasChanges);
+        Assert.Equal("0", viewModel.CreateRequest("Depth of Field").Value);
     }
 
     [Fact]
-    public void UnknownPresetValueDoesNotDisplayTheEditorDefault()
+    public void UnknownPresetValueDisplaysFallbackAndAllowsDirectEdit()
     {
         var viewModel = new SettingEditorViewModel(new SettingEditSnapshot(
             "Engine.ini",
@@ -142,9 +149,38 @@ public sealed class SettingEditorViewModelTests
             SettingEditorKind.Choice,
             "0",
             null,
-            Choices: [new SettingChoice("0", "Off")]));
+            Choices: [new SettingChoice("0", "Off"), new SettingChoice("1", "On")]));
 
-        Assert.False(viewModel.ShowValueEditor);
-        Assert.True(viewModel.ShowUnknownGameValue);
+        Assert.True(viewModel.ShowValueEditor);
+        Assert.True(viewModel.IsCustomEditorEnabled);
+        Assert.False(viewModel.UseCustomValue);
+
+        viewModel.SelectedChoice = viewModel.Choices[1];
+        Assert.True(viewModel.UseCustomValue);
+        Assert.True(viewModel.HasChanges);
+        Assert.Equal("1", viewModel.CreateRequest("Depth of Field").Value);
+    }
+
+    [Fact]
+    public void ProfileValueIsValidatedBeforeItChangesTheEditor()
+    {
+        var viewModel = new SettingEditorViewModel(new SettingEditSnapshot(
+            "Engine.ini",
+            "SystemSettings",
+            "r.ViewDistanceScale",
+            SettingEditorKind.Number,
+            "1.2",
+            null,
+            0.5m,
+            2m,
+            0.05m));
+
+        Assert.False(viewModel.CanApplyProfileValue("1.23"));
+        Assert.False(viewModel.TryApplyProfileValue("1.23"));
+        Assert.False(viewModel.HasChanges);
+
+        Assert.True(viewModel.TryApplyProfileValue("1.5"));
+        Assert.True(viewModel.HasChanges);
+        Assert.Equal("1.5", viewModel.CreateRequest("View distance").Value);
     }
 }

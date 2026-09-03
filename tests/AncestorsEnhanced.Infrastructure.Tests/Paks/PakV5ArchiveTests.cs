@@ -34,6 +34,27 @@ public sealed class PakV5ArchiveTests
     }
 
     [Fact]
+    public void CompressedArchivePathLookupIsCaseInsensitive()
+    {
+        byte[] pak = BuildCompressedPak("Ancestors/Content/Test.uasset", [1, 2, 3, 4], 4);
+
+        Assert.True(PakV5Archive.ContainsFile(pak, "ancestors/content/test.uasset"));
+        Assert.Equal([1, 2, 3, 4], PakV5Archive.ReadFile(pak, "ANCESTORS/CONTENT/TEST.UASSET"));
+    }
+
+    [Fact]
+    public void CompressedArchiveRejectsAHashOfTheUncompressedContent()
+    {
+        byte[] pak = BuildCompressedPak(
+            "Ancestors/Content/Test.uasset",
+            [1, 2, 3, 4],
+            4,
+            hashCompressedPayload: false);
+
+        Assert.Throws<InvalidDataException>(() => PakV5Archive.ReadFile(pak, "Ancestors/Content/Test.uasset"));
+    }
+
+    [Fact]
     public void CompressedBlockCannotEscapeTheDeclaredPayload()
     {
         byte[] pak = BuildCompressedPak("Test.uasset", [.. Enumerable.Range(0, 4096).Select(value => (byte)value)], 4096, 1);
@@ -108,7 +129,8 @@ public sealed class PakV5ArchiveTests
         string path,
         byte[] content,
         int blockSize,
-        int firstBlockOffsetAdjustment = 0)
+        int firstBlockOffsetAdjustment = 0,
+        bool hashCompressedPayload = true)
     {
         List<byte[]> compressedBlocks = [];
         for (int offset = 0; offset < content.Length; offset += blockSize)
@@ -135,7 +157,8 @@ public sealed class PakV5ArchiveTests
 
         using var output = new MemoryStream();
         using var writer = new BinaryWriter(output, Encoding.UTF8, leaveOpen: true);
-        WriteEntry(writer, 0, compressedPayload.Length, content.Length, compressedPayload, blocks, (uint)blockSize);
+        byte[] hashSource = hashCompressedPayload ? compressedPayload : content;
+        WriteEntry(writer, 0, compressedPayload.Length, content.Length, hashSource, blocks, (uint)blockSize);
         writer.Write(compressedPayload);
         long indexOffset = output.Position;
 
@@ -145,7 +168,7 @@ public sealed class PakV5ArchiveTests
             WriteString(indexWriter, "../../../");
             indexWriter.Write(1);
             WriteString(indexWriter, path);
-            WriteEntry(indexWriter, 0, compressedPayload.Length, content.Length, compressedPayload, blocks, (uint)blockSize);
+            WriteEntry(indexWriter, 0, compressedPayload.Length, content.Length, hashSource, blocks, (uint)blockSize);
         }
 
         byte[] indexBytes = index.ToArray();
@@ -190,6 +213,18 @@ public sealed class PakV5ArchiveTests
         writer.Write(bytes.Length + 1);
         writer.Write(bytes);
         writer.Write((byte)0);
+    }
+
+    [Fact]
+    public void BuildFilesRejectsCaseInsensitiveDuplicates()
+    {
+        var files = new List<(string FileName, byte[] Content)>
+        {
+            ("Ancestors/Content/Test.uasset", [1, 2, 3]),
+            ("ancestors/content/test.uasset", [4, 5, 6]),
+        };
+
+        Assert.Throws<ArgumentException>(() => PakV5Archive.BuildFiles(files));
     }
 }
 #pragma warning restore CA5350

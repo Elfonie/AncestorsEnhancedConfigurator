@@ -1,5 +1,6 @@
 using System.Globalization;
 using AncestorsEnhanced.Core.SaveGames;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace AncestorsEnhanced.App.ViewModels;
@@ -13,6 +14,9 @@ public partial class SaveGameSlotViewModel : ViewModelBase
     private readonly bool _exists;
     private bool _showAllCheckpoints;
 
+    [ObservableProperty]
+    public partial bool IsSelected { get; set; }
+
     public SaveGameSlotViewModel(
         SaveGameSlotSnapshot slot,
         Func<Task> create,
@@ -20,7 +24,11 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         Func<SaveGameCheckpoint, Func<Task>> deleteCheckpoint,
         Func<bool>? canRestore = null,
         Func<bool>? canMutate = null,
-        bool showAllCheckpoints = false)
+        bool showAllCheckpoints = false,
+        Func<SaveGameCheckpoint, CheckpointMetadata?>? metadataProvider = null,
+        Action<SaveGameCheckpoint, CheckpointMetadata>? metadataChanged = null,
+        Func<SaveGameCheckpoint, CheckpointMetadata, bool>? favoriteMetadataChanged = null,
+        IReadOnlyDictionary<string, SaveGameCheckpointViewModel>? existingCheckpoints = null)
     {
         _exists = slot.Exists;
         SlotNumber = slot.SlotNumber;
@@ -41,12 +49,18 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         _showAllCheckpoints = showAllCheckpoints;
 
         Checkpoints = slot.Checkpoints
-            .Select(checkpoint => new SaveGameCheckpointViewModel(
-                checkpoint,
-                loadCheckpoint(checkpoint),
-                deleteCheckpoint(checkpoint),
-                canRestore ?? (() => true),
-                _canMutate))
+            .Select(checkpoint => existingCheckpoints?.GetValueOrDefault(checkpoint.Id)
+                ?? new SaveGameCheckpointViewModel(
+                    checkpoint,
+                    loadCheckpoint(checkpoint),
+                    deleteCheckpoint(checkpoint),
+                    canRestore ?? (() => true),
+                    _canMutate,
+                    metadataProvider?.Invoke(checkpoint),
+                    metadata => metadataChanged?.Invoke(checkpoint, metadata),
+                    favoriteMetadataChanged is null
+                        ? null
+                        : metadata => favoriteMetadataChanged(checkpoint, metadata)))
             .ToArray();
         UpdateVisibleCheckpoints();
     }
@@ -66,18 +80,20 @@ public partial class SaveGameSlotViewModel : ViewModelBase
 
     public IReadOnlyList<SaveGameCheckpointViewModel> VisibleCheckpoints { get; private set; } = [];
 
+    public int FilteredCheckpointCount { get; private set; }
+
     public bool HasSave => _exists;
 
     public bool CanSaveCheckpoint => _exists && _canMutate();
 
-    public bool HasHiddenCheckpoints => Checkpoints.Count > DefaultVisibleCheckpoints && !_showAllCheckpoints;
+    public bool HasHiddenCheckpoints => VisibleCheckpointSource.Count > DefaultVisibleCheckpoints && !_showAllCheckpoints;
 
     public bool HasExpandedCheckpoints =>
-        _showAllCheckpoints && Checkpoints.Count > DefaultVisibleCheckpoints;
+        _showAllCheckpoints && VisibleCheckpointSource.Count > DefaultVisibleCheckpoints;
 
     public bool IsShowingAllCheckpoints => _showAllCheckpoints;
     public int HiddenCheckpointCount =>
-        Math.Max(0, Checkpoints.Count - DefaultVisibleCheckpoints);
+        Math.Max(0, VisibleCheckpointSource.Count - DefaultVisibleCheckpoints);
 
     public string ShowAllLabel => HiddenCheckpointCount == 1
         ? "Show 1 older checkpoint"
@@ -101,6 +117,14 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         }
     }
 
+    public void SetCheckpointFilter(string searchText, string originFilter)
+    {
+        _filteredCheckpoints = Checkpoints.Where(checkpoint => checkpoint.Matches(searchText, originFilter)).ToArray();
+        FilteredCheckpointCount = _filteredCheckpoints.Length;
+        UpdateVisibleCheckpoints(showAll: string.IsNullOrWhiteSpace(searchText) ? null : true);
+        OnPropertyChanged(nameof(FilteredCheckpointCount));
+    }
+
     public static string FormatSize(long bytes) => bytes switch
     {
         < 1024 => string.Create(CultureInfo.CurrentCulture, $"{bytes} B"),
@@ -111,9 +135,10 @@ public partial class SaveGameSlotViewModel : ViewModelBase
     private void UpdateVisibleCheckpoints(bool? showAll = null)
     {
         _showAllCheckpoints = showAll ?? _showAllCheckpoints;
-        VisibleCheckpoints = _showAllCheckpoints || Checkpoints.Count <= DefaultVisibleCheckpoints
-            ? Checkpoints
-            : Checkpoints.Take(DefaultVisibleCheckpoints).ToArray();
+        IReadOnlyList<SaveGameCheckpointViewModel> candidates = VisibleCheckpointSource;
+        VisibleCheckpoints = _showAllCheckpoints || candidates.Count <= DefaultVisibleCheckpoints
+            ? candidates
+            : candidates.Take(DefaultVisibleCheckpoints).ToArray();
         OnPropertyChanged(nameof(VisibleCheckpoints));
         OnPropertyChanged(nameof(HasHiddenCheckpoints));
         OnPropertyChanged(nameof(HiddenCheckpointCount));
@@ -121,4 +146,9 @@ public partial class SaveGameSlotViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasExpandedCheckpoints));
         OnPropertyChanged(nameof(IsShowingAllCheckpoints));
     }
+
+    private SaveGameCheckpointViewModel[]? _filteredCheckpoints;
+
+    private IReadOnlyList<SaveGameCheckpointViewModel> VisibleCheckpointSource =>
+        _filteredCheckpoints ?? Checkpoints;
 }

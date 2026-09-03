@@ -23,7 +23,12 @@ internal sealed class SaveGameCheckpointStore(
     private readonly Func<DateTimeOffset, string> _newCheckpointId =
         newCheckpointId ?? SaveGamePaths.NewCheckpointId;
 
-    public string Create(string userDataDirectory, int slotNumber, byte[] content, string origin = "Manual")
+    public string Create(
+        string userDataDirectory,
+        int slotNumber,
+        byte[] content,
+        string origin = "Manual",
+        IReadOnlySet<string>? protectedCheckpointIds = null)
     {
         if (maxCheckpointsPerSlot < 1)
         {
@@ -104,7 +109,13 @@ internal sealed class SaveGameCheckpointStore(
         // never turn a successfully published checkpoint into a reported failure.
         try
         {
-            EnforceCap(slotRoot, slotNumber, maxCheckpointsPerSlot, checkpointDirectory);
+            EnforceCap(
+                userDataDirectory,
+                slotRoot,
+                slotNumber,
+                maxCheckpointsPerSlot,
+                checkpointDirectory,
+                protectedCheckpointIds);
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or
@@ -152,10 +163,12 @@ internal sealed class SaveGameCheckpointStore(
     }
 
     private static void EnforceCap(
+        string userDataDirectory,
         string slotRoot,
         int slotNumber,
         int maxCheckpointsPerSlot,
-        string protectedCheckpointDirectory)
+        string protectedCheckpointDirectory,
+        IReadOnlySet<string>? protectedCheckpointIds)
     {
         string[] directories = Directory.EnumerateDirectories(slotRoot).ToArray();
         List<string> checkpoints = directories
@@ -166,14 +179,72 @@ internal sealed class SaveGameCheckpointStore(
             .ToList();
 
         int overflow = checkpoints.Count - maxCheckpointsPerSlot;
+        HashSet<string>? favorites = ReadFavoriteCheckpointIds(userDataDirectory, slotNumber);
+        // Metadata is advisory. If it cannot be read, retain everything rather than
+        // risk deleting a checkpoint the user explicitly pinned.
+        if (favorites is null)
+        {
+            return;
+        }
         foreach (string checkpoint in checkpoints
                      .Where(path => !string.Equals(
                          Path.GetFullPath(path),
                          protectedCheckpointDirectory,
-                         PathComparison))
+                         PathComparison)
+                          && !favorites.Contains(Path.GetFileName(path))
+                          && !(protectedCheckpointIds?.Contains(Path.GetFileName(path)) ?? false))
                      .Take(overflow))
         {
             TryDeleteDirectory(checkpoint);
+        }
+    }
+
+    private static HashSet<string>? ReadFavoriteCheckpointIds(string userDataDirectory, int slotNumber)
+    {
+        string settingsPath = Path.Combine(userDataDirectory, "AncestorsEnhanced_ToolSettings.json");
+        if (!File.Exists(settingsPath))
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        try
+        {
+            FileInfo info = new(settingsPath);
+            if (info.Length > 1024 * 1024)
+            {
+                return null;
+            }
+
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(settingsPath));
+            if (!document.RootElement.TryGetProperty("CheckpointMetadata", out JsonElement metadata) ||
+                metadata.ValueKind != JsonValueKind.Object)
+            {
+                return new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            string prefix = slotNumber.ToString(CultureInfo.InvariantCulture) + ":";
+            var favorites = new HashSet<string>(StringComparer.Ordinal);
+            foreach (JsonProperty property in metadata.EnumerateObject())
+            {
+                if (!property.Name.StartsWith(prefix, StringComparison.Ordinal) ||
+                    !property.Value.TryGetProperty("IsFavorite", out JsonElement isFavorite) ||
+                    isFavorite.ValueKind != JsonValueKind.True)
+                {
+                    continue;
+                }
+
+                string id = property.Name[prefix.Length..];
+                if (id.Length > 0)
+                {
+                    favorites.Add(id);
+                }
+            }
+
+            return favorites;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
         }
     }
 

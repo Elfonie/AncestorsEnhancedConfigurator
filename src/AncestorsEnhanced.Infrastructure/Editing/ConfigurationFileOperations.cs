@@ -12,6 +12,8 @@ internal static class ConfigurationFileOperations
         new(StringComparer.OrdinalIgnoreCase)
         {
             "AncestorsEnhanced-Vignette_P.pak",
+            "AncestorsEnhanced-Gameplay_P.pak",
+            "AncestorsEnhanced-Gameplay_P.pak.aec-owned.sha256",
             "pakchunk99-WindowsNoEditor_P.pak",
         };
 
@@ -44,11 +46,12 @@ internal static class ConfigurationFileOperations
     public static string GetTargetPath(string configDirectory, string fileName)
     {
         ValidateFileName(fileName);
-        string path = Path.GetFullPath(Path.Combine(configDirectory, fileName));
+        string resolvedConfig = ResolvePhysicalPath(configDirectory);
+        string path = Path.GetFullPath(Path.Combine(resolvedConfig, fileName));
         if (!string.Equals(
                 Path.GetDirectoryName(path),
-                configDirectory,
-                StringComparison.OrdinalIgnoreCase))
+                resolvedConfig,
+                PathComparison))
         {
             throw new InvalidOperationException("The target path leaves the configuration directory.");
         }
@@ -97,7 +100,7 @@ internal static class ConfigurationFileOperations
         if (target == SettingFileTarget.SystemSave)
         {
             ValidateSystemSaveFileName(fileName);
-            string saveDirectory = GetSystemSaveDirectory(userDataDirectory);
+            string saveDirectory = ResolvePhysicalPath(GetSystemSaveDirectory(userDataDirectory));
             string savePath = Path.GetFullPath(Path.Combine(saveDirectory, fileName));
             if (!string.Equals(Path.GetDirectoryName(savePath), saveDirectory, PathComparison))
             {
@@ -118,7 +121,7 @@ internal static class ConfigurationFileOperations
         }
 
         ValidatePakFileName(fileName);
-        string directory = GetPakDirectory(installDirectory);
+        string directory = ResolvePhysicalPath(GetPakDirectory(installDirectory));
         string path = Path.GetFullPath(Path.Combine(directory, fileName));
         if (!string.Equals(Path.GetDirectoryName(path), directory, PathComparison))
         {
@@ -132,8 +135,8 @@ internal static class ConfigurationFileOperations
         string userDataDirectory,
         string configurationDirectory)
     {
-        string root = Path.GetFullPath(userDataDirectory);
-        string current = Path.GetFullPath(configurationDirectory);
+        string root = ResolvePhysicalPath(userDataDirectory);
+        string current = ResolvePhysicalPath(configurationDirectory);
         string relative = Path.GetRelativePath(root, current);
         if (Path.IsPathRooted(relative) ||
             relative.Equals("..", StringComparison.Ordinal) ||
@@ -150,13 +153,83 @@ internal static class ConfigurationFileOperations
                 throw new InvalidOperationException("A linked configuration directory will not be changed.");
             }
 
-            if (string.Equals(current, root, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(current, root, PathComparison))
             {
                 break;
             }
 
             current = Path.GetDirectoryName(current)
                 ?? throw new InvalidOperationException("The configuration path is invalid.");
+        }
+    }
+
+    /// <summary>
+    /// Resolves any symbolic links or directory junctions along the path to return
+    /// the physical, canonical path. Does not throw if components do not exist; falls
+    /// back safely to <see cref="Path.GetFullPath(string)"/>.
+    /// </summary>
+    public static string ResolvePhysicalPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return path;
+        }
+
+        try
+        {
+            string fullPath = Path.GetFullPath(path);
+            string? root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrEmpty(root))
+            {
+                return fullPath;
+            }
+
+            string relative = Path.GetRelativePath(root, fullPath);
+            if (string.IsNullOrEmpty(relative) || relative == ".")
+            {
+                return fullPath;
+            }
+
+            string[] parts = relative.Split(
+                [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries);
+            string current = root;
+
+            foreach (string part in parts)
+            {
+                current = Path.Combine(current, part);
+                if (Directory.Exists(current))
+                {
+                    var dirInfo = new DirectoryInfo(current);
+                    if (dirInfo.LinkTarget is not null)
+                    {
+                        FileSystemInfo? target = dirInfo.ResolveLinkTarget(returnFinalTarget: true);
+                        if (target is not null)
+                        {
+                            current = Path.GetFullPath(target.FullName);
+                        }
+                    }
+                }
+                else if (File.Exists(current))
+                {
+                    var fileInfo = new FileInfo(current);
+                    if (fileInfo.LinkTarget is not null)
+                    {
+                        FileSystemInfo? target = fileInfo.ResolveLinkTarget(returnFinalTarget: true);
+                        if (target is not null)
+                        {
+                            current = Path.GetFullPath(target.FullName);
+                        }
+                    }
+                }
+            }
+
+            return Path.GetFullPath(current);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return Path.GetFullPath(path);
         }
     }
 
@@ -168,12 +241,64 @@ internal static class ConfigurationFileOperations
         }
     }
 
-    public static void WriteBytesAtomically(string path, byte[] content)
+    // This is a last-moment containment check for destructive path operations.
+    // It narrows parent replacement races but cannot provide handle-relative
+    // object identity; callers must not describe it as a complete TOCTOU cure.
+    // When trustedRoot is provided, validation verifies containment and stops
+    // at trustedRoot so that legitimate symlinks above it (e.g. ~/.steam/root)
+    // are not falsely rejected.
+    private static void ValidateMutationDirectory(string directory, string? trustedRoot = null)
+    {
+        string current = ResolvePhysicalPath(directory);
+        string? canonicalRoot = string.IsNullOrWhiteSpace(trustedRoot)
+            ? null
+            : ResolvePhysicalPath(trustedRoot);
+
+        if (canonicalRoot is not null)
+        {
+            string relative = Path.GetRelativePath(canonicalRoot, current);
+            if (Path.IsPathRooted(relative) ||
+                relative.Equals("..", StringComparison.Ordinal) ||
+                relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("The target directory leaves the trusted root.");
+            }
+        }
+
+        while (true)
+        {
+            if (Directory.Exists(current) &&
+                File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
+            {
+                throw new InvalidOperationException("A linked directory will not be changed.");
+            }
+
+            if (canonicalRoot is not null && string.Equals(current, canonicalRoot, PathComparison))
+            {
+                return;
+            }
+
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrEmpty(parent) || string.Equals(parent, current, PathComparison))
+            {
+                return;
+            }
+
+            if (canonicalRoot is null)
+            {
+                return;
+            }
+
+            current = parent;
+        }
+    }
+
+    public static void WriteBytesAtomically(string path, byte[] content, string? trustedRoot = null)
     {
         string directory = Path.GetDirectoryName(path)
             ?? throw new InvalidOperationException("The target directory is missing.");
         Directory.CreateDirectory(directory);
-        ValidateConfigurationPath(directory, directory);
+        ValidateConfigurationPath(trustedRoot ?? directory, directory);
         ValidateWritableTarget(path);
         string temporaryPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         FileAttributes? attributes = File.Exists(path) ? File.GetAttributes(path) : null;
@@ -195,7 +320,9 @@ internal static class ConfigurationFileOperations
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(temporaryPath, path, overwrite: File.Exists(path));
+            ValidateMutationDirectory(directory, trustedRoot);
+            ValidateWritableTarget(path);
+            File.Move(temporaryPath, path, overwrite: true);
             if (attributes is not null)
             {
                 File.SetAttributes(path, attributes.Value & ~FileAttributes.ReparsePoint);
@@ -230,7 +357,8 @@ internal static class ConfigurationFileOperations
         string path,
         byte[] content,
         string? expectedSha256,
-        bool expectedExists)
+        bool expectedExists,
+        string? trustedRoot = null)
     {
         string directory = Path.GetDirectoryName(path)
             ?? throw new InvalidOperationException("The target directory is missing.");
@@ -243,9 +371,11 @@ internal static class ConfigurationFileOperations
         bool committed = false;
         try
         {
-            WriteBytesAtomically(temporaryPath, content);
+            WriteBytesAtomically(temporaryPath, content, trustedRoot);
             if (!expectedExists)
             {
+                ValidateMutationDirectory(directory, trustedRoot);
+                ValidateWritableTarget(path);
                 File.Move(temporaryPath, path, overwrite: false);
                 return;
             }
@@ -257,6 +387,8 @@ internal static class ConfigurationFileOperations
 
             FileAttributes attributes = File.GetAttributes(path);
             UnixFileMode? unixMode = !OperatingSystem.IsWindows() ? File.GetUnixFileMode(path) : null;
+            ValidateMutationDirectory(directory, trustedRoot);
+            ValidateWritableTarget(path);
             File.Move(path, capturedPath, overwrite: false);
             ValidateWritableTarget(capturedPath);
             string capturedSha = Sha256(ReadStableBounded(capturedPath, 64L * 1024 * 1024));
@@ -273,6 +405,8 @@ internal static class ConfigurationFileOperations
             }
             try
             {
+                ValidateMutationDirectory(directory, trustedRoot);
+                ValidateWritableTarget(path);
                 File.Move(temporaryPath, path, overwrite: false);
                 committed = true;
             }
@@ -281,6 +415,7 @@ internal static class ConfigurationFileOperations
                 RestoreCapturedFile(path, capturedPath);
                 throw;
             }
+            ValidateMutationDirectory(directory, trustedRoot);
             TryDeleteFile(capturedPath);
         }
         catch
@@ -302,7 +437,7 @@ internal static class ConfigurationFileOperations
     /// bytes still match <paramref name="expectedSha256"/>. On any mismatch the target
     /// is left untouched so a plan can never delete bytes it did not see.
     /// </summary>
-    public static void CompareAndDelete(string path, string expectedSha256)
+    public static void CompareAndDelete(string path, string expectedSha256, string? trustedRoot = null)
     {
         _ = RecoverInterruptedTarget(path);
         if (!File.Exists(path))
@@ -314,6 +449,8 @@ internal static class ConfigurationFileOperations
         string directory = Path.GetDirectoryName(path)
             ?? throw new InvalidOperationException("The target directory is missing.");
         string capturedPath = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.cas");
+        ValidateMutationDirectory(directory, trustedRoot);
+        ValidateWritableTarget(path);
         File.Move(path, capturedPath, overwrite: false);
         try
         {
@@ -327,6 +464,7 @@ internal static class ConfigurationFileOperations
 
             try
             {
+                ValidateMutationDirectory(directory, trustedRoot);
                 File.Delete(capturedPath);
             }
             catch
@@ -342,6 +480,10 @@ internal static class ConfigurationFileOperations
                 RestoreCapturedFile(path, capturedPath);
             }
             throw;
+        }
+        finally
+        {
+            TryDeleteFile(capturedPath);
         }
     }
 
@@ -476,6 +618,16 @@ internal static class ConfigurationFileOperations
                 installDirectory,
                 "pakchunk99-WindowsNoEditor_P.pak",
                 SettingFileTarget.Pak));
+            targets.Add(GetTargetPath(
+                userDataDirectory,
+                installDirectory,
+                "AncestorsEnhanced-Gameplay_P.pak",
+                SettingFileTarget.Pak));
+            targets.Add(GetTargetPath(
+                userDataDirectory,
+                installDirectory,
+                "AncestorsEnhanced-Gameplay_P.pak.aec-owned.sha256",
+                SettingFileTarget.Pak));
         }
 
         bool recovered = false;
@@ -552,8 +704,7 @@ internal static class ConfigurationFileOperations
 
         string targetHash = Sha256(ReadStableBounded(path, 64L * 1024 * 1024));
         if (!expectedExistingHashes.Contains(targetHash, StringComparer.Ordinal) ||
-            !expectedExistingHashes.Contains(capturedHash, StringComparer.Ordinal) ||
-            string.Equals(targetHash, capturedHash, StringComparison.Ordinal))
+            !expectedExistingHashes.Contains(capturedHash, StringComparer.Ordinal))
         {
             throw new IOException(
                 $"The current {targetName} and its write sidecar do not prove a completed tool operation. Neither file was changed.");
@@ -597,6 +748,7 @@ internal static class ConfigurationFileOperations
         string target = Path.GetFullPath(targetDirectory);
         string relative = Path.GetRelativePath(root, target);
         if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) ||
+            relative.Equals(".", StringComparison.Ordinal) ||
             relative.Equals("..", StringComparison.Ordinal) ||
             relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
         {

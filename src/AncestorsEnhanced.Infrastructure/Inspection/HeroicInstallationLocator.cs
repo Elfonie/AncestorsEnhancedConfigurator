@@ -51,14 +51,18 @@ internal sealed class HeroicInstallationLocator(
                 using var json = JsonDocument.Parse(fileSystem.ReadAllText(file.FullPath));
                 JsonElement root = json.RootElement;
                 string? title = ReadString(root, "title");
-                string? install = ReadString(root, "install_path");
+                string? install = ReadFirstString(root, "install_path", "installPath");
                 if (string.IsNullOrWhiteSpace(install) ||
-                    title?.Contains("Ancestors", StringComparison.OrdinalIgnoreCase) != true)
+                    (title?.Contains("Ancestors", StringComparison.OrdinalIgnoreCase) != true &&
+                     !file.Name.Contains("Ancestors", StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
 
-                GameInstallationSnapshot? snapshot = CreateForStore(install, null);
+                GameInstallationSnapshot? snapshot = CreateForStore(
+                    install,
+                    null,
+                    ReadFirstString(root, "winePrefix", "wine_prefix", "prefix"));
                 if (snapshot is not null)
                 {
                     found.Add(snapshot);
@@ -80,8 +84,14 @@ internal sealed class HeroicInstallationLocator(
         string heroicRoot,
         List<InspectionNotice> notices)
     {
-        string legendaryPath = Path.Combine(heroicRoot, "legendary", "installed.json");
-        if (!fileSystem.FileExists(legendaryPath))
+        string? legendaryPath = new[]
+            {
+                Path.Combine(heroicRoot, "legendary", "installed.json"),
+                Path.Combine(heroicRoot, "legendaryConfig", "legendary", "installed.json"),
+                Path.Combine(heroicRoot, "installed.json"),
+            }
+            .FirstOrDefault(fileSystem.FileExists);
+        if (legendaryPath is null)
         {
             return [];
         }
@@ -94,13 +104,19 @@ internal sealed class HeroicInstallationLocator(
             }
 
             using var json = JsonDocument.Parse(fileSystem.ReadAllText(legendaryPath));
-            if (json.RootElement.ValueKind != JsonValueKind.Array)
+            IEnumerable<JsonElement> entries = json.RootElement.ValueKind switch
+            {
+                JsonValueKind.Array => json.RootElement.EnumerateArray(),
+                JsonValueKind.Object => json.RootElement.EnumerateObject().Select(property => property.Value),
+                _ => [],
+            };
+            if (!entries.Any())
             {
                 return [];
             }
 
             List<GameInstallationSnapshot> found = [];
-            foreach (JsonElement entry in json.RootElement.EnumerateArray())
+            foreach (JsonElement entry in entries)
             {
                 if (entry.ValueKind != JsonValueKind.Object)
                 {
@@ -108,7 +124,7 @@ internal sealed class HeroicInstallationLocator(
                 }
 
                 string? title = ReadString(entry, "title");
-                string? install = ReadString(entry, "install_path");
+                string? install = ReadFirstString(entry, "install_path", "installPath");
                 if (string.IsNullOrWhiteSpace(install) ||
                     title?.Contains("Ancestors", StringComparison.OrdinalIgnoreCase) != true)
                 {
@@ -117,7 +133,8 @@ internal sealed class HeroicInstallationLocator(
 
                 GameInstallationSnapshot? snapshot = CreateForStore(
                     install,
-                    ReadString(entry, "version"));
+                    ReadString(entry, "version"),
+                    ReadFirstString(entry, "winePrefix", "wine_prefix", "prefix"));
                 if (snapshot is not null)
                 {
                     found.Add(snapshot);
@@ -136,9 +153,9 @@ internal sealed class HeroicInstallationLocator(
         }
     }
 
-    private GameInstallationSnapshot? CreateForStore(string install, string? buildId) =>
+    private GameInstallationSnapshot? CreateForStore(string install, string? buildId, string? prefix = null) =>
         environment.Host == HostKind.Linux
-            ? factory.CreateLinux(StoreKind.Heroic, install, buildId, CompatibilityLayerKind.Proton)
+            ? factory.CreateLinux(StoreKind.Heroic, install, buildId, CompatibilityLayerKind.Proton, prefix)
             : factory.CreateWindows(StoreKind.Heroic, install, buildId);
 
     private static string? ReadString(JsonElement element, string name) =>
@@ -146,4 +163,7 @@ internal sealed class HeroicInstallationLocator(
         property.ValueKind == JsonValueKind.String
             ? property.GetString()
             : null;
+
+    private static string? ReadFirstString(JsonElement element, params string[] names) =>
+        names.Select(name => ReadString(element, name)).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 }

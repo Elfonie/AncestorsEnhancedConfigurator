@@ -1,12 +1,17 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using AncestorsEnhanced.Core;
 using AncestorsEnhanced.Core.Editing;
 using AncestorsEnhanced.Core.Inspection;
+using AncestorsEnhanced.Core.Profiles;
 using AncestorsEnhanced.Core.SaveGames;
 using AncestorsEnhanced.Core.Settings;
 using AncestorsEnhanced.Infrastructure.Editing;
+using AncestorsEnhanced.Infrastructure.Platform;
 using AncestorsEnhanced.Infrastructure.SaveGames;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -16,8 +21,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 {
     private readonly IReadOnlyGameInspector _inspector;
     private readonly IGameSettingsEditor _settingsEditor;
+    private readonly IGameplayDifficultyEditor _gameplayEditor;
     private readonly Func<VerifiedGameContext, ISaveGameManager> _saveManagerFactory;
+    private readonly IUserProfileLibrary _profileLibrary;
     private readonly GameContextVerifier _gameContextVerifier;
+    private readonly IHardwareProbe _hardwareProbe;
+    private readonly Func<string, bool> _directoryOpener;
     private readonly UiMutationGate _mutationGate = new();
     private VerifiedGameContext? _verifiedGameContext;
     private bool _saveGamesRefreshFailed;
@@ -26,9 +35,21 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     private readonly Dictionary<string, SettingEditorViewModel> _editors =
         new(StringComparer.Ordinal);
     private IReadOnlyList<FeatureGroupSnapshot> _allFeatureGroups = [];
+    private readonly Dictionary<string, bool> _groupExpansionStates = new(StringComparer.Ordinal);
     private GameInspectionSnapshot? _snapshot;
     private SettingsChangePlan? _reviewPlan;
     private bool _reviewIsToolChangeRemoval;
+    private bool _reviewIsGameplay;
+    private bool _reviewRemovesGameplayPak;
+    private readonly Action<bool>? _highContrastChanged;
+    private readonly Action<bool>? _discordRichPresenceChanged;
+    private readonly Func<string?>? _resetApplicationPreferences;
+    private readonly Action? _onboardingCompleted;
+    private readonly Action<bool>? _experimentalGraphicsSettingsChanged;
+    private readonly Action<bool>? _experimentalGameplaySettingsChanged;
+    private readonly int _gameplayMinimumPercent = 10;
+    private readonly Action<HardwareSnapshot>? _detailedHardwareScanCompleted;
+    private HardwareSnapshot? _detailedHardwareSnapshot;
 
     [ObservableProperty]
     public partial string DetectionStatus { get; set; } = "Not checked yet";
@@ -38,6 +59,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial string DetectionDotColor { get; set; } = "#7A877A";
+
+    public IBrush DetectionBrush => StatusPresentation.BrushForLegacyAccent(DetectionColor);
 
     [ObservableProperty]
     public partial string InstallationPath { get; set; } = "Not detected";
@@ -64,6 +87,70 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial string SearchText { get; set; } = "";
 
     [ObservableProperty]
+    public partial string GraphicsFilter { get; set; } = "All";
+
+    [ObservableProperty]
+    public partial IReadOnlyList<BuiltInGraphicsPresetViewModel> BuiltInGraphicsPresets { get; set; } =
+    [
+        new("Clear Image", "Remove blur and remove vignette completely", CreateBuiltInProfile("Clear Image", [
+            new ProfileSetting("r.MotionBlurQuality", "0"),
+            new ProfileSetting("r.DepthOfFieldQuality", "0"),
+            new ProfileSetting("r.SceneColorFringeQuality", "0"),
+            new ProfileSetting("r.Tonemapper.Sharpen", "0.4"),
+            new ProfileSetting("mod.VignettePercent", "0")])),
+        new("Performance Setup", "Complete baseline for constrained hardware", CreateHardwareBaselineProfile("Performance Setup", GameGraphicsQuality.Medium, [
+            new ProfileSetting("r.PostProcessAAQuality", "3"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "2048"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1")])),
+        new("Balanced Setup", "Complete High-quality baseline for mainstream hardware", CreateHardwareBaselineProfile("Balanced Setup", GameGraphicsQuality.High, [
+            new ProfileSetting("r.PostProcessAAQuality", "4"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "3072"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1")])),
+        new("High Quality Setup", "Complete High-quality baseline with extra world and reflection detail", CreateHardwareBaselineProfile("High Quality Setup", GameGraphicsQuality.High, [
+            new ProfileSetting("r.PostProcessAAQuality", "4"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "4096"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1"),
+            new ProfileSetting("r.ViewDistanceScale", "1.1"),
+            new ProfileSetting("r.SSR.Quality", "3")])),
+        new("Ultra Setup", "Complete High-quality baseline for exceptional hardware", CreateHardwareBaselineProfile("Ultra Setup", GameGraphicsQuality.High, [
+            new ProfileSetting("r.PostProcessAAQuality", "4"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "6144"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1"),
+            new ProfileSetting("r.ViewDistanceScale", "1.2"),
+            new ProfileSetting("foliage.DensityScale", "1.5"),
+            new ProfileSetting("grass.DensityScale", "1.5"),
+            new ProfileSetting("r.SSR.Quality", "3"),
+            new ProfileSetting("r.Shadow.MaxResolution", "4096"),
+            new ProfileSetting("r.Shadow.DistanceScale", "1.0"),
+            new ProfileSetting("r.Tonemapper.Sharpen", "0.4")])),
+        new("Low VRAM Setup", "Complete baseline that protects limited graphics memory", CreateHardwareBaselineProfile("Low VRAM Setup", GameGraphicsQuality.Low, [
+            new ProfileSetting("r.PostProcessAAQuality", "2"),
+            new ProfileSetting("r.MaxAnisotropy", "16"),
+            new ProfileSetting("r.Streaming.PoolSize", "1024"),
+            new ProfileSetting("r.Streaming.LimitPoolSizeToVRAM", "1")])),
+        new("Cinematic Tweak", "Atmosphere and post-processing adjustments without resetting other choices", CreateBuiltInProfile("Cinematic Tweak", [
+            new ProfileSetting("r.DepthOfFieldQuality", "4"),
+            new ProfileSetting("r.MotionBlurQuality", "4"),
+            new ProfileSetting("r.SceneColorFringeQuality", "1"),
+            new ProfileSetting("r.BloomQuality", "5"),
+            new ProfileSetting("r.VolumetricFog", "1")])),
+    ];
+
+    [ObservableProperty]
+    public partial bool IsGraphicsPresetsExpanded { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGraphicsPresetPreview))]
+    [NotifyPropertyChangedFor(nameof(GraphicsPresetPreviewTitle))]
+    [NotifyPropertyChangedFor(nameof(GraphicsPresetPreviewSummary))]
+    [NotifyPropertyChangedFor(nameof(GraphicsPresetPreviewValues))]
+    public partial BuiltInGraphicsPresetViewModel? GraphicsPresetPreview { get; set; }
+
+    [ObservableProperty]
     public partial string ViewModeTitle { get; set; } = "Simple";
 
     [ObservableProperty]
@@ -83,6 +170,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty]
     public partial string OperationAccent { get; set; } = "#7A877A";
+
+    public IBrush OperationBrush => StatusPresentation.BrushForLegacyAccent(OperationAccent);
 
     [ObservableProperty]
     public partial bool CanRevertLast { get; set; }
@@ -106,52 +195,404 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public partial IReadOnlyList<NoticeRowViewModel> Notices { get; set; } = [];
 
     [ObservableProperty]
+    public partial HardwareDiagnosticsViewModel HardwareDiagnostics { get; set; } = HardwareDiagnosticsViewModel.FromSnapshot(EmptyHardwareProbe.Instance.Inspect());
+
+    [ObservableProperty]
+    public partial bool IsDetailedHardwareDetectionRunning { get; set; }
+
+    [ObservableProperty]
+    public partial string HardwareScanMessage { get; set; } = "";
+
+    [ObservableProperty]
     public partial bool IsSaveGamesView { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsHomeView { get; set; } = true;
 
     [ObservableProperty]
     public partial SaveManagerViewModel? SaveManager { get; set; }
 
     [ObservableProperty]
-    public partial bool IsCheatView { get; set; }
+    public partial bool IsGameplayView { get; set; }
 
     [ObservableProperty]
-    public partial CheatViewModel? Cheat { get; set; }
+    public partial bool IsGameplayAdvancedMode { get; set; }
+
+    [ObservableProperty]
+    public partial string GameplayAdvancedTab { get; set; } = "survival";
+
+    [ObservableProperty]
+    public partial IReadOnlyList<GameplayDifficultyPresetViewModel> GameplayDifficultyPresets { get; set; } = [];
+
+    [ObservableProperty]
+    public partial bool IsGameplayPresetsExpanded { get; set; }
+
+    [ObservableProperty]
+    public partial IReadOnlyList<GameplayDifficultyControlViewModel> GameplaySimpleControls { get; set; } = [];
+
+    [ObservableProperty]
+    public partial IReadOnlyList<GameplayDifficultyControlViewModel> GameplayAdvancedControls { get; set; } = [];
+
+    [ObservableProperty]
+    public partial IReadOnlyList<GameplayResearchValueViewModel> GameplayResearchValues { get; set; } = [];
+
+    [ObservableProperty]
+    public partial GameplayReadinessViewModel GameplayReadiness { get; set; } = new(
+        "Game not checked",
+        "Reload to verify the exact game identity before viewing gameplay research.",
+        "#D6BC84",
+        true);
+
+    [ObservableProperty]
+    public partial GameplayDifficultyState GameplayState { get; set; } = GameplayDifficultyState.GameDefault;
+
+    [ObservableProperty]
+    public partial bool IsProfilesView { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsSettingsView { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsDiagnosticsView { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsOnboardingVisible { get; set; }
+
+    [ObservableProperty]
+    public partial int OnboardingStep { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsHighContrastEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsDiscordRichPresenceEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial string DiscordRichPresenceStatus { get; set; } = "Off";
+
+    [ObservableProperty]
+    public partial string? ApplicationPreferencesWarning { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsExperimentalGraphicsSettingsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsExperimentalGameplaySettingsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool IncludeClanInGameplayPatch { get; set; }
+
+    [ObservableProperty]
+    public partial bool HasAcknowledgedDetailedHardwareScan { get; set; }
+
+    [ObservableProperty]
+    public partial IReadOnlyList<UserProfileRowViewModel> UserProfiles { get; set; } = [];
+
+    [ObservableProperty]
+    public partial ImportedProfileViewModel? ImportedProfile { get; set; }
+
+    [ObservableProperty]
+    public partial UserProfileRowViewModel? ProfilePendingDeletion { get; set; }
+
+    [ObservableProperty]
+    public partial UserProfileRowViewModel? ProfilePendingRename { get; set; }
+
+    [ObservableProperty]
+    public partial string RenamedProfileName { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string? ProfileComparisonName { get; set; }
+
+    [ObservableProperty]
+    public partial IReadOnlyList<ProfileComparisonRowViewModel> ProfileComparisonRows { get; set; } = [];
+
+    [ObservableProperty]
+    public partial bool IsCreatingProfile { get; set; }
+
+    [ObservableProperty]
+    public partial string NewProfileName { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string NewProfileDescription { get; set; } = "";
 
     public MainViewModel(
         IReadOnlyGameInspector inspector,
         IGameSettingsEditor settingsEditor,
-        Func<VerifiedGameContext, ISaveGameManager>? saveManagerFactory = null)
+        Func<VerifiedGameContext, ISaveGameManager>? saveManagerFactory = null,
+        IUserProfileLibrary? profileLibrary = null,
+        bool highContrastEnabled = false,
+        Action<bool>? highContrastChanged = null,
+        bool discordRichPresenceEnabled = false,
+        Action<bool>? discordRichPresenceChanged = null,
+        string? applicationPreferencesWarning = null,
+        Func<string?>? resetApplicationPreferences = null,
+        bool showOnboarding = false,
+        Action? onboardingCompleted = null,
+        bool experimentalGraphicsSettingsEnabled = false,
+        Action<bool>? experimentalGraphicsSettingsChanged = null,
+        bool experimentalGameplaySettingsEnabled = false,
+        Action<bool>? experimentalGameplaySettingsChanged = null,
+        bool hasAcknowledgedDetailedHardwareScan = false,
+        HardwareSnapshot? detailedHardwareSnapshot = null,
+        Action<HardwareSnapshot>? detailedHardwareScanCompleted = null,
+        IHardwareProbe? hardwareProbe = null,
+        IGameplayDifficultyEditor? gameplayDifficultyEditor = null,
+        Func<string, bool>? directoryOpener = null)
     {
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(settingsEditor);
         _inspector = inspector;
         _gameContextVerifier = new GameContextVerifier(inspector);
+        _gameplayEditor = gameplayDifficultyEditor ?? new SafeGameplayDifficultyEditor(_gameContextVerifier);
+        _hardwareProbe = hardwareProbe ?? EmptyHardwareProbe.Instance;
+        _directoryOpener = directoryOpener ?? TryOpenDirectory;
         _settingsEditor = settingsEditor;
         _saveManagerFactory = saveManagerFactory ?? (context => new SafeSaveGameManager(context, _gameContextVerifier));
+        _profileLibrary = profileLibrary ?? EmptyUserProfileLibrary.Instance;
+        _highContrastChanged = highContrastChanged;
+        _discordRichPresenceChanged = discordRichPresenceChanged;
+        _resetApplicationPreferences = resetApplicationPreferences;
+        _onboardingCompleted = onboardingCompleted;
+        _experimentalGraphicsSettingsChanged = experimentalGraphicsSettingsChanged;
+        _experimentalGameplaySettingsChanged = experimentalGameplaySettingsChanged;
+        _detailedHardwareSnapshot = detailedHardwareSnapshot;
+        _detailedHardwareScanCompleted = detailedHardwareScanCompleted;
+        IsHighContrastEnabled = highContrastEnabled;
+        IsDiscordRichPresenceEnabled = discordRichPresenceEnabled;
+        ApplicationPreferencesWarning = applicationPreferencesWarning;
+        IsOnboardingVisible = showOnboarding;
+        IsExperimentalGraphicsSettingsEnabled = experimentalGraphicsSettingsEnabled;
+        IsExperimentalGameplaySettingsEnabled = experimentalGameplaySettingsEnabled;
+        HasAcknowledgedDetailedHardwareScan = hasAcknowledgedDetailedHardwareScan;
         _mutationGate.Changed += OnMutationGateChanged;
 
         ProductName = "Ancestors Enhanced Configurator";
         string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-        Phase = $"{version} Graphics, Saves and Cheats";
+        Phase = $"{version} Graphics, Saves and Gameplay";
+        SystemDiagnostics = $"{RuntimeInformation.OSDescription.Trim()} · {RuntimeInformation.OSArchitecture} · {Environment.ProcessorCount} logical processors";
     }
 
     public string ProductName { get; }
 
     public string Phase { get; }
 
-    public bool ShowGraphicsView => !IsSaveGamesView && !IsCheatView;
+    public bool ShowHomeView => IsHomeView;
+
+    public bool ShowGraphicsView => !IsHomeView && !IsSaveGamesView && !IsGameplayView && !IsProfilesView && !IsSettingsView && !IsDiagnosticsView;
 
     public bool ShowSaveGamesView => IsSaveGamesView;
 
-    public bool ShowCheatView => IsCheatView;
+    public bool ShowGameplayView => IsGameplayView;
 
-    public bool IsCheatAvailable => Cheat is not null;
+    public bool HasGameplayResearchValues => GameplayResearchValues.Count > 0;
 
-    public bool IsCheatUnavailable => Cheat is null;
+    public bool IsGameplaySimpleMode => !IsGameplayAdvancedMode;
+
+    public bool IsGameplaySurvivalTab => string.Equals(GameplayAdvancedTab, "survival", StringComparison.Ordinal);
+
+    public bool IsGameplayRecoveryTab => string.Equals(GameplayAdvancedTab, "recovery", StringComparison.Ordinal);
+
+    public bool IsGameplayResearchTab => string.Equals(GameplayAdvancedTab, "research", StringComparison.Ordinal);
+
+    public bool ShowGameplayCoreControls => IsGameplaySimpleMode || IsGameplaySurvivalTab;
+
+    public bool HasGameplayDifficultyPresets => GameplayDifficultyPresets.Count > 0;
+
+    public bool HasGameplaySimpleControls => GameplaySimpleControls.Count > 0;
+
+    public bool HasGameplayAdvancedControls => GameplayAdvancedControls.Count > 0;
+
+    public int GameplayMinimumPercent => _gameplayMinimumPercent;
+
+    public int GameplayMaximumPercent => IsExperimentalGameplaySettingsEnabled ? 1000 : 200;
+
+    public string GameplayControlRangeLabel => IsExperimentalGameplaySettingsEnabled
+        ? "Extended range: 10% to 1000% · 10% steps"
+        : "Standard range: 10% to 200% · 10% steps";
+
+    public string GameplayDraftStatus { get; private set; } = "Game default · no AEC gameplay PAK installed";
+
+    public bool HasGameplayPendingChanges =>
+        GameplaySimpleControls.Count > 0 &&
+        GameplayAdvancedControls.Count > 0 &&
+        CurrentGameplaySettings != GameplayState.Settings;
+
+    public bool CanReviewGameplay =>
+        HasGameplayPendingChanges &&
+        !GameplayReadiness.IsBlocked &&
+        GameplayState.Kind is not GameplayDifficultyStateKind.Unverified &&
+        !IsReviewingChanges &&
+        !IsAnyOperationRunning;
+
+    public bool CanResetGameplay =>
+        GameplayState.Kind == GameplayDifficultyStateKind.Active &&
+        !IsReviewingChanges &&
+        !IsAnyOperationRunning;
+
+    public bool CanEditGameplay =>
+        !GameplayReadiness.IsBlocked &&
+        GameplayState.Kind is not GameplayDifficultyStateKind.Unverified &&
+        !IsReviewingChanges &&
+        !IsAnyOperationRunning;
+
+    public string GameplayReviewButtonLabel => CurrentGameplaySettings.IsGameDefault
+        ? "Review removal"
+        : GameplayState.Kind == GameplayDifficultyStateKind.Active
+            ? "Review gameplay update"
+            : "Review gameplay mod";
+
+    public string HomeGraphicsSummary => HasGamePreset
+        ? $"{GamePresetName} · {CustomOverrideCount} custom change(s)"
+        : "Graphics settings will appear after game detection.";
+
+    public string HomeGameplayTitle => HasGameplayPendingChanges
+        ? "Gameplay changes ready"
+        : GameplayState.Kind switch
+        {
+            GameplayDifficultyStateKind.Active => "Custom gameplay difficulty active",
+            GameplayDifficultyStateKind.GameDefault => "Game-default difficulty",
+            _ => "Gameplay difficulty needs attention",
+        };
+
+    public string HomeGameplaySummary => HasGameplayPendingChanges
+        ? FormatGameplayHomeSummary(CurrentGameplaySettings, "Review the changes before they are applied.")
+        : GameplayState.Kind == GameplayDifficultyStateKind.Active
+            ? FormatGameplayHomeSummary(GameplayState.Settings, "Open Gameplay to review the values.")
+            : GameplayState.Kind == GameplayDifficultyStateKind.GameDefault
+                ? "No AEC gameplay PAK is installed."
+                : GameplayState.Description;
+
+    public int ExternalPakCount => _snapshot?.PakFiles.Count(pak =>
+        pak.Classification is not PakClassification.BaseGame and not PakClassification.AecOwned) ?? 0;
+
+    public bool HasExternalPaks => ExternalPakCount > 0;
+
+    public string ExternalPakHelpText => ExternalPakCount == 1
+        ? "1 external PAK is preventing gameplay editing. AEC will not remove it; inspect or remove it manually from the game PAK folder."
+        : $"{ExternalPakCount} external PAKs are preventing gameplay editing. AEC will not remove them; inspect or remove them manually from the game PAK folder.";
+
+    public string? GamePakFolderPath => TryGetGamePakFolder(_snapshot?.Installation?.InstallDirectory);
+
+    public bool CanOpenGamePakFolder => HasExternalPaks && GamePakFolderPath is not null;
+
+    public string HomeTitle => IsBusy
+        ? "Checking Ancestors…"
+        : DetectionStatus switch
+        {
+            "Ancestors is ready" => "Ready to play",
+            "Scan failed" => "Attention required",
+            "Ancestors installation not detected" => "Game not found",
+            "Multiple Ancestors installations detected" => "Choose an Ancestors installation",
+            "Ancestors detected but not supported for editing" => "Unsupported game version",
+            "Ancestors detected with problems" => "Attention required",
+            _ => "Checking Ancestors…",
+        };
+
+    public string HomeSavesSummary => SaveManager is null
+        ? "Save games will appear after detection."
+        : SaveManager.HasSlots
+            ? $"{SaveManager.Slots.Count(slot => slot.HasSave)} save slot(s) · {SaveManager.BackupHealthSummary}"
+            : "No save slots found yet.";
+
+    public bool ShowProfilesView => IsProfilesView;
+
+    public bool ShowSettingsView => IsSettingsView;
+
+    public bool ShowDiagnosticsView => IsDiagnosticsView;
+
+    public bool IsHomeSectionActive => ShowHomeView;
+
+    public bool IsGraphicsSectionActive => ShowGraphicsView;
+
+    public bool IsSaveGamesSectionActive => ShowSaveGamesView;
+
+    public bool IsGameplaySectionActive => ShowGameplayView;
+
+    public bool IsProfilesSectionActive => ShowProfilesView;
+
+    public bool IsSettingsSectionActive => ShowSettingsView;
+
+    public bool IsDiagnosticsSectionActive => ShowDiagnosticsView;
+
+    public string PageContextLabel => IsProfilesView
+        ? "Profiles"
+        : IsDiagnosticsView
+            ? "Diagnostics"
+            : IsSettingsView
+                ? "Settings"
+            : IsHomeView
+                ? "Home"
+                : IsGameplayView
+                    ? "Gameplay"
+                    : IsSaveGamesView
+                        ? "Saves"
+                        : "Graphics";
+
+    public string SystemDiagnostics { get; }
+
+    public bool CanStageHardwareRecommendation =>
+        HardwareDiagnostics.Recommendation.CanStagePreset &&
+        !HasPendingChanges &&
+        !IsReviewingChanges &&
+        !IsAnyOperationRunning;
+
+    public bool CanRunDetailedHardwareDetection => !IsAnyOperationRunning;
+
+    public string DetailedHardwareActionLabel => IsDetailedHardwareDetectionRunning
+        ? "Checking hardware…"
+        : "Refresh hardware details";
+
+    public bool HasHardwareScanMessage => !string.IsNullOrWhiteSpace(HardwareScanMessage);
+
+    public bool CanShowHardwareScanAction =>
+        CanRunDetailedHardwareDetection;
+
+    public string OnboardingTitle => OnboardingStep switch
+    {
+        0 => "Welcome to Ancestors Enhanced",
+        1 => "Your game stays in control",
+        _ => "Choose your level of detail",
+    };
+
+    public string OnboardingDescription => OnboardingStep switch
+    {
+        0 => "AEC detects your installation first and only enables writing after a supported game context is verified.",
+        1 => "Graphics changes are staged, reviewed and backed up. Save games are not changed by graphics profiles or gameplay research.",
+        _ => "Simple keeps common controls focused. Advanced exposes the verified technical controls when you want them.",
+    };
+
+    public string OnboardingActionLabel => OnboardingStep < 2 ? "Next" : "Get started";
+
+    public bool HasUserProfiles => UserProfiles.Count > 0;
+
+    public bool HasImportedProfile => ImportedProfile is not null;
+
+    public bool HasProfilePendingDeletion => ProfilePendingDeletion is not null;
+
+    public bool HasProfilePendingRename => ProfilePendingRename is not null;
+
+    public bool CanConfirmProfileRename =>
+        ProfilePendingRename is not null && !IsAnyOperationRunning && !string.IsNullOrWhiteSpace(RenamedProfileName);
+
+    public bool HasProfileComparison => ProfileComparisonRows.Count > 0;
+
+    public bool HasCustomProfileSettings => _editors.Values.Any(editor =>
+        editor.TryGetCustomProfileValue(out _));
+
+    public bool CanSaveProfile =>
+        !IsAnyOperationRunning &&
+        HasCustomProfileSettings &&
+        !string.IsNullOrWhiteSpace(NewProfileName);
 
     public bool IsSaveManagerAvailable => SaveManager is not null;
 
     public bool IsSaveManagerUnavailable => SaveManager is null;
+
+    /// <summary>Retries are useful only after game identity was verified and save-manager creation failed.</summary>
+    public bool CanRetrySaveManagerInitialization => _verifiedGameContext is not null && SaveManager is null;
+
+    public bool ShouldKeepRunningInTrayOnClose =>
+        SaveManager is { IsWatchdogEnabled: true, KeepRunningInTrayWhenClosing: true };
 
     public bool HasPendingChanges => PendingChanges.Count > 0;
 
@@ -160,17 +601,39 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public bool CanRemoveToolChanges =>
         HasRemovableToolChanges && !HasPendingChanges && !IsReviewingChanges && !IsAnyOperationRunning;
 
-    public bool ShowPendingActions => HasPendingChanges && !IsReviewingChanges;
+    public bool ShowPendingActions => !ShowGameplayView && HasPendingChanges && !IsReviewingChanges;
+
+    public bool ShowGameplayPendingActions => ShowGameplayView && HasGameplayPendingChanges && !IsReviewingChanges;
+
+    public bool CanDiscardGameplayDraft => HasGameplayPendingChanges && !IsReviewingChanges && !IsAnyOperationRunning;
 
     public bool ShowReviewActions => IsReviewingChanges;
 
-    public bool ShowBottomBar => ShowGraphicsView || HasPendingChanges || IsReviewingChanges;
+    public bool ShowBottomBar => ShowGraphicsView || ShowGameplayView || HasPendingChanges || HasGameplayPendingChanges || IsReviewingChanges;
 
     public bool IsAnyOperationRunning =>
         IsBusy ||
+        IsDetailedHardwareDetectionRunning ||
         _mutationGate.IsBusy ||
-        (SaveManager?.IsBusy ?? false) ||
-        (Cheat?.IsBusy ?? false);
+        (SaveManager?.IsBusy ?? false);
+
+    partial void OnIsDetailedHardwareDetectionRunningChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsAnyOperationRunning));
+        OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+        OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRemoveToolChanges));
+        OnPropertyChanged(nameof(CanEditSettings));
+        OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(CanReviewGameplay));
+        OnPropertyChanged(nameof(CanResetGameplay));
+        OnPropertyChanged(nameof(CanEditGameplay));
+        OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+        OnPropertyChanged(nameof(DetailedHardwareActionLabel));
+        OnPropertyChanged(nameof(HomeTitle));
+    }
     public bool CanEditSettings => !IsReviewingChanges && !IsAnyOperationRunning;
 
     public bool CanRestoreGameDefaults =>
@@ -180,6 +643,46 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _editors.Values.Any(editor => editor.HasActiveOverride);
 
     public bool IsSimpleMode => !IsAdvancedMode;
+
+    public bool IsAllGraphicsFilter => GraphicsFilter == "All";
+
+    public bool IsModifiedGraphicsFilter => GraphicsFilter == "Modified";
+
+    public IReadOnlyList<BuiltInGraphicsPresetViewModel> PrimaryGraphicsPresets =>
+        BuiltInGraphicsPresets.Where(preset => preset.Name is not "Ultra Setup" and not "Low VRAM Setup").ToArray();
+
+    public IReadOnlyList<BuiltInGraphicsPresetViewModel> AdditionalGraphicsTweaks =>
+        BuiltInGraphicsPresets.Where(preset => preset.Name is "Ultra Setup" or "Low VRAM Setup").ToArray();
+
+    public IReadOnlyList<BuiltInGraphicsPresetViewModel> HardwareGraphicsPresets =>
+        BuiltInGraphicsPresets.Where(preset => preset.IsHardwareSetup).ToArray();
+
+    public IReadOnlyList<BuiltInGraphicsPresetViewModel> ImageStyleGraphicsPresets =>
+        BuiltInGraphicsPresets.Where(preset => !preset.IsHardwareSetup).ToArray();
+
+    public bool IsGameDefaultsGraphicsFilter => GraphicsFilter == "Game defaults";
+
+    public string GraphicsPresetsToggleLabel => IsGraphicsPresetsExpanded ? "Hide presets" : "Show presets";
+
+    public bool HasGraphicsPresetPreview => GraphicsPresetPreview is not null;
+
+    public string GraphicsPresetPreviewTitle => GraphicsPresetPreview is null
+        ? string.Empty
+        : $"{GraphicsPresetPreview.DisplayName} preview";
+
+    public string GraphicsPresetPreviewSummary => GraphicsPresetPreview is null
+        ? string.Empty
+        : $"This will stage {GraphicsPresetPreview.Profile.Graphics.Count} listed setting(s) for review. Nothing is written yet.";
+
+    public IReadOnlyList<GraphicsPresetPreviewValueViewModel> GraphicsPresetPreviewValues =>
+        GraphicsPresetPreview?.Profile.Graphics
+            .Take(6)
+            .Select(setting => new GraphicsPresetPreviewValueViewModel(
+                DisplayNameForPresetKey(setting.Key),
+                DisplayValueForPresetSetting(setting.Key, setting.Value)))
+            .ToArray() ?? [];
+
+    public string GameplayPresetsToggleLabel => IsGameplayPresetsExpanded ? "Hide presets" : "Show presets";
 
     public bool HasNoSearchResults =>
         IsAdvancedMode &&
@@ -199,19 +702,25 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public string ReviewSummary => _reviewIsToolChangeRemoval
-        ? ReviewChanges.Count == 1
-            ? "Remove tool changes from 1 file"
-            : $"Remove tool changes from {ReviewChanges.Count} files"
+    public string ReviewSummary => _reviewIsGameplay
+        ? _reviewRemovesGameplayPak
+            ? "Restore game-default difficulty"
+            : "Review gameplay difficulty"
+        : _reviewIsToolChangeRemoval
+        ? "Remove Configurator changes"
         : ReviewChanges.Count == 1
         ? "Review 1 change before writing"
         : $"Review {ReviewChanges.Count} changes before writing";
 
-    public string ReviewDescription => _reviewIsToolChangeRemoval
-        ? "Only unchanged files managed by this tool will be returned to their captured original state"
+    public string ReviewDescription => _reviewIsGameplay
+        ? "AEC will change only its verified gameplay PAK and ownership record. Save games are not edited. Runtime behavior is still marked as awaiting in-game verification."
+        : _reviewIsToolChangeRemoval
+        ? "The listed files will be restored to their state before you first used this Configurator. Save games and other mods are not changed"
         : "Check the old and new values before anything is written";
 
-    public string ConfirmReviewLabel => _reviewIsToolChangeRemoval ? "Confirm removal" : "Confirm & Apply";
+    public string ConfirmReviewLabel => _reviewIsGameplay
+        ? _reviewRemovesGameplayPak ? "Remove gameplay PAK" : "Confirm & Install"
+        : _reviewIsToolChangeRemoval ? "Remove Configurator changes" : "Confirm & Apply";
 
     public string PendingSummary => PendingChanges.Count switch
     {
@@ -225,10 +734,33 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         PendingChanges.Take(3).Select(change => $"{change.Name}: {change.DesiredValue}")) +
         (PendingChanges.Count > 3 ? $" · +{PendingChanges.Count - 3} more" : string.Empty);
 
+    public string GameplayPendingDetails
+    {
+        get
+        {
+            if (!HasGameplayPendingChanges) return string.Empty;
+            var diffs = new List<string>();
+            foreach (GameplayDifficultyControlViewModel control in GameplaySimpleControls.Concat(GameplayAdvancedControls))
+            {
+                if (control.MultiplierPercent != 100)
+                {
+                    diffs.Add($"{control.Name}: {control.MultiplierPercent}%");
+                }
+            }
+            if (IncludeClanInGameplayPatch != GameplayState.Settings.IncludeClan)
+            {
+                diffs.Add(IncludeClanInGameplayPatch ? "Include Clan: Yes" : "Include Clan: No");
+            }
+            if (diffs.Count == 0) return "No custom changes";
+            return string.Join(" · ", diffs.Take(3)) + (diffs.Count > 3 ? $" · +{diffs.Count - 3} more" : string.Empty);
+        }
+    }
+
     public int SettingCount => Settings.Count;
 
     public async Task InitializeAsync()
     {
+        RefreshProfileLibrary();
         if (await RefreshFromDiskAsync())
         {
             ShowMessage(
@@ -268,58 +800,962 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
     [RelayCommand]
     private void ShowAdvanced() => IsAdvancedMode = true;
+
+    [RelayCommand]
+    private void ToggleGraphicsPresets() => IsGraphicsPresetsExpanded = !IsGraphicsPresetsExpanded;
+
+    [RelayCommand]
+    private void PreviewBuiltInGraphicsPreset(BuiltInGraphicsPresetViewModel? preset) =>
+        GraphicsPresetPreview = preset;
+
+    [RelayCommand]
+    private void ShowAllGraphics() => GraphicsFilter = "All";
+
+    [RelayCommand]
+    private void ShowModifiedGraphics() => GraphicsFilter = "Modified";
+
+    [RelayCommand]
+    private void ShowGameDefaultsGraphics() => GraphicsFilter = "Game defaults";
+
+    [RelayCommand]
+    private void LoadBuiltInGraphicsPreset(BuiltInGraphicsPresetViewModel? preset)
+    {
+        if (preset is not null)
+        {
+            LoadBuiltInTweakForReview(preset.Profile);
+        }
+    }
+
+    private string DisplayNameForPresetKey(string key) =>
+        _allFeatureGroups.SelectMany(group => group.Settings)
+            .FirstOrDefault(setting => string.Equals(setting.TechnicalKey, key, StringComparison.OrdinalIgnoreCase))?.Name
+        ?? key switch
+        {
+            SystemSaveSettingKeys.ViewDistanceQuality => "View distance",
+            SystemSaveSettingKeys.PostProcessingQuality => "Post-processing",
+            SystemSaveSettingKeys.ShadowQuality => "Shadows",
+            SystemSaveSettingKeys.TextureQuality => "Texture quality",
+            SystemSaveSettingKeys.VisualEffectsQuality => "Visual effects",
+            SystemSaveSettingKeys.FoliageQuality => "Foliage quality",
+            "r.MaxAnisotropy" => "Texture filtering",
+            "r.Streaming.PoolSize" => "Texture memory budget",
+            "r.Streaming.LimitPoolSizeToVRAM" => "Limit texture memory to VRAM",
+            "r.PostProcessAAQuality" => "Anti-aliasing",
+            "r.ViewDistanceScale" => "View distance",
+            "r.SSR.Quality" => "Screen-space reflections",
+            "r.Shadow.MaxResolution" => "Shadow resolution",
+            "foliage.DensityScale" => "Foliage density",
+            "grass.DensityScale" => "Grass density",
+            "r.MotionBlurQuality" => "Motion blur",
+            "r.DepthOfFieldQuality" => "Depth of field",
+            "r.SceneColorFringeQuality" => "Chromatic aberration",
+            "r.Tonemapper.Sharpen" => "Image sharpness",
+            "mod.VignettePercent" => "Vignette",
+            "r.BloomQuality" => "Bloom",
+            "r.VolumetricFog" => "Volumetric fog",
+            _ => key,
+        };
+
+    private string DisplayValueForPresetSetting(string key, string value)
+    {
+        SettingEditorViewModel? editor = _editors.Values.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, key, StringComparison.OrdinalIgnoreCase));
+        return editor?.FormatValue(value) ?? value switch
+        {
+            "0" => "Off",
+            "1" => "On",
+            _ => value,
+        };
+    }
+
+    [RelayCommand]
+    private void ResetGraphicsGroup(FeatureGroupRowViewModel? row)
+    {
+        if (row is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        foreach (FeatureSettingSnapshot setting in _allFeatureGroups
+                     .FirstOrDefault(group => group.Id == row.Id)?.Settings ?? [])
+        {
+            if (_editors.GetValueOrDefault(setting.Id) is { ShowOverrideToggle: true } editor)
+            {
+                editor.UseGameDefault();
+            }
+        }
+    }
     [RelayCommand]
     private void ShowSaveGames()
     {
-        IsCheatView = false;
+        IsHomeView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsSettingsView = false;
+        IsDiagnosticsView = false;
         IsSaveGamesView = true;
         UpdateViewVisibility();
     }
 
     [RelayCommand]
-    private void ShowCheat()
+    private void ShowGameplay()
     {
+        IsHomeView = false;
         IsSaveGamesView = false;
-        IsCheatView = true;
+        IsProfilesView = false;
+        IsSettingsView = false;
+        IsDiagnosticsView = false;
+        IsGameplayView = true;
         UpdateViewVisibility();
+    }
+
+    [RelayCommand]
+    private void OpenGamePakFolder()
+    {
+        string? pakFolder = GamePakFolderPath;
+        if (pakFolder is null || !HasExternalPaks)
+        {
+            return;
+        }
+
+        if (_directoryOpener(pakFolder))
+        {
+            ShowMessage("Opened the game PAK folder. AEC will not remove external files for you.", "#B4D941");
+        }
+        else
+        {
+            ShowMessage("The game PAK folder could not be opened. Check that the game installation still exists.", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void ShowGameplaySimple() => IsGameplayAdvancedMode = false;
+
+    [RelayCommand]
+    private void ShowGameplayAdvanced()
+    {
+        IsGameplayAdvancedMode = true;
+        GameplayAdvancedTab = "survival";
+    }
+
+    [RelayCommand]
+    private void ShowGameplaySurvivalTab() => GameplayAdvancedTab = "survival";
+
+    [RelayCommand]
+    private void ShowGameplayRecoveryTab() => GameplayAdvancedTab = "recovery";
+
+    [RelayCommand]
+    private void ShowGameplayResearchTab() => GameplayAdvancedTab = "research";
+
+    [RelayCommand]
+    private void ToggleGameplayPresets() => IsGameplayPresetsExpanded = !IsGameplayPresetsExpanded;
+
+    [RelayCommand]
+    private void SelectGameplayPreset(GameplayDifficultyPresetViewModel? preset)
+    {
+        if (preset is null || !CanEditGameplay)
+        {
+            return;
+        }
+
+        foreach (GameplayDifficultyControlViewModel control in GameplaySimpleControls)
+        {
+            control.MultiplierPercent = control.HigherIsHarder
+                ? preset.MultiplierPercent
+                : Math.Max(10, 200 - preset.MultiplierPercent);
+        }
+
+        foreach (GameplayDifficultyControlViewModel control in GameplayAdvancedControls)
+        {
+            control.MultiplierPercent = 100;
+        }
+
+        SetGameplayDraftStatus(preset.Name);
+    }
+
+    [RelayCommand]
+    private void DiscardGameplayChanges()
+    {
+        if (!CanDiscardGameplayDraft)
+        {
+            return;
+        }
+
+        ApplyGameplaySettingsToControls(GameplayState.Settings);
+        SetGameplayDraftStatus("Game default");
+    }
+
+    [RelayCommand]
+    private void ResetGameplay()
+    {
+        if (!CanResetGameplay)
+        {
+            return;
+        }
+
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.MultiplierPercent = 100;
+        }
+
+        SetGameplayDraftStatus("Game default");
+        OpenGameplayReview();
+    }
+
+    [RelayCommand]
+    private void OpenGameplayReview()
+    {
+        if (_snapshot is null || !CanReviewGameplay)
+        {
+            return;
+        }
+
+        try
+        {
+            _reviewPlan = _gameplayEditor.CreatePlan(_snapshot, CurrentGameplaySettings);
+            _reviewIsGameplay = true;
+            _reviewIsToolChangeRemoval = false;
+            _reviewRemovesGameplayPak = CurrentGameplaySettings.IsGameDefault;
+            ReviewChanges = _reviewPlan.Changes
+                .Select(change => new ChangeReviewRowViewModel(
+                    change.DisplayName,
+                    $"{change.FileName} · {change.Key}",
+                    change.Before ?? "Game default",
+                    change.After ?? "Game default"))
+                .ToArray();
+            OnPropertyChanged(nameof(ReviewSummary));
+            OnPropertyChanged(nameof(ReviewDescription));
+            OnPropertyChanged(nameof(ConfirmReviewLabel));
+            IsReviewingChanges = true;
+            ShowMessage("Check every gameplay value, then confirm the PAK operation.", "#FF5A00");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage(exception.Message, "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void ShowProfiles()
+    {
+        IsHomeView = false;
+        IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsSettingsView = false;
+        IsDiagnosticsView = false;
+        IsProfilesView = true;
+        RefreshProfileLibrary();
+        UpdateViewVisibility();
+    }
+
+    [RelayCommand]
+    private void ShowSettings()
+    {
+        IsHomeView = false;
+        IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsDiagnosticsView = false;
+        IsSettingsView = true;
+        UpdateViewVisibility();
+    }
+
+    [RelayCommand]
+    private void ShowDiagnostics()
+    {
+        IsHomeView = false;
+        IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsSettingsView = false;
+        IsDiagnosticsView = true;
+        UpdateViewVisibility();
+    }
+
+    [RelayCommand]
+    private void AdvanceOnboarding()
+    {
+        if (OnboardingStep < 2)
+        {
+            OnboardingStep++;
+            OnPropertyChanged(nameof(OnboardingTitle));
+            OnPropertyChanged(nameof(OnboardingDescription));
+            OnPropertyChanged(nameof(OnboardingActionLabel));
+            return;
+        }
+
+        IsOnboardingVisible = false;
+        _onboardingCompleted?.Invoke();
+    }
+
+    [RelayCommand]
+    private void SkipOnboarding()
+    {
+        IsOnboardingVisible = false;
+        _onboardingCompleted?.Invoke();
+    }
+
+    public string CreateDiagnosticsReport() => DiagnosticsReportBuilder.Build(
+        ProductName,
+        Phase,
+        DetectionStatus,
+        InstallationDetails,
+        InstallationPath,
+        UserDataPath,
+        BinarySettingsPath,
+        BinarySettingsStatus,
+        SystemDiagnostics,
+        HardwareDiagnostics,
+        ConfigurationFiles,
+        PakFiles,
+        Notices);
+
+    [RelayCommand]
+    private void LoadHardwareRecommendation()
+    {
+        BuiltInGraphicsPresetViewModel? preset = BuiltInGraphicsPresets.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, HardwareDiagnostics.Recommendation.PresetName, StringComparison.Ordinal));
+        if (preset is null)
+        {
+            return;
+        }
+
+        if (HasPendingChanges || IsReviewingChanges)
+        {
+            ShowMessage("Apply or discard current changes before using a hardware recommendation.", "#D6BC84");
+            return;
+        }
+
+        if (CanStageHardwareRecommendation)
+        {
+            LoadBuiltInGraphicsPreset(preset);
+            if (HasPendingChanges)
+            {
+                OpenReview();
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task RunDetailedHardwareDetectionAsync()
+    {
+        if (!CanRunDetailedHardwareDetection)
+        {
+            return;
+        }
+
+        IsDetailedHardwareDetectionRunning = true;
+        try
+        {
+            HardwareScanMessage = "Checking hardware details…";
+            ShowMessage(HardwareScanMessage, "#D6BC84");
+            HardwareSnapshot detailedSnapshot = await Task.Run(() => _hardwareProbe.Inspect(includeDetailedGraphics: true));
+            HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(detailedSnapshot);
+            _detailedHardwareSnapshot = detailedSnapshot;
+            HasAcknowledgedDetailedHardwareScan = true;
+            _detailedHardwareScanCompleted?.Invoke(detailedSnapshot);
+            HardwareScanMessage = HardwareDiagnostics.Recommendation.CanStagePreset
+                ? "Hardware details checked. AEC can now offer a conservative graphics recommendation."
+                : "Hardware details checked. " + HardwareDiagnostics.Recommendation.Description;
+            ShowMessage(
+                HardwareScanMessage,
+                HardwareDiagnostics.Recommendation.CanStagePreset ? "#B4D941" : "#D6BC84");
+        }
+        finally
+        {
+            IsDetailedHardwareDetectionRunning = false;
+            OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+            OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+            OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        }
+    }
+
+    [RelayCommand]
+    private void StartCreatingProfile()
+    {
+        if (IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        IsCreatingProfile = true;
+        NewProfileName = "";
+        NewProfileDescription = "";
+    }
+
+    [RelayCommand]
+    private void CreateProfileFromGraphics()
+    {
+        ShowProfiles();
+        StartCreatingProfile();
+    }
+
+    [RelayCommand]
+    private void CancelCreatingProfile() => IsCreatingProfile = false;
+
+    [RelayCommand]
+    private void CreateProfile()
+    {
+        if (IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        var graphics = new List<ProfileSetting>();
+        foreach ((string id, SettingEditorViewModel editor) in _editors)
+        {
+            if (!EditableSettingsCatalog.IsDefined(editor.Key))
+            {
+                ShowMessage($"{FindSettingName(id)} cannot be included because this setting is not supported by profiles yet.", "#D6BC84");
+                return;
+            }
+            if (editor.TryGetCustomProfileValue(out string? value))
+            {
+                graphics.Add(new ProfileSetting(editor.Key, value!));
+            }
+        }
+        if (graphics.Count == 0)
+        {
+            ShowMessage("There are no custom graphics values to save yet.", "#D6BC84");
+            return;
+        }
+
+        try
+        {
+            string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+            var profile = new UserProfile(
+                UserProfile.CurrentSchemaVersion,
+                NewProfileName.Trim(),
+                string.IsNullOrWhiteSpace(NewProfileDescription) ? null : NewProfileDescription.Trim(),
+                DateTimeOffset.UtcNow,
+                version,
+                graphics,
+                [],
+                []);
+            StoredUserProfile saved = _profileLibrary.Save(profile);
+            RefreshProfileLibrary();
+            IsCreatingProfile = false;
+            ShowMessage($"Saved profile: {saved.Profile.Name}", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The profile was not saved: {exception.Message}", "#E04D42");
+        }
+    }
+
+    public void ImportProfile(string path)
+    {
+        if (IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            UserProfile profile = _profileLibrary.ReadExternal(path);
+            ImportedProfile = new ImportedProfileViewModel(profile, Path.GetFileName(path));
+            ShowMessage("Profile checked. Choose whether to add it to your library or load it for review.", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The profile was not imported: {exception.Message}", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void AddImportedProfileToLibrary()
+    {
+        if (ImportedProfile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            StoredUserProfile saved = _profileLibrary.Save(ImportedProfile.Profile);
+            RefreshProfileLibrary();
+            ImportedProfile = null;
+            ShowMessage($"Added to My profiles: {saved.Profile.Name}", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The profile was not saved: {exception.Message}", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void LoadImportedProfile()
+    {
+        if (ImportedProfile is not null)
+        {
+            LoadProfileForReview(ImportedProfile.Profile);
+        }
+    }
+
+    [RelayCommand]
+    private void LoadProfile(UserProfileRowViewModel? profile)
+    {
+        if (profile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            LoadProfileForReview(_profileLibrary.Read(profile.Id));
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The saved profile could not be loaded: {exception.Message}", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void CompareProfile(UserProfileRowViewModel? profile)
+    {
+        if (profile is null)
+        {
+            return;
+        }
+
+        try
+        {
+            UserProfile source = _profileLibrary.Read(profile.Id);
+            ProfileComparisonName = source.Name;
+            var profileSettings = GetLoadableProfileSettings(source)
+                .ToDictionary(setting => setting.Key, StringComparer.OrdinalIgnoreCase);
+            var resetKeys = _editors.Values
+                .Where(editor => editor.ShowOverrideToggle && editor.HasCurrentOverride && !profileSettings.ContainsKey(editor.Key))
+                .Select(editor => editor.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            ProfileComparisonRows = profileSettings.Keys
+                .Concat(resetKeys)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(key =>
+            {
+                FeatureSettingSnapshot? current = _allFeatureGroups
+                    .SelectMany(group => group.Settings)
+                    .FirstOrDefault(candidate => string.Equals(candidate.TechnicalKey, key, StringComparison.OrdinalIgnoreCase));
+                TryGetEditorByTechnicalKey(key, out SettingEditorViewModel? editor);
+                return new ProfileComparisonRowViewModel(
+                    current?.Name ?? key,
+                    editor is null
+                        ? "Not available for this game setup"
+                        : editor.FormatValue(editor.GetProfileComparisonValue()),
+                    profileSettings.TryGetValue(key, out ProfileSetting? setting)
+                        ? editor?.FormatValue(setting.Value) ?? setting.Value
+                        : "→ Game default");
+            }).ToArray();
+            OnPropertyChanged(nameof(HasProfileComparison));
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The saved profile could not be compared: {exception.Message}", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void ClearProfileComparison()
+    {
+        ProfileComparisonName = null;
+        ProfileComparisonRows = [];
+        OnPropertyChanged(nameof(HasProfileComparison));
+    }
+
+    public UserProfile? GetProfileForExport(string id)
+    {
+        try
+        {
+            return _profileLibrary.Read(id);
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The saved profile could not be exported: {exception.Message}", "#E04D42");
+            return null;
+        }
+    }
+
+    public void ReportProfileFileError(string action) =>
+        ShowMessage($"The profile {action} could not be completed.", "#E04D42");
+
+    public void ReportDiagnosticsCopyError() =>
+        ShowMessage("Diagnostics could not be copied to the clipboard.", "#E04D42");
+
+    public void ReportExitBlockedWhileOperationRuns() =>
+        ShowMessage("Wait for the current file operation to finish before exiting.", "#D6BC84");
+
+    [RelayCommand]
+    private void RequestProfileDeletion(UserProfileRowViewModel? profile)
+    {
+        if (profile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        ProfilePendingDeletion = profile;
+    }
+
+    [RelayCommand]
+    private void CancelProfileDeletion() => ProfilePendingDeletion = null;
+
+    [RelayCommand]
+    private void ConfirmProfileDeletion()
+    {
+        UserProfileRowViewModel? profile = ProfilePendingDeletion;
+        if (profile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            _profileLibrary.Delete(profile.Id);
+            ProfilePendingDeletion = null;
+            RefreshProfileLibrary();
+            ShowMessage($"Deleted profile: {profile.Name}", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The saved profile could not be deleted: {exception.Message}", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void DuplicateProfile(UserProfileRowViewModel? profile)
+    {
+        if (profile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            UserProfile duplicate = profile.Profile with
+            {
+                Name = profile.Name + " copy",
+                CreatedAtUtc = DateTimeOffset.UtcNow,
+            };
+            StoredUserProfile saved = _profileLibrary.Save(duplicate);
+            RefreshProfileLibrary();
+            ShowMessage($"Created copy: {saved.Profile.Name}", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The profile could not be duplicated: {exception.Message}", "#E04D42");
+        }
+    }
+
+    [RelayCommand]
+    private void RequestProfileRename(UserProfileRowViewModel? profile)
+    {
+        if (profile is null || IsAnyOperationRunning)
+        {
+            return;
+        }
+
+        ProfilePendingRename = profile;
+        RenamedProfileName = profile.Name;
+    }
+
+    [RelayCommand]
+    private void CancelProfileRename()
+    {
+        ProfilePendingRename = null;
+        RenamedProfileName = "";
+    }
+
+    [RelayCommand]
+    private void ConfirmProfileRename()
+    {
+        UserProfileRowViewModel? profile = ProfilePendingRename;
+        if (profile is null || !CanConfirmProfileRename)
+        {
+            return;
+        }
+
+        try
+        {
+            UserProfile renamed = profile.Profile with { Name = RenamedProfileName.Trim() };
+            StoredUserProfile saved = _profileLibrary.Save(renamed);
+            try
+            {
+                _profileLibrary.Delete(profile.Id);
+            }
+            catch (Exception exception) when (IsExpectedUserOperationException(exception))
+            {
+                RefreshProfileLibrary();
+                ProfilePendingRename = null;
+                ShowMessage($"Created renamed copy {saved.Profile.Name}, but kept the original: {exception.Message}", "#D6BC84");
+                return;
+            }
+
+            RefreshProfileLibrary();
+            ProfilePendingRename = null;
+            RenamedProfileName = "";
+            ShowMessage($"Renamed profile: {saved.Profile.Name}", "#B4D941");
+        }
+        catch (Exception exception) when (IsExpectedUserOperationException(exception))
+        {
+            ShowMessage($"The profile could not be renamed: {exception.Message}", "#E04D42");
+        }
     }
 
     private void OnChildPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(SaveManagerViewModel.IsBusy) ||
-            e.PropertyName == nameof(CheatViewModel.IsBusy))
+        if (e.PropertyName == nameof(SaveManagerViewModel.IsBusy))
         {
             NotifyMutationAvailability();
         }
 
-        if (sender is CheatViewModel cheat &&
-            e.PropertyName == nameof(CheatViewModel.IsGameRunning) &&
-            SaveManager is not null)
+        if (e.PropertyName is nameof(SaveManagerViewModel.Slots) or nameof(SaveManagerViewModel.BackupHealthSummary))
         {
-            SaveManager.IsGameRunning = cheat.IsGameRunning;
-        }
-
-        if (sender is SaveManagerViewModel saves &&
-            e.PropertyName == nameof(SaveManagerViewModel.Slots) &&
-            Cheat is not null)
-        {
-            Cheat.UpdateSlotAvailability(saves.Slots);
+            OnPropertyChanged(nameof(HomeSavesSummary));
         }
     }
     private void UpdateViewVisibility()
     {
+        CloseReview();
+        OnPropertyChanged(nameof(ShowHomeView));
         OnPropertyChanged(nameof(ShowGraphicsView));
         OnPropertyChanged(nameof(ShowSaveGamesView));
-        OnPropertyChanged(nameof(ShowCheatView));
+        OnPropertyChanged(nameof(ShowGameplayView));
+        OnPropertyChanged(nameof(ShowProfilesView));
+        OnPropertyChanged(nameof(ShowSettingsView));
+        OnPropertyChanged(nameof(ShowDiagnosticsView));
+        OnPropertyChanged(nameof(IsHomeSectionActive));
+        OnPropertyChanged(nameof(IsGraphicsSectionActive));
+        OnPropertyChanged(nameof(IsSaveGamesSectionActive));
+        OnPropertyChanged(nameof(IsGameplaySectionActive));
+        OnPropertyChanged(nameof(IsProfilesSectionActive));
+        OnPropertyChanged(nameof(IsSettingsSectionActive));
+        OnPropertyChanged(nameof(IsDiagnosticsSectionActive));
+        OnPropertyChanged(nameof(PageContextLabel));
+        OnPropertyChanged(nameof(ShowBottomBar));
+        OnPropertyChanged(nameof(ShowPendingActions));
+        OnPropertyChanged(nameof(ShowGameplayPendingActions));
     }
 
     [RelayCommand]
     private void ShowGraphics()
     {
-        IsCheatView = false;
+        IsHomeView = false;
         IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsSettingsView = false;
+        IsDiagnosticsView = false;
         UpdateViewVisibility();
     }
+
+    [RelayCommand]
+    private void ShowHome()
+    {
+        IsSaveGamesView = false;
+        IsGameplayView = false;
+        IsProfilesView = false;
+        IsSettingsView = false;
+        IsDiagnosticsView = false;
+        IsHomeView = true;
+        UpdateViewVisibility();
+    }
+
+    partial void OnIsHomeViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowHomeView));
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnIsGameplayViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowGameplayView));
+        OnPropertyChanged(nameof(ShowProfilesView));
+        OnPropertyChanged(nameof(ShowSettingsView));
+        OnPropertyChanged(nameof(ShowDiagnosticsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnIsGameplayAdvancedModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsGameplaySimpleMode));
+        OnPropertyChanged(nameof(ShowGameplayCoreControls));
+    }
+
+    partial void OnGameplayAdvancedTabChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsGameplaySurvivalTab));
+        OnPropertyChanged(nameof(IsGameplayRecoveryTab));
+        OnPropertyChanged(nameof(IsGameplayResearchTab));
+        OnPropertyChanged(nameof(ShowGameplayCoreControls));
+    }
+
+    partial void OnIsProfilesViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowProfilesView));
+        OnPropertyChanged(nameof(ShowSettingsView));
+        OnPropertyChanged(nameof(ShowDiagnosticsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnIsSettingsViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowSettingsView));
+        OnPropertyChanged(nameof(ShowDiagnosticsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnIsDiagnosticsViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowGraphicsView));
+        OnPropertyChanged(nameof(ShowDiagnosticsView));
+        OnPropertyChanged(nameof(ShowBottomBar));
+    }
+
+    partial void OnIsHighContrastEnabledChanged(bool value)
+    {
+        _highContrastChanged?.Invoke(value);
+    }
+
+    [RelayCommand]
+    private void ToggleHighContrast() => IsHighContrastEnabled = !IsHighContrastEnabled;
+
+    partial void OnIsDiscordRichPresenceEnabledChanged(bool value) =>
+        _discordRichPresenceChanged?.Invoke(value);
+
+    public void SetDiscordRichPresenceStatus(string status) =>
+        DiscordRichPresenceStatus = string.IsNullOrWhiteSpace(status) ? "Unavailable" : status;
+
+    public void RefreshThemeBindings()
+    {
+        OnPropertyChanged(nameof(DetectionBrush));
+        OnPropertyChanged(nameof(OperationBrush));
+        SaveManager?.RefreshThemeBindings();
+        GameplayReadiness = new GameplayReadinessViewModel(
+            GameplayReadiness.Title,
+            GameplayReadiness.Description,
+            GameplayReadiness.AccentColor,
+            GameplayReadiness.IsBlocked);
+        ApplyViewMode();
+    }
+
+    partial void OnApplicationPreferencesWarningChanged(string? value) =>
+        OnPropertyChanged(nameof(HasApplicationPreferencesWarning));
+
+    public bool HasApplicationPreferencesWarning => !string.IsNullOrWhiteSpace(ApplicationPreferencesWarning);
+
+    [RelayCommand]
+    private void ResetApplicationPreferences()
+    {
+        if (!HasApplicationPreferencesWarning || _resetApplicationPreferences is null)
+        {
+            return;
+        }
+
+        string? archivedFileName = _resetApplicationPreferences();
+        if (string.IsNullOrWhiteSpace(archivedFileName))
+        {
+            ShowMessage("Application preferences could not be reset. The original file was kept.", "#E04D42");
+            return;
+        }
+
+        ApplicationPreferencesWarning = null;
+        IsHighContrastEnabled = false;
+        IsDiscordRichPresenceEnabled = false;
+        IsExperimentalGraphicsSettingsEnabled = false;
+        IsExperimentalGameplaySettingsEnabled = false;
+        HasAcknowledgedDetailedHardwareScan = false;
+        _detailedHardwareSnapshot = null;
+        IsOnboardingVisible = true;
+        OnboardingStep = 0;
+        ShowMessage($"Application preferences were reset. The unreadable file was kept as {archivedFileName}.", "#B4D941");
+    }
+
+    partial void OnIsExperimentalGraphicsSettingsEnabledChanged(bool value)
+    {
+        _experimentalGraphicsSettingsChanged?.Invoke(value);
+        if (!value)
+        {
+            foreach ((string id, SettingEditorViewModel editor) in _editors)
+            {
+                if (SettingDefinitionCatalog.IsExperimental(id) && editor.HasChanges)
+                {
+                    editor.Reset();
+                }
+            }
+
+            CloseReview();
+            UpdatePendingChanges();
+        }
+
+        ApplyViewMode();
+    }
+
+    partial void OnIsExperimentalGameplaySettingsEnabledChanged(bool value)
+    {
+        _experimentalGameplaySettingsChanged?.Invoke(value);
+        NotifyGameplayRangeChanged();
+        UpdateGameplayControlRanges();
+    }
+
+    partial void OnIncludeClanInGameplayPatchChanged(bool value)
+    {
+        CloseReview();
+        NotifyGameplayStateChanged();
+    }
+
+    partial void OnIsGraphicsPresetsExpandedChanged(bool value) =>
+        OnPropertyChanged(nameof(GraphicsPresetsToggleLabel));
+
+    partial void OnIsGameplayPresetsExpandedChanged(bool value) =>
+        OnPropertyChanged(nameof(GameplayPresetsToggleLabel));
+
+    partial void OnHasAcknowledgedDetailedHardwareScanChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        OnPropertyChanged(nameof(DetailedHardwareActionLabel));
+    }
+
+    partial void OnHardwareScanMessageChanged(string value) =>
+        OnPropertyChanged(nameof(HasHardwareScanMessage));
+
+    partial void OnUserProfilesChanged(IReadOnlyList<UserProfileRowViewModel> value) =>
+        OnPropertyChanged(nameof(HasUserProfiles));
+
+    partial void OnImportedProfileChanged(ImportedProfileViewModel? value) =>
+        OnPropertyChanged(nameof(HasImportedProfile));
+
+    partial void OnProfilePendingDeletionChanging(UserProfileRowViewModel? value)
+    {
+        if (ProfilePendingDeletion is not null && !ReferenceEquals(ProfilePendingDeletion, value))
+        {
+            ProfilePendingDeletion.IsPendingDeletion = false;
+        }
+    }
+
+    partial void OnProfilePendingDeletionChanged(UserProfileRowViewModel? value)
+    {
+        if (value is not null)
+        {
+            value.IsPendingDeletion = true;
+        }
+
+        OnPropertyChanged(nameof(HasProfilePendingDeletion));
+    }
+
+    partial void OnProfilePendingRenameChanged(UserProfileRowViewModel? value)
+    {
+        OnPropertyChanged(nameof(HasProfilePendingRename));
+        OnPropertyChanged(nameof(CanConfirmProfileRename));
+    }
+
+    partial void OnNewProfileNameChanged(string value) =>
+        OnPropertyChanged(nameof(CanSaveProfile));
+
+    partial void OnRenamedProfileNameChanged(string value) =>
+        OnPropertyChanged(nameof(CanConfirmProfileRename));
 
     [RelayCommand]
     private void DiscardChanges()
@@ -378,8 +1814,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
                     $"{change.FileName} · {change.Key}",
-                    change.Before ?? "Game default",
-                    change.After ?? "Game default"))
+                    FormatReviewValue(change.Key, change.Before),
+                    FormatReviewValue(change.Key, change.After)))
                 .ToArray();
             IsReviewingChanges = true;
             ShowMessage("Check every value, then confirm the write.", "#FF5A00");
@@ -406,8 +1842,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 .Select(change => new ChangeReviewRowViewModel(
                     change.DisplayName,
                     $"{change.FileName} | {change.Key}",
-                    change.Before ?? "Game default",
-                    change.After ?? "Game default"))
+                    FormatReviewValue(change.Key, change.Before),
+                    FormatReviewValue(change.Key, change.After)))
                 .ToArray();
             OnPropertyChanged(nameof(ReviewSummary));
             OnPropertyChanged(nameof(ReviewDescription));
@@ -443,8 +1879,12 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         }
 
         bool isToolChangeRemoval = plan.IsToolChangeRemoval;
+        bool isGameplay = _reviewIsGameplay;
+        bool removesGameplayPak = _reviewRemovesGameplayPak;
         _reviewPlan = null;
         _reviewIsToolChangeRemoval = false;
+        _reviewIsGameplay = false;
+        _reviewRemovesGameplayPak = false;
         OnPropertyChanged(nameof(ReviewSummary));
         OnPropertyChanged(nameof(ReviewDescription));
         OnPropertyChanged(nameof(ConfirmReviewLabel));
@@ -452,12 +1892,16 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         ReviewChanges = [];
         IsBusy = true;
         ShowMessage(
-            isToolChangeRemoval ? "Removing verified tool changes..." : "Applying the reviewed changes...",
+            isGameplay
+                ? removesGameplayPak ? "Removing the verified AEC gameplay PAK..." : "Building and installing the reviewed gameplay PAK..."
+                : isToolChangeRemoval ? "Removing verified tool changes..." : "Applying the reviewed changes...",
             "#FF5A00");
         SettingsOperationResult result;
         try
         {
-            result = await Task.Run(() => _settingsEditor.Apply(plan));
+            result = await Task.Run(() => isGameplay
+                ? _gameplayEditor.Apply(plan)
+                : _settingsEditor.Apply(plan));
         }
         catch (Exception exception) when (IsExpectedUserOperationException(exception))
         {
@@ -547,14 +1991,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(ShowGraphicsView));
         OnPropertyChanged(nameof(ShowSaveGamesView));
-        OnPropertyChanged(nameof(ShowBottomBar));
-    }
-
-    partial void OnIsCheatViewChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ShowCheatView));
-        OnPropertyChanged(nameof(ShowGraphicsView));
-        OnPropertyChanged(nameof(ShowSaveGamesView));
+        OnPropertyChanged(nameof(ShowDiagnosticsView));
         OnPropertyChanged(nameof(ShowBottomBar));
     }
 
@@ -571,31 +2008,32 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(IsSaveManagerUnavailable));
     }
 
-    partial void OnCheatChanging(CheatViewModel? oldValue, CheatViewModel? newValue)
-    {
-        if (oldValue is not null) oldValue.PropertyChanged -= OnChildPropertyChanged;
-        if (newValue is not null) newValue.PropertyChanged += OnChildPropertyChanged;
-    }
-
-    partial void OnCheatChanged(CheatViewModel? value)
-    {
-        OnPropertyChanged(nameof(IsCheatAvailable));
-        OnPropertyChanged(nameof(IsCheatUnavailable));
-        OnPropertyChanged(nameof(IsAnyOperationRunning));
-    }
-
     private CancellationTokenSource? _searchDebounceSource;
     private Task? _searchDebounceTask;
 
     partial void OnSearchTextChanged(string value)
     {
         CancellationTokenSource? previous = _searchDebounceSource;
-        previous?.Cancel();
-        previous?.Dispose();
         _searchDebounceSource = new CancellationTokenSource();
+        try
+        {
+            previous?.Cancel();
+            previous?.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
 
         CancellationToken token = _searchDebounceSource.Token;
         _searchDebounceTask = DebouncedSearchApplyAsync(token);
+    }
+
+    partial void OnGraphicsFilterChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsAllGraphicsFilter));
+        OnPropertyChanged(nameof(IsModifiedGraphicsFilter));
+        OnPropertyChanged(nameof(IsGameDefaultsGraphicsFilter));
+        ApplyViewMode();
     }
 
     private async Task DebouncedSearchApplyAsync(CancellationToken token)
@@ -612,7 +2050,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
 
             await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ApplyViewMode);
         }
-        catch (OperationCanceledException)
+        catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException)
         {
             // A newer search request replaced this one.
         }
@@ -624,6 +2062,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     partial void OnIsBusyChanged(bool value)
     {
         NotifyMutationAvailability();
+        OnPropertyChanged(nameof(HomeTitle));
     }
 
     private void OnMutationGateChanged(object? sender, EventArgs e) =>
@@ -636,6 +2075,18 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+        OnPropertyChanged(nameof(CanShowHardwareScanAction));
+        OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+        OnPropertyChanged(nameof(CanReviewGameplay));
+        OnPropertyChanged(nameof(CanResetGameplay));
+        OnPropertyChanged(nameof(CanEditGameplay));
+        OnPropertyChanged(nameof(HasCustomProfileSettings));
+        OnPropertyChanged(nameof(CanSaveProfile));
+        OnPropertyChanged(nameof(CanConfirmProfileRename));
+        OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+        OnPropertyChanged(nameof(CanRunDetailedHardwareDetection));
+        OnPropertyChanged(nameof(CanShowHardwareScanAction));
     }
 
     partial void OnIsReviewingChangesChanged(bool value)
@@ -647,6 +2098,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(ShowReviewActions));
         OnPropertyChanged(nameof(CanEditSettings));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(CanReviewGameplay));
+        OnPropertyChanged(nameof(CanResetGameplay));
+        OnPropertyChanged(nameof(CanEditGameplay));
     }
 
     partial void OnReviewChangesChanged(IReadOnlyList<ChangeReviewRowViewModel> value) =>
@@ -658,6 +2112,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         DetectionColor = statusColor;
         DetectionDotColor = dotColor;
         OnPropertyChanged(nameof(DetectionStatus));
+        OnPropertyChanged(nameof(DetectionBrush));
+        OnPropertyChanged(nameof(HomeTitle));
     }
 
     private async Task<bool> RefreshFromDiskAsync()
@@ -666,20 +2122,27 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         _lastRefreshRecoveredOperation = false;
         _lastSaveRecoveryMessage = null;
         IsBusy = true;
+        OnPropertyChanged(nameof(HomeTitle));
         DetectionStatus = "Scanning game files";
         ShowMessage("Reading the installation and settings...", "#FF5A00");
         try
         {
-            GameInspectionSnapshot snapshot = await Task.Run(_inspector.Inspect);
+            Task<GameInspectionSnapshot> inspectionTask = Task.Run(_inspector.Inspect);
+            Task<HardwareSnapshot> hardwareTask = Task.Run(() => _hardwareProbe.Inspect());
+            HardwareSnapshot ordinaryHardware = await hardwareTask;
+            HardwareDiagnostics = HardwareDiagnosticsViewModel.FromSnapshot(_detailedHardwareSnapshot ?? ordinaryHardware);
+            OnPropertyChanged(nameof(CanStageHardwareRecommendation));
+            GameInspectionSnapshot snapshot = await inspectionTask;
             if (await Task.Run(() => _settingsEditor.RecoverInterruptedChanges(snapshot)))
             {
                 _lastRefreshRecoveredOperation = true;
                 snapshot = await Task.Run(_inspector.Inspect);
             }
             bool canKeepChildState = _verifiedGameContext?.Matches(snapshot) == true &&
-                SaveManager is not null && Cheat is not null;
+                SaveManager is not null;
             _saveGamesRefreshFailed = false;
             _snapshot = snapshot;
+            UpdateGameplayCatalog(snapshot);
             _verifiedGameContext = VerifyGameContext(snapshot);
             if (snapshot.HasErrors)
             {
@@ -693,13 +2156,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             {
                 SetDetection("Ancestors detected but not supported for editing", "#D6BC84", "#D6BC84");
             }
+            else if (snapshot.Notices.Any(notice => string.Equals(notice.Code, "game.multiple-installations", StringComparison.Ordinal)))
+            {
+                SetDetection("Multiple Ancestors installations detected", "#D6BC84", "#D6BC84");
+            }
             else
             {
                 SetDetection("Ancestors installation not detected", "#7A877A", "#7A877A");
             }
             InstallationPath = snapshot.Installation?.InstallDirectory ?? "Not detected";
             InstallationDetails = snapshot.Installation is null
-                ? "Store and build unknown"
+                ? snapshot.Notices.Any(notice => string.Equals(notice.Code, "game.multiple-installations", StringComparison.Ordinal))
+                    ? "More than one installation was found. AEC will not choose one automatically."
+                    : "Store and build unknown"
                 : FormatInstallation(snapshot.Installation);
             UserDataPath = snapshot.UserDataDirectory ?? "Not detected";
             BinarySettingsPath = snapshot.BinarySettingsFile?.FullPath ?? "Not detected";
@@ -716,6 +2185,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             _allFeatureGroups = ReadableSettingsCatalog.CreateFeatureGroups(snapshot);
             OnPropertyChanged(nameof(CustomOverrideCount));
             OnPropertyChanged(nameof(GamePresetName));
+            OnPropertyChanged(nameof(HomeGraphicsSummary));
+            OnPropertyChanged(nameof(HomeGameplaySummary));
+            NotifyExternalPakFolderState();
             RebuildEditors();
             UpdatePendingChanges();
             ApplyViewMode();
@@ -735,16 +2207,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 SaveManager?.Dispose();
                 SaveManager = await CreateSaveManagerAsync();
                 SaveManager?.Activate();
-                Cheat?.Dispose();
-                Cheat = CreateCheat();
-                Cheat?.Start();
+                OnPropertyChanged(nameof(HomeSavesSummary));
                 _saveGamesRefreshFailed = _verifiedGameContext is not null && SaveManager is null;
                 _lastSaveRecoveryMessage = SaveManager?.LastRecoveryMessage;
-            }
-            if (Cheat is not null && SaveManager is not null)
-            {
-                SaveManager.IsGameRunning = Cheat.IsGameRunning;
-                Cheat.UpdateSlotAvailability(SaveManager.Slots);
             }
             return true;
         }
@@ -776,8 +2241,8 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             PendingChanges = [];
             SaveManager?.Dispose();
             SaveManager = null;
-            Cheat?.Dispose();
-            Cheat = null;
+            OnPropertyChanged(nameof(HomeSavesSummary));
+            NotifyExternalPakFolderState();
             ShowMessage($"Scan failed: {exception.Message}", "#E04D42");
             LogDetection("failed: " + exception.Message);
             return false;
@@ -785,6 +2250,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         finally
         {
             IsBusy = false;
+            OnPropertyChanged(nameof(HomeTitle));
         }
     }
 
@@ -842,13 +2308,24 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         {
             ISaveGameManager manager = _saveManagerFactory(context);
             SaveGamesSnapshot snapshot = await Task.Run(manager.Inspect);
-            var watchdog = new SaveGameWatchdog(context, _gameContextVerifier);
+            var watchdog = new SaveGameWatchdog(
+                context,
+                _gameContextVerifier,
+                message => AppDiagnostics.Logger?.Write(message));
             var viewModel = new SaveManagerViewModel(
                 manager,
                 context.UserDataDirectory,
                 watchdog,
                 dispatchToUi: null,
-                mutationGate: _mutationGate);
+                mutationGate: _mutationGate,
+                storeName: context.Store switch
+                {
+                    StoreKind.Gog => "GOG",
+                    StoreKind.EpicGames => "Epic Games",
+                    StoreKind.Heroic => "Heroic",
+                    StoreKind.Steam => "Steam",
+                    _ => context.Store.ToString()
+                });
             viewModel.Refresh(snapshot);
             return viewModel;
         }
@@ -857,28 +2334,6 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             ShowMessage($"Could not load save games: {exception.Message}", "#E04D42");
             return null;
         }
-    }
-
-    private CheatViewModel? CreateCheat()
-    {
-        if (_verifiedGameContext is not { } context)
-        {
-            return null;
-        }
-
-        var service = new SaveGameCheatService(context, _gameContextVerifier);
-        return new CheatViewModel(
-            service,
-            async (slot, checkpointId) =>
-            {
-                if (SaveManager is null)
-                {
-                    return new SaveGameOperationResult(false, "Save manager is not available; reload first.");
-                }
-
-                return await SaveManager.RunLoad(slot, checkpointId);
-            },
-            _mutationGate);
     }
 
     private void RebuildEditors()
@@ -910,6 +2365,19 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             : "The settings that make the clearest visual difference";
 
         string query = SearchText.Trim();
+        if (query.Length == 0)
+        {
+            foreach (FeatureGroupRowViewModel existingGroup in FeatureGroups)
+            {
+                _groupExpansionStates[existingGroup.Id] = existingGroup.IsExpanded;
+            }
+        }
+
+        foreach (FeatureGroupRowViewModel oldGroup in FeatureGroups)
+        {
+            oldGroup.Dispose();
+        }
+
         FeatureGroups = _allFeatureGroups
             .Where(group => IsAdvancedMode || group.IsEssential)
             .Select(group => CreateGroupRow(group, query))
@@ -926,7 +2394,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             .Where(setting => IsAdvancedMode
                 ? SettingDefinitionCatalog.IsShownInAdvancedMode(setting)
                 : SettingDefinitionCatalog.IsShownInSimpleMode(setting.Id))
+            .Where(setting => IsExperimentalGraphicsSettingsEnabled || !SettingDefinitionCatalog.IsExperimental(setting.Id))
             .Where(setting => MatchesSearch(group, setting, query))
+            .Where(setting => MatchesGraphicsFilter(_editors.GetValueOrDefault(setting.Id)))
             .Select(setting => new FeatureSettingRowViewModel(
                 setting.Name,
                 setting.Value,
@@ -940,19 +2410,20 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                     .Select(value => new SettingPresetValueRowViewModel(value.Name, value.Value))
                     .ToArray() ?? [],
                 setting.ActivePresetName,
-                _editors.GetValueOrDefault(setting.Id)))];
+                _editors.GetValueOrDefault(setting.Id),
+                SettingDefinitionCatalog.IsExperimental(setting.Id)))];
 
         return new FeatureGroupRowViewModel(
             group.Id,
             group.Category,
-            group.Name,
+            IsAdvancedMode ? group.Name : group.SimpleName ?? group.Name,
             IsAdvancedMode ? group.Summary : group.SimpleSummary ?? group.Summary,
             group.Description,
             GetAccentColor(group.State),
             settings.Length == 1 ? "1 setting" : $"{settings.Length} settings",
             settings,
             IsAdvancedMode,
-            query.Length > 0);
+            query.Length > 0 || _groupExpansionStates.GetValueOrDefault(group.Id));
     }
 
     private static bool MatchesSearch(
@@ -964,7 +2435,14 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         group.Category.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
         setting.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
         setting.Description.Contains(query, StringComparison.CurrentCultureIgnoreCase) ||
-        setting.TechnicalKey?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+            setting.TechnicalKey?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
+    private bool MatchesGraphicsFilter(SettingEditorViewModel? editor) => GraphicsFilter switch
+    {
+        "Modified" => editor?.HasActiveOverride == true || editor?.HasChanges == true,
+        "Game defaults" => editor?.HasActiveOverride != true && editor?.HasChanges != true,
+        _ => true,
+    };
 
     private void LoadTechnicalDetails(GameInspectionSnapshot snapshot)
     {
@@ -992,6 +2470,7 @@ public partial class MainViewModel : ViewModelBase, IDisposable
                 file.Classification switch
                 {
                     PakClassification.BaseGame => "Known base-game package",
+                    PakClassification.AecOwned => "AEC-managed package",
                     PakClassification.PatchStyle => "Patch-style package; origin not assumed",
                     _ => "Unclassified package",
                 }))
@@ -1030,18 +2509,378 @@ public partial class MainViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRemoveToolChanges));
         OnPropertyChanged(nameof(ShowPendingActions));
+        OnPropertyChanged(nameof(ShowBottomBar));
         OnPropertyChanged(nameof(CanRestoreGameDefaults));
+        OnPropertyChanged(nameof(HasCustomProfileSettings));
+        OnPropertyChanged(nameof(CanSaveProfile));
+    }
+
+    private string FormatReviewValue(string key, string? rawValue)
+    {
+        SettingEditorViewModel? editor = _editors.Values.FirstOrDefault(candidate =>
+            string.Equals(candidate.Key, key, StringComparison.Ordinal));
+        return editor?.FormatValue(rawValue) ?? rawValue ?? "Game default";
+    }
+
+    private void RefreshProfileLibrary()
+    {
+        try
+        {
+            UserProfiles = _profileLibrary.List()
+                .Select(profile => new UserProfileRowViewModel(
+                    profile.Id,
+                    profile.Profile.Name,
+                    profile.Profile.Description ?? "No description",
+                    ProfileContents(profile.Profile),
+                    profile.Profile))
+                .ToArray();
+            if (_profileLibrary.UnreadableProfileCount > 0)
+            {
+                string count = _profileLibrary.UnreadableProfileCount.ToString(CultureInfo.CurrentCulture);
+                ShowMessage($"{count} local profile(s) could not be read and were left untouched.", "#D6BC84");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            UserProfiles = [];
+            ShowMessage("Your local profile library could not be read.", "#D6BC84");
+        }
+    }
+
+    private void UpdateGameplayCatalog(GameInspectionSnapshot snapshot)
+    {
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.PropertyChanged -= OnGameplayControlChanged;
+        }
+
+        bool isSupported = GameplayDifficultyCatalog.Supports(snapshot);
+        GameplayDifficultyPresets = isSupported ? GameplayDifficultyCatalog.CreatePresets() : [];
+        GameplaySimpleControls = isSupported ? GameplayDifficultyCatalog.CreateSimpleControls() : [];
+        GameplayAdvancedControls = isSupported ? GameplayDifficultyCatalog.CreateAdvancedControls() : [];
+        UpdateGameplayControlRanges();
+        GameplayState = _gameplayEditor.Inspect(snapshot);
+        if (isSupported && GameplayState.Kind != GameplayDifficultyStateKind.Unverified)
+        {
+            ApplyGameplaySettingsToControls(GameplayState.Settings);
+        }
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.PropertyChanged += OnGameplayControlChanged;
+        }
+        GameplayResearchValues = isSupported ? GameplayDifficultyCatalog.CreateAdvancedValues() : [];
+        GameplayReadiness = GameplayState.Kind == GameplayDifficultyStateKind.Unverified && isSupported
+            ? new GameplayReadinessViewModel(
+                "Installed gameplay PAK needs attention",
+                GameplayState.Description + ". AEC will not overwrite or remove it.",
+                "#E04D42",
+                true)
+            : GameplayDifficultyCatalog.AssessReadiness(snapshot);
+        SetGameplayDraftStatus(isSupported
+            ? GameplayState.Kind == GameplayDifficultyStateKind.Active
+                ? "Installed gameplay difficulty"
+                : $"Steam build {GameplayDifficultyCatalog.SupportedSteamBuildId} · game default"
+            : "Gameplay difficulty is available only for verified Steam build 5495393 with matching stock PAK signatures");
+        OnPropertyChanged(nameof(HasGameplayDifficultyPresets));
+        OnPropertyChanged(nameof(HasGameplaySimpleControls));
+        OnPropertyChanged(nameof(HasGameplayAdvancedControls));
+        OnPropertyChanged(nameof(HasGameplayResearchValues));
+        NotifyGameplayStateChanged();
+    }
+
+    private void OnGameplayControlChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    {
+        if (eventArgs.PropertyName == nameof(GameplayDifficultyControlViewModel.MultiplierPercent))
+        {
+            CloseReview();
+            SetGameplayDraftStatus("Custom gameplay difficulty");
+            NotifyGameplayStateChanged();
+        }
+    }
+
+    private void SetGameplayDraftStatus(string draft)
+    {
+        GameplayDraftStatus = HasGameplayPendingChanges
+            ? $"{draft} · pending review"
+            : (GameplayState.Kind == GameplayDifficultyStateKind.Active
+                ? "AEC gameplay PAK active"
+                : (GameplayState.Kind == GameplayDifficultyStateKind.Unverified
+                    ? GameplayState.Description
+                    : draft));
+        OnPropertyChanged(nameof(GameplayDraftStatus));
+        OnPropertyChanged(nameof(HomeGameplayTitle));
+        OnPropertyChanged(nameof(HomeGameplaySummary));
+    }
+
+    private static string FormatGameplayHomeSummary(
+        GameplayDifficultySettings settings,
+        string action)
+    {
+        int changedValues = new[]
+        {
+            settings.FoodPercent,
+            settings.WaterPercent,
+            settings.SleepPercent,
+            settings.FallDamagePercent,
+            settings.BleedingPercent,
+            settings.PoisonPercent,
+            settings.EnergyRecoveryPercent,
+            settings.WoundSleepHealingPercent,
+            settings.WoundStaminaPenaltyPercent,
+            settings.PoisonRecoveryPercent,
+            settings.RestDelayPercent,
+            settings.ExhaustionThresholdPercent,
+            settings.ExhaustionPenaltyPercent,
+            settings.WoundRecoveryDurationPercent,
+            settings.PoisonStaminaPenaltyPercent,
+        }.Count(value => value != 100) + (settings.IncludeClan ? 1 : 0);
+
+        return changedValues == 1
+            ? $"1 custom value · {action}"
+            : $"{changedValues} custom values · {action}";
+    }
+
+    private GameplayDifficultySettings CurrentGameplaySettings => new(
+        GameplayPercent("food"),
+        GameplayPercent("water"),
+        GameplayPercent("sleep"),
+        GameplayPercent("fall-damage"),
+        GameplayPercent("bleeding"),
+        GameplayPercent("poison"),
+        GameplayPercent("energy-recovery"),
+        GameplayPercent("wound-sleep-healing"),
+        GameplayPercent("wound-stamina-penalty"),
+        GameplayPercent("poison-recovery"),
+        GameplayPercent("rest-delay"),
+        GameplayPercent("exhaustion-threshold"),
+        GameplayPercent("exhaustion-penalty"),
+        GameplayPercent("wound-recovery-duration"),
+        GameplayPercent("poison-stamina-penalty"),
+        IncludeClanInGameplayPatch);
+
+    private int GameplayPercent(string id) =>
+        AllGameplayControls.FirstOrDefault(control => string.Equals(control.Id, id, StringComparison.Ordinal))?.MultiplierPercent ?? 100;
+
+    private void ApplyGameplaySettingsToControls(GameplayDifficultySettings settings)
+    {
+        IncludeClanInGameplayPatch = settings.IncludeClan;
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.MultiplierPercent = control.Id switch
+            {
+                "food" => settings.FoodPercent,
+                "water" => settings.WaterPercent,
+                "sleep" => settings.SleepPercent,
+                "fall-damage" => settings.FallDamagePercent,
+                "bleeding" => settings.BleedingPercent,
+                "poison" => settings.PoisonPercent,
+                "energy-recovery" => settings.EnergyRecoveryPercent,
+                "wound-sleep-healing" => settings.WoundSleepHealingPercent,
+                "wound-stamina-penalty" => settings.WoundStaminaPenaltyPercent,
+                "poison-recovery" => settings.PoisonRecoveryPercent,
+                "rest-delay" => settings.RestDelayPercent,
+                "exhaustion-threshold" => settings.ExhaustionThresholdPercent,
+                "exhaustion-penalty" => settings.ExhaustionPenaltyPercent,
+                "wound-recovery-duration" => settings.WoundRecoveryDurationPercent,
+                "poison-stamina-penalty" => settings.PoisonStaminaPenaltyPercent,
+                _ => 100,
+            };
+        }
+    }
+
+    private IEnumerable<GameplayDifficultyControlViewModel> AllGameplayControls =>
+        GameplaySimpleControls.Concat(GameplayAdvancedControls);
+
+    private void NotifyGameplayStateChanged()
+    {
+        OnPropertyChanged(nameof(HasGameplayPendingChanges));
+        OnPropertyChanged(nameof(GameplayPendingDetails));
+        OnPropertyChanged(nameof(CanReviewGameplay));
+        OnPropertyChanged(nameof(CanResetGameplay));
+        OnPropertyChanged(nameof(CanEditGameplay));
+        OnPropertyChanged(nameof(GameplayReviewButtonLabel));
+        OnPropertyChanged(nameof(ShowBottomBar));
+        OnPropertyChanged(nameof(ShowGameplayPendingActions));
+        OnPropertyChanged(nameof(CanDiscardGameplayDraft));
+        OnPropertyChanged(nameof(HomeGameplayTitle));
+        OnPropertyChanged(nameof(HomeGameplaySummary));
+    }
+
+    private void NotifyGameplayRangeChanged()
+    {
+        OnPropertyChanged(nameof(GameplayMinimumPercent));
+        OnPropertyChanged(nameof(GameplayMaximumPercent));
+        OnPropertyChanged(nameof(GameplayControlRangeLabel));
+    }
+
+    private void UpdateGameplayControlRanges()
+    {
+        int max = GameplayMaximumPercent;
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
+        {
+            control.MaxPercent = max;
+        }
+    }
+
+    private static string ProfileContents(UserProfile profile)
+    {
+        var sections = new List<string>(3);
+        if (profile.Graphics.Count > 0) sections.Add("Graphics");
+        if (profile.Display.Count > 0) sections.Add("Display");
+        if (profile.Gameplay.Count > 0) sections.Add("Gameplay");
+        return string.Join(" · ", sections);
+    }
+
+    /// <summary>
+    /// Display settings use the same verified editor and value checks as graphics.
+    /// Gameplay remains separate until its runtime PAK path is proven.
+    /// </summary>
+    private static IEnumerable<ProfileSetting> GetLoadableProfileSettings(UserProfile profile) =>
+        profile.Graphics.Concat(profile.Display);
+
+    private static UserProfile CreateBuiltInProfile(string name, IReadOnlyList<ProfileSetting> graphics) =>
+        new(
+            UserProfile.CurrentSchemaVersion,
+            name,
+            "Built-in AEC graphics preset.",
+            DateTimeOffset.UnixEpoch,
+            "1.0.0",
+            graphics,
+            [],
+            []);
+
+    private static UserProfile CreateHardwareBaselineProfile(
+        string name,
+        GameGraphicsQuality quality,
+        IReadOnlyList<ProfileSetting> hardwareOverrides)
+    {
+        var graphics = new List<ProfileSetting>
+        {
+            new(SystemSaveSettingKeys.ViewDistanceQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.PostProcessingQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.ShadowQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.TextureQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.VisualEffectsQuality, quality.ToString()),
+            new(SystemSaveSettingKeys.FoliageQuality, quality.ToString()),
+        };
+        graphics.AddRange(hardwareOverrides);
+        return CreateBuiltInProfile(name, graphics);
+    }
+
+    private void LoadProfileForReview(UserProfile profile)
+    {
+        if (_snapshot is null || IsAnyOperationRunning)
+        {
+            ShowMessage("Reload the game settings before loading a profile.", "#D6BC84");
+            return;
+        }
+        if (HasPendingChanges || IsReviewingChanges)
+        {
+            ShowMessage("Apply or discard the pending changes before loading a profile.", "#D6BC84");
+            return;
+        }
+        if (profile.Gameplay.Count > 0)
+        {
+            ShowMessage("Gameplay profiles are not available yet. No settings were loaded.", "#D6BC84");
+            return;
+        }
+        var candidates = new List<(SettingEditorViewModel Editor, ProfileSetting Setting)>();
+        foreach (ProfileSetting setting in GetLoadableProfileSettings(profile))
+        {
+            if (!TryGetEditorByTechnicalKey(setting.Key, out SettingEditorViewModel? editor) || editor is null ||
+                !editor.CanApplyProfileValue(setting.Value))
+            {
+                ShowMessage($"{profile.Name} contains a setting that is not supported by this game setup. No settings were loaded.", "#E04D42");
+                return;
+            }
+            candidates.Add((editor, setting));
+        }
+
+        var profileKeys = new HashSet<string>(
+            GetLoadableProfileSettings(profile).Select(setting => setting.Key),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (SettingEditorViewModel editor in _editors.Values)
+        {
+            if (editor.ShowOverrideToggle && editor.HasCurrentOverride && !profileKeys.Contains(editor.Key))
+            {
+                editor.UseGameDefault();
+            }
+        }
+
+        foreach ((SettingEditorViewModel editor, ProfileSetting setting) in candidates)
+        {
+            _ = editor.TryApplyProfileValue(setting.Value);
+        }
+
+        ShowGraphics();
+        UpdatePendingChanges();
+        if (HasPendingChanges)
+        {
+            ShowMessage($"Loaded {profile.Name}. Review the pending changes before applying them.", "#FF5A00");
+        }
+        else
+        {
+            ShowMessage($"{profile.Name} already matches your current setup. No changes are needed.", "#B4D941");
+        }
+    }
+
+    private void LoadBuiltInTweakForReview(UserProfile tweak)
+    {
+        if (_snapshot is null || IsAnyOperationRunning)
+        {
+            ShowMessage("Reload the game settings before loading a graphics tweak.", "#D6BC84");
+            return;
+        }
+        if (HasPendingChanges || IsReviewingChanges)
+        {
+            ShowMessage("Apply or discard the pending changes before loading a graphics tweak.", "#D6BC84");
+            return;
+        }
+
+        var candidates = new List<(SettingEditorViewModel Editor, ProfileSetting Setting)>();
+        foreach (ProfileSetting setting in tweak.Graphics)
+        {
+            if (!TryGetEditorByTechnicalKey(setting.Key, out SettingEditorViewModel? editor) || editor is null ||
+                !editor.CanApplyProfileValue(setting.Value))
+            {
+                ShowMessage($"{tweak.Name} contains a setting that is not supported by this game setup. No settings were loaded.", "#E04D42");
+                return;
+            }
+            candidates.Add((editor, setting));
+        }
+
+        foreach ((SettingEditorViewModel editor, ProfileSetting setting) in candidates)
+        {
+            _ = editor.TryApplyProfileValue(setting.Value);
+        }
+
+        ShowGraphics();
+        UpdatePendingChanges();
+        ShowMessage(
+            HasPendingChanges
+                ? $"Loaded {tweak.Name}. Only its listed settings were staged for review."
+                : $"{tweak.Name} already matches your current setup. No changes are needed.",
+            HasPendingChanges ? "#FF5A00" : "#B4D941");
     }
 
     private void CloseReview()
     {
         if (_reviewPlan is not null)
         {
-            _settingsEditor.DiscardPlan(_reviewPlan);
+            if (_reviewIsGameplay)
+            {
+                _gameplayEditor.DiscardPlan(_reviewPlan);
+            }
+            else
+            {
+                _settingsEditor.DiscardPlan(_reviewPlan);
+            }
             _reviewPlan = null;
         }
 
         _reviewIsToolChangeRemoval = false;
+        _reviewIsGameplay = false;
+        _reviewRemovesGameplayPak = false;
         ReviewChanges = [];
         IsReviewingChanges = false;
         OnPropertyChanged(nameof(ReviewSummary));
@@ -1054,6 +2893,79 @@ public partial class MainViewModel : ViewModelBase, IDisposable
             .SelectMany(group => group.Settings)
             .First(setting => string.Equals(setting.Id, settingId, StringComparison.Ordinal))
             .Name;
+
+    private void NotifyExternalPakFolderState()
+    {
+        OnPropertyChanged(nameof(ExternalPakCount));
+        OnPropertyChanged(nameof(HasExternalPaks));
+        OnPropertyChanged(nameof(ExternalPakHelpText));
+        OnPropertyChanged(nameof(GamePakFolderPath));
+        OnPropertyChanged(nameof(CanOpenGamePakFolder));
+    }
+
+    private static string? TryGetGamePakFolder(string? installDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(installDirectory))
+        {
+            return null;
+        }
+
+        try
+        {
+            string root = Path.GetFullPath(installDirectory);
+            string pakFolder = Path.GetFullPath(Path.Combine(root, "Ancestors", "Content", "Paks"));
+            string relative = Path.GetRelativePath(root, pakFolder);
+            return relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative)
+                ? null
+                : pakFolder;
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
+    private static bool TryOpenDirectory(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                _ = Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+                return true;
+            }
+
+            if (OperatingSystem.IsLinux())
+            {
+                var startInfo = new ProcessStartInfo { FileName = "xdg-open", UseShellExecute = false };
+                startInfo.ArgumentList.Add(path);
+                _ = Process.Start(startInfo);
+                return true;
+            }
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or
+            InvalidOperationException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private bool TryGetEditorByTechnicalKey(string key, out SettingEditorViewModel? editor)
+    {
+        editor = null;
+        editor = _editors.Values.FirstOrDefault(candidate => string.Equals(
+            candidate.Key,
+            key,
+            StringComparison.OrdinalIgnoreCase));
+        return editor is not null;
+    }
 
     private void LogDetection(string result)
     {
@@ -1068,6 +2980,28 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     {
         OperationMessage = message;
         OperationAccent = accent;
+        OnPropertyChanged(nameof(OperationBrush));
+    }
+
+    private sealed class EmptyUserProfileLibrary : IUserProfileLibrary
+    {
+        public static readonly EmptyUserProfileLibrary Instance = new();
+
+        public int UnreadableProfileCount => 0;
+
+        public IReadOnlyList<StoredUserProfile> List() => [];
+
+        public UserProfile Read(string id) =>
+            throw new NotSupportedException("The profile library is not available.");
+
+        public StoredUserProfile Save(UserProfile profile) =>
+            throw new NotSupportedException("The profile library is not available.");
+
+        public void Delete(string id) =>
+            throw new NotSupportedException("The profile library is not available.");
+
+        public UserProfile ReadExternal(string path) =>
+            throw new NotSupportedException("The profile library is not available.");
     }
 
     private static string GetAccentColor(ReadableSettingState state) => state switch
@@ -1079,9 +3013,9 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     };
 
     private static bool IsExpectedUserOperationException(Exception exception) =>
-        exception is IOException or UnauthorizedAccessException or InvalidOperationException or
-            ArgumentException or NotSupportedException or System.Text.DecoderFallbackException or
-            System.Text.Json.JsonException;
+        exception is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or
+        ArgumentException or NotSupportedException or System.Text.DecoderFallbackException or
+        System.Text.Json.JsonException;
 
     private static string FormatBytes(long bytes)
     {
@@ -1131,21 +3065,37 @@ public partial class MainViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
-        _searchDebounceSource?.Cancel();
-        try
+        foreach (GameplayDifficultyControlViewModel control in AllGameplayControls)
         {
-            _searchDebounceTask?.Wait(TimeSpan.FromMilliseconds(300));
+            control.PropertyChanged -= OnGameplayControlChanged;
         }
-        catch (AggregateException)
+        CancellationTokenSource? searchSource = _searchDebounceSource;
+        Task? searchTask = _searchDebounceTask;
+        searchSource?.Cancel();
+        if (searchTask is null || searchTask.IsCompleted)
         {
+            searchSource?.Dispose();
         }
-        _searchDebounceSource?.Dispose();
+        else
+        {
+            _ = searchTask.ContinueWith(
+                completed =>
+                {
+                    if (completed.IsFaulted)
+                    {
+                        AppDiagnostics.Logger?.Write($"Search debounce failed during shutdown: {completed.Exception}");
+                    }
+
+                    searchSource?.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
         _mutationGate.Changed -= OnMutationGateChanged;
         _searchDebounceSource = null;
         _searchDebounceTask = null;
         SaveManager?.Dispose();
         SaveManager = null;
-        Cheat?.Dispose();
-        Cheat = null;
     }
 }

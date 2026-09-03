@@ -5,6 +5,24 @@ namespace AncestorsEnhanced.Core.Tests.Editing;
 
 public sealed class EditableSettingsCatalogTests
 {
+    [Theory]
+    [InlineData(10)]
+    [InlineData(1000)]
+    public void GameplayDifficultyAcceptsTheExperimentalBounds(int value)
+    {
+        new GameplayDifficultySettings(value, value, value, value).Validate();
+    }
+
+    [Theory]
+    [InlineData(9)]
+    [InlineData(1001)]
+    [InlineData(105)]
+    public void GameplayDifficultyRejectsValuesOutsideTheExperimentalTenPercentSteps(int value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new GameplayDifficultySettings(value, 100, 100, 100).Validate());
+    }
+
     [Fact]
     public void StartupMoviesUsesTheReviewedGameIniTarget()
     {
@@ -69,6 +87,31 @@ public sealed class EditableSettingsCatalogTests
         string[] labels = editor.Choices!.Select(choice => choice.Label).ToArray();
         Assert.Contains(labels, label => label.Contains('\u00d7', StringComparison.Ordinal));
         Assert.DoesNotContain(labels, label => label.Contains('\u00c3', StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("r.DOF.Gather.RingCount", "3")]
+    [InlineData("r.DOF.Gather.AccumulatorQuality", "1")]
+    [InlineData("r.DOF.Gather.EnableBokehSettings", "0")]
+    [InlineData("r.Shadow.MaxCSMResolution", "4096")]
+    [InlineData("r.VolumetricFog.GridPixelSize", "4")]
+    [InlineData("r.CapsuleShadows", "1")]
+    [InlineData("r.TranslucencyLightingVolumeDim", "64")]
+    [InlineData("r.SSS.Scale", "0.75")]
+    public void VerifiedStockAdvancedControlsAcceptOnlyCataloguedValues(string key, string value)
+    {
+        GameInspectionSnapshot snapshot = CreateSnapshot();
+        SettingEditSnapshot editor = Assert.IsType<SettingEditSnapshot>(
+            EditableSettingsCatalog.Create(snapshot, key, null));
+
+        Assert.True(EditableSettingsCatalog.TryValidate(
+            snapshot,
+            new SettingChangeRequest("Advanced setting", editor.FileName, editor.Section, key, value),
+            out _));
+        Assert.False(EditableSettingsCatalog.TryValidate(
+            snapshot,
+            new SettingChangeRequest("Advanced setting", editor.FileName, editor.Section, key, "not-a-stock-choice"),
+            out _));
     }
 
     [Theory]

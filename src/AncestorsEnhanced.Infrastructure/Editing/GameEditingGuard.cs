@@ -26,7 +26,10 @@ internal static class GameEditingGuard
             string libraryRoot = Path.GetFullPath(proton.LibraryRoot);
             string userData = Path.GetFullPath(snapshot.UserDataDirectory);
             string? rootOfUserData = GetLibraryRootOfUserData(userData);
-            if (!string.Equals(rootOfUserData, libraryRoot, PathComparison))
+            if (rootOfUserData is null || !string.Equals(
+                    Path.GetFullPath(rootOfUserData),
+                    libraryRoot,
+                    PathComparison))
             {
                 throw new InvalidOperationException("The Proton user-data directory does not belong to the detected installation.");
             }

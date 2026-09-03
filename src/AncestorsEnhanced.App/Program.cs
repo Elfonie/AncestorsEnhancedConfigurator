@@ -31,7 +31,14 @@ sealed class Program
             "AncestorsEnhancedConfigurator");
         if (!singleInstance.IsAcquired)
         {
-            AppDiagnostics.Logger?.Write("Second instance detected; showing a notice.");
+            if (AncestorsEnhanced.Infrastructure.Platform.SingleInstanceActivationListener.TryActivateExistingInstance(
+                    "AncestorsEnhancedConfigurator", TimeSpan.FromSeconds(2)))
+            {
+                AppDiagnostics.Logger?.Write("Second instance detected; requested activation of the existing window.");
+                return;
+            }
+
+            AppDiagnostics.Logger?.Write("Second instance detected but the existing instance did not accept activation; showing a notice.");
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(["--already-running"]);
             return;
         }

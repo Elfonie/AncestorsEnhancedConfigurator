@@ -230,6 +230,33 @@ public sealed class SaveGameWatchdogTests : IDisposable
     }
 
     [Fact]
+    public void StopFlushesADirtySlotThatIsWaitingForCooldown()
+    {
+        string userData = CreateUserData();
+        int calls = 0;
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ =>
+            {
+                Interlocked.Increment(ref calls);
+                return new SaveGameOperationResult(true, "Checkpoint saved.", "final");
+            })
+        {
+            Cooldown = TimeSpan.FromMinutes(5),
+        };
+
+        watchdog.Start();
+        using (watchdog.BeginSlotMutation(0))
+        {
+        }
+        Thread.Sleep(100);
+
+        watchdog.StopWatch();
+
+        Assert.Equal(1, Volatile.Read(ref calls));
+    }
+
+    [Fact]
     public void DisposeIsIdempotent()
     {
         string userData = CreateUserData();
@@ -240,6 +267,27 @@ public sealed class SaveGameWatchdogTests : IDisposable
         watchdog.Dispose();
 
         Assert.False(watchdog.IsRunning);
+    }
+
+    [Fact]
+    public void CheckpointSubscriberFailuresAreWrittenToDiagnostics()
+    {
+        string userData = CreateUserData();
+        var diagnostics = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ => new SaveGameOperationResult(true, "Checkpoint saved.", "checkpoint"),
+            diagnostics.Enqueue)
+        {
+            Cooldown = TimeSpan.Zero,
+        };
+        watchdog.CheckpointCreated += (_, _) => throw new InvalidOperationException("UI handler failed");
+        watchdog.Start();
+
+        watchdog.BeginSlotMutation(0).Dispose();
+
+        WaitFor(() => diagnostics.Any(message => message.Contains("CheckpointCreated subscriber failed", StringComparison.Ordinal)));
+        Assert.Contains(diagnostics, message => message.Contains("UI handler failed", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -260,6 +308,87 @@ public sealed class SaveGameWatchdogTests : IDisposable
 
         Assert.False(watchdog.IsRunning);
         Assert.Equal(0, Volatile.Read(ref calls));
+    }
+
+    [Fact]
+    public void StopWatchWaitsForSlowWorkerCompletion()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1, 2, 3));
+
+        var workerStarted = new ManualResetEventSlim();
+        var workerCanFinish = new ManualResetEventSlim();
+        int checkpointCount = 0;
+
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ =>
+            {
+                workerStarted.Set();
+                workerCanFinish.Wait(TimeSpan.FromSeconds(5));
+                Interlocked.Increment(ref checkpointCount);
+                return new SaveGameOperationResult(true, "Checkpoint saved.", "cp-1");
+            })
+        {
+            Cooldown = TimeSpan.Zero,
+        };
+
+        watchdog.Start();
+        // Trigger worker
+        watchdog.BeginSlotMutation(0).Dispose();
+
+        // Wait until worker is actively inside the checkpoint creation delegate
+        Assert.True(workerStarted.Wait(TimeSpan.FromSeconds(5)));
+
+        // Unblock worker after 500ms
+        Task.Run(async () =>
+        {
+            await Task.Delay(500);
+            workerCanFinish.Set();
+        });
+
+        // StopWatch must block until the worker has finished
+        watchdog.StopWatch();
+
+        Assert.Equal(1, Volatile.Read(ref checkpointCount));
+        Assert.False(watchdog.IsRunning);
+    }
+
+    [Fact]
+    public void StopWatchTimesOutWhenWorkerHangs()
+    {
+        string userData = CreateUserData();
+        string slotPath = SaveGamePaths.GetSlotPath(userData, 0);
+        File.WriteAllBytes(slotPath, TestSaveFactory.Create(1, 2, 3));
+
+        var workerStarted = new ManualResetEventSlim();
+        var workerCanFinish = new ManualResetEventSlim();
+
+        using var watchdog = new SaveGameWatchdog(
+            userData,
+            _ =>
+            {
+                workerStarted.Set();
+                workerCanFinish.Wait(TimeSpan.FromSeconds(10));
+                return new SaveGameOperationResult(true, "Checkpoint saved.", "cp-1");
+            })
+        {
+            Cooldown = TimeSpan.Zero,
+        };
+
+        watchdog.Start();
+        watchdog.BeginSlotMutation(0).Dispose();
+
+        Assert.True(workerStarted.Wait(TimeSpan.FromSeconds(5)));
+
+        // StopWatch with 200ms timeout must return false instead of hanging indefinitely
+        bool completed = watchdog.StopWatch(TimeSpan.FromMilliseconds(200));
+
+        Assert.False(completed);
+        Assert.False(watchdog.IsRunning);
+
+        workerCanFinish.Set();
     }
 
     private string CreateUserData()

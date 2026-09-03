@@ -14,7 +14,8 @@ internal sealed record SettingEditorTemplate(
     IReadOnlyList<SettingChoice>? Choices = null,
     SettingFileTarget Target = SettingFileTarget.Ini,
     string? Unit = null,
-    bool IsDirect = false);
+    bool IsDirect = false,
+    decimal DisplayMultiplier = 1);
 
 public static class EditableSettingsCatalog
 {
@@ -26,12 +27,23 @@ public static class EditableSettingsCatalog
             ["r.MotionBlur.Amount"] = Number(-1, -1, 1, 0.05m),
             ["r.MotionBlur.Max"] = Number(-1, -1, 100, 1),
             ["r.DepthOfFieldQuality"] = Quality(defaultValue: 0, maximum: 4),
+            ["r.DOF.Gather.RingCount"] = Choice("4", ("3", "3 rings"), ("4", "4 rings"), ("5", "5 rings")),
+            ["r.DOF.Gather.AccumulatorQuality"] = Quality(defaultValue: 1, maximum: 1),
+            ["r.DOF.Gather.PostfilterMethod"] = Choice("1", ("1", "Median 3×3"), ("2", "Maximum 3×3")),
+            ["r.DOF.Gather.EnableBokehSettings"] = Toggle(defaultValue: true),
+            ["r.DOF.Scatter.EnableBokehSettings"] = Toggle(defaultValue: true),
+            ["r.DOF.Recombine.Quality"] = Quality(defaultValue: 1, maximum: 2),
+            ["r.DOF.TemporalAAQuality"] = Quality(defaultValue: 1, maximum: 1),
+            ["r.DOF.Kernel.MaxForegroundRadius"] = Choice(
+                "0.025", ("0.006", "0.006"), ("0.012", "0.012"), ("0.025", "0.025")),
+            ["r.DOF.Kernel.MaxBackgroundRadius"] = Choice(
+                "0.025", ("0.006", "0.006"), ("0.012", "0.012"), ("0.025", "0.025")),
 
             ["r.PostProcessAAQuality"] = Quality(defaultValue: 4, maximum: 6),
             ["r.TemporalAACurrentFrameWeight"] = Number(0.15m, 0.01m, 1, 0.01m),
             ["r.Tonemapper.Sharpen"] = Number(0.4m, 0, 2, 0.05m),
 
-            ["r.ViewDistanceScale"] = Number(1.2m, 0.5m, 2, 0.05m),
+            ["r.ViewDistanceScale"] = Number(1.2m, 0.5m, 2, 0.05m, displayMultiplier: 100, unit: "%"),
             ["foliage.DensityScale"] = Number(1.5m, 0.25m, 3, 0.05m),
             ["grass.DensityScale"] = Number(1.5m, 0.25m, 3, 0.05m),
             ["r.SkeletalMeshLODBias"] = Number(0, -2, 4, 1),
@@ -43,7 +55,11 @@ public static class EditableSettingsCatalog
                 ("4", "4×"),
                 ("8", "8×"),
                 ("16", "16×")),
-            ["r.Streaming.PoolSize"] = Number(4096, 256, 16384, 256),
+            // The verified Ancestors scalability data contains 500, 1000 and 1500 MB.
+            // A 256 MB step marked those legitimate game values unsupported, which in
+            // turn could prevent a hardware recommendation from loading. Four MB keeps
+            // ordinary memory budgets practical while accepting every known stock value.
+            ["r.Streaming.PoolSize"] = Number(4096, 256, 16384, 4),
             ["r.Streaming.MipBias"] = Number(0, -4, 16, 0.25m),
             ["r.Streaming.Boost"] = Number(1, 0.1m, 4, 0.1m),
             ["r.Streaming.LimitPoolSizeToVRAM"] = Toggle(defaultValue: true),
@@ -60,15 +76,20 @@ public static class EditableSettingsCatalog
                 ("3", "3 levels"),
                 ("4", "4 levels")),
             ["r.BloomQuality"] = Quality(defaultValue: 5, maximum: 5),
+            ["r.ScreenPercentage"] = Number(100m, 50m, 150m, 5m, unit: "%"),
             ["r.EyeAdaptationQuality"] = Quality(defaultValue: 2, maximum: 2),
             ["r.SceneColorFringeQuality"] = Quality(defaultValue: 0, maximum: 1),
             ["r.LensFlareQuality"] = Quality(defaultValue: 2, maximum: 3),
             ["r.LightShaftQuality"] = Toggle(defaultValue: true),
             ["r.Tonemapper.GrainQuantization"] = Toggle(defaultValue: true),
             ["r.Tonemapper.Quality"] = Quality(defaultValue: 5, maximum: 5),
+            ["r.RenderTargetPoolMin"] = Choice(
+                "400", ("300", "300 MB"), ("350", "350 MB"), ("400", "400 MB")),
             ["r.AmbientOcclusionRadiusScale"] = Number(1.5m, 0.1m, 5, 0.1m),
             ["r.AmbientOcclusionMaxQuality"] = Number(100, 0, 100, 5),
             ["r.AmbientOcclusionMipLevelFactor"] = Number(0.6m, 0.1m, 2, 0.1m),
+            ["r.FastBlurThreshold"] = Choice(
+                "3", ("0", "0"), ("2", "2"), ("3", "3")),
             ["r.Filter.SizeScale"] = Number(0.8m, 0.1m, 2, 0.05m),
 
             ["r.ShadowQuality"] = Quality(defaultValue: 4, maximum: 5),
@@ -84,10 +105,34 @@ public static class EditableSettingsCatalog
             ["r.DistanceFieldShadowing"] = Toggle(defaultValue: true),
             ["r.DistanceFieldAO"] = Toggle(defaultValue: true),
             ["r.VolumetricFog"] = Toggle(defaultValue: true),
+            ["r.LightFunctionQuality"] = Quality(defaultValue: 1, maximum: 1),
+            ["r.Shadow.MaxCSMResolution"] = Choice(
+                "2048", ("512", "512 px"), ("1024", "1024 px"), ("2048", "2048 px"), ("4096", "4096 px")),
+            ["r.Shadow.RadiusThreshold"] = Choice(
+                "0.04", ("0", "0"), ("0.01", "0.01"), ("0.04", "0.04"), ("0.05", "0.05"), ("0.06", "0.06")),
+            ["r.Shadow.CSM.TransitionScale"] = Choice(
+                "0.8", ("0", "0"), ("0.25", "0.25"), ("0.8", "0.8"), ("1.0", "1.0")),
+            ["r.Shadow.PreShadowResolutionFactor"] = Choice("1.0", ("0.5", "50%"), ("1.0", "100%")),
+            ["r.AOQuality"] = Choice("2", ("1", "Low"), ("2", "Medium")),
+            ["r.VolumetricFog.GridPixelSize"] = Choice(
+                "8", ("4", "4 px (highest cost)"), ("8", "8 px"), ("16", "16 px (lowest cost)")),
+            ["r.VolumetricFog.GridSizeZ"] = Choice("128", ("64", "64 slices"), ("128", "128 slices")),
+            ["r.VolumetricFog.HistoryMissSupersampleCount"] = Choice(
+                "4", ("4", "4 samples"), ("16", "16 samples")),
+            ["r.LightMaxDrawDistanceScale"] = Choice("1", ("0", "Off"), (".5", "50%"), ("1", "100%")),
+            ["r.CapsuleShadows"] = Toggle(defaultValue: true),
 
             ["r.RefractionQuality"] = Quality(defaultValue: 2, maximum: 2),
             ["r.SSR.Quality"] = Quality(defaultValue: 2, maximum: 4),
+            ["r.TranslucencyLightingVolumeDim"] = Choice(
+                "48", ("24", "24³"), ("32", "32³"), ("48", "48³"), ("64", "64³")),
+            ["r.TranslucencyVolumeBlur"] = Toggle(defaultValue: true),
             ["r.DetailMode"] = Quality(defaultValue: 1, maximum: 2),
+            ["r.MaterialQualityLevel"] = Quality(defaultValue: 1, maximum: 2),
+            ["r.SSS.Scale"] = Choice("1", ("0", "Off"), ("0.75", "75%"), ("1", "100%")),
+            ["r.SSS.Quality"] = Choice("1", (("-1", "Automatic")), ("0", "Off"), ("1", "Low")),
+            ["r.SSS.SampleSet"] = Quality(defaultValue: 1, maximum: 2),
+            ["r.SSS.HalfRes"] = Toggle(defaultValue: true),
             ["r.EmitterSpawnRateScale"] = Number(0.5m, 0, 2, 0.05m),
             ["r.ParticleLightQuality"] = Toggle(defaultValue: true),
             ["!StartupMovies"] = new(
@@ -177,7 +222,8 @@ public static class EditableSettingsCatalog
             choices,
             template.Target,
             template.Unit,
-            template.IsDirect);
+            template.IsDirect,
+            DisplayMultiplier: template.DisplayMultiplier);
         editor = editor with
         {
             CanSetCustomValue = template.IsDirect || currentOverride is null || IsValidValue(editor, currentOverride),
@@ -363,13 +409,17 @@ public static class EditableSettingsCatalog
         decimal defaultValue,
         decimal minimum,
         decimal maximum,
-        decimal increment) =>
+        decimal increment,
+        decimal displayMultiplier = 1,
+        string? unit = null) =>
         new(
             SettingEditorKind.Number,
             Invariant(defaultValue),
             Minimum: minimum,
             Maximum: maximum,
-            Increment: increment);
+            Increment: increment,
+            Unit: unit,
+            DisplayMultiplier: displayMultiplier);
 
     private static SettingEditorTemplate Quality(int defaultValue, int maximum) =>
         Choice(
@@ -386,7 +436,10 @@ public static class EditableSettingsCatalog
         1 => "Low",
         2 => "Medium",
         3 => "High",
-        _ => $"Level {value}",
+        4 => "Very high",
+        5 => "Ultra",
+        6 => "Cinematic",
+        _ => $"Engine level {value}",
     };
 
     private static SettingEditorTemplate Choice(
