@@ -646,7 +646,9 @@ public sealed class SaveManagerViewModelTests
 
             viewModel.IsWatchdogEnabled = true;
 
-            Assert.True(SpinWait.SpinUntil(() => !viewModel.IsWatchdogEnabled, TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(
+                () => !viewModel.IsWatchdogEnabled && viewModel.StatusMessage.Contains("could not start", StringComparison.OrdinalIgnoreCase),
+                TimeSpan.FromSeconds(5)));
             Assert.Contains("could not start", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
             Assert.True(SpinWait.SpinUntil(() =>
             {

@@ -2,7 +2,7 @@
 
 Ancestors Enhanced Configurator (AEC) is a portable desktop application for **Ancestors: The Humankind Odyssey**. It provides verified graphics editing, local save checkpoints, graphics profiles, local hardware guidance, diagnostics, and an exact-build gameplay-difficulty system.
 
-AEC is deliberately fail-closed. Detecting a game folder is not enough to authorise a write: the application verifies the store/build or stock-content signature, the current installation context, and every target again before committing a supported change.
+AEC is deliberately fail-closed. Detecting a game folder is not enough to authorize a write: the application verifies the store/build or stock-content signature, the current installation context, and every target again before committing a supported change.
 
 Release packages are self-contained folder builds. No installer or separate .NET runtime is required.
 
@@ -12,7 +12,7 @@ Release packages are self-contained folder builds. No installer or separate .NET
 - Simple and Advanced graphics views with search and All/Modified/Game-default filters
 - Seven combinable built-in graphics tweaks: Clear Image, Performance, Balanced, High Quality, Ultra, Low VRAM, and Cinematic
 - Editable display, frame-rate, brightness, quality, UE4 override, vignette, and startup-video settings when their targets are verified
-- Graphics-only `.aecprofile` files with save, import, export, compare, duplicate, rename, and delete actions
+- Graphics and display `.aecprofile` files with save, import, export, compare, duplicate, rename, and delete actions
 - Manual and automatic checkpoints for all five local save slots
 - Checkpoint search, origin filters, names, notes, favorites, restore confirmation, and deletion
 - Exact-build gameplay PAK creation, update, detection, review, and removal
@@ -63,11 +63,11 @@ Available safety actions include:
 - **Undo last apply** reverts the newest still-provable AEC settings operation.
 - **Remove Configurator changes** restores verified tool-owned files to their recorded pre-AEC baseline.
 
-## Graphics profiles
+## Configuration profiles
 
-Profiles store the current editable graphics setup in a bounded `.aecprofile` JSON document. Loading a profile resets omitted managed overrides to their game-controlled value, so Compare includes both applied profile values and overrides that will return to Game default.
+Profiles store the current editable graphics and display setup in a bounded `.aecprofile` JSON document. Loading a profile resets omitted managed overrides to their game-controlled value, so Compare includes both applied profile values and overrides that will return to Game default.
 
-Profiles can be imported, exported, compared, duplicated, renamed, and deleted with confirmation. Invalid or unreadable local profiles are left untouched and reported to the user. Profile files currently support graphics settings only; Display and Gameplay profile sections are rejected by schema validation.
+Profiles can be imported, exported, compared, duplicated, renamed, and deleted with confirmation. Invalid or unreadable local profiles are left untouched and reported to the user. Profile files support both graphics and display settings; they are loaded through the same validated editor pipeline. Gameplay profile sections remain reserved and are rejected by schema validation.
 
 ## Save checkpoints
 
@@ -138,7 +138,7 @@ Restoring a local checkpoint can cause a Steam/Epic/GOG cloud conflict. Compare 
 - Discord Rich Presence is optional and off by default. The local Discord SDK starts only when enabled.
 - Experimental graphics exposes rarely useful renderer controls in Graphics > Advanced.
 - Experimental gameplay extends the percentage range from 200% to 1000%.
-- Diagnostics is read-only and can copy a support report with Windows user paths redacted.
+- Diagnostics is read-only and can copy a support report with personal user paths and Steam IDs redacted.
 - The first-instance listener activates the existing window when AEC is started a second time.
 
 ## Release archives

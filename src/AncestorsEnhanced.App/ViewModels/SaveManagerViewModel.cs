@@ -658,6 +658,9 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
                 return;
             }
 
+            StatusMessage = "Auto-backup was turned off because it could not start: " + exception.Message;
+            StatusAccent = "#E04D42";
+
             // "Enabled" is a promise that a watcher exists. A startup failure must
             // therefore correct both the visible toggle and the durable preference.
             _loadingSettings = true;
@@ -673,8 +676,6 @@ public partial class SaveManagerViewModel : ViewModelBase, IDisposable
             Volatile.Write(ref _watchdogDesiredEnabled, 0);
             QueueWatchdogReconciliation();
             SaveSettings();
-            StatusMessage = "Auto-backup was turned off because it could not start: " + exception.Message;
-            StatusAccent = "#E04D42";
         }
 
         if (Dispatcher.UIThread.CheckAccess())
